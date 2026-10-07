@@ -1,0 +1,34 @@
+# Kun's skills to vendor into skills/<name>.
+# Format: <repo> <path-in-repo> [local-name]
+# Run ./sync.sh after editing.
+
+# Core workflow tools
+no-mistakes          skills/no-mistakes
+gnhf                 skills/gnhf
+vision               skills/vision
+firstmate            skills/stow
+firstmate            .agents/skills/firstmate-coding-guidelines
+compact-adviser      packages/codex-plugin/skills/compact-adviser
+
+# AXI (agent-ergonomic CLIs)
+axi                  .agents/skills/axi
+gh-axi               skills/gh-axi
+chrome-devtools-axi  skills/chrome-devtools-axi
+tasks-axi            skills/tasks-axi
+quota-axi            skills/quota-axi
+quota-axi            skills/quota-interpretation
+lavish-axi           skills/lavish
+
+# grok-ship (software factory skills)
+grok-ship            skills/adversarial-review
+grok-ship            skills/ahoy
+grok-ship            skills/project-management
+grok-ship            skills/lavish-session
+grok-ship            skills/vision-md-triage-verdict
+grok-ship            skills/14-day-stale-pr-close
+grok-ship            skills/triage-eligible-fetch
+
+# Content / misc
+whathappened         skills/whathappened
+short-pipe           skills/shorts-from-longform
+kunchenguid-design-system .agents/skills/use-kunchenguid-design-system
