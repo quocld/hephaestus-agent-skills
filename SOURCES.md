@@ -16,3 +16,4 @@ License texts for each source are in `LICENSES/`.
 | `skills/ask-or-decide` | distilled from firstmate `ask-user-authority` and AGENTS.md escalation rules | MIT |
 | `skills/knowledge-placement` | distilled from firstmate `firstmate-coding-guidelines` | MIT |
 | `reference/opinions-example.md` | github.com/kunchenguid/kun `OPINIONS.md` (no upstream license; keep this repo private) | none |
+| `skills/flow-trace`, `skills/e2e-verify`, `skills/bug-triage`, `skills/fe-guardrails` | distilled from my westmont-erp project workflow | mine |
