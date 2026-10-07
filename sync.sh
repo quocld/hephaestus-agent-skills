@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pull Kun's skills (skills.manifest) and global docs from GitHub.
 #  - MIT skills are vendored into skills/ and committed, with licenses in LICENSES/.
-#  - kunchenguid/kun has no license, so its docs and skill go to vendor/kun/ (gitignored).
+#  - kunchenguid/kun (no upstream license) docs and skill go to vendor/kun/. Keep this repo private.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,4 +50,4 @@ echo "AGENTS.md <- dotfiles/home/AGENTS.md"
 for f in ENTRY.md TOOLS.md OPINIONS.md VOICE.md skills/kun/SKILL.md scripts/pull-kun.mjs; do
   fetch kun "$f" "vendor/kun/$f"
 done
-echo "vendor/kun <- kun (local only, gitignored)"
+echo "vendor/kun <- kun"

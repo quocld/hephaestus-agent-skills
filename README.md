@@ -10,7 +10,7 @@ Kun Chen's ([@kunchenguid](https://github.com/kunchenguid)) full public agent se
 | `CLAUDE.md` | dotfiles | Just `@AGENTS.md`. |
 | `skills/` | see `skills.manifest` | Kun's skills, vendored (MIT). |
 | `LICENSES/` | each source repo | License of every vendored repo. |
-| `vendor/kun/` | [kunchenguid/kun](https://github.com/kunchenguid/kun) | `OPINIONS.md`, `VOICE.md`, `TOOLS.md`, `ENTRY.md`, `/kun` skill. Not committed (no license upstream); fetched by `sync.sh`. |
+| `vendor/kun/` | [kunchenguid/kun](https://github.com/kunchenguid/kun) | `OPINIONS.md`, `VOICE.md`, `TOOLS.md`, `ENTRY.md`, `/kun` skill. Upstream has no license, so keep this repo private. |
 
 ## Skills
 
