@@ -23,14 +23,7 @@ link() {
 # Global instructions: Claude Code reads ~/.claude/CLAUDE.md
 link "$REPO/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
 
-# Kun's opinions/voice and /kun skill live in vendor/kun (run ./sync.sh first)
-if [ -d "$REPO/vendor/kun" ]; then
-  link "$REPO/vendor/kun/OPINIONS.md" "$HOME/OPINIONS.md"
-  link "$REPO/vendor/kun/VOICE.md" "$HOME/VOICE.md"
-  link "$REPO/vendor/kun/skills/kun" "$CLAUDE_DIR/skills/kun"
-else
-  echo "vendor/kun missing - run ./sync.sh to fetch OPINIONS.md, VOICE.md and the kun skill"
-fi
+link "$REPO/OPINIONS.md" "$HOME/OPINIONS.md"
 
 # Skills
 for dir in "$REPO"/skills/*/; do

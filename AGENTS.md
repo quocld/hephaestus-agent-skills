@@ -12,7 +12,13 @@
   If something clearly looks off, even if it is not directly related to what you are doing, try to get it fixed along the way.
 - Apply that same high standard to engineering excellence: lint, test failures, and test flakiness.
   If you see one, even if it is not caused by what you are working on right now, still get it fixed.
+- Make reasonable calls on obvious or reversible decisions instead of asking.
+  Before asking the user anything mid-task, or when a change might expand scope, apply the `ask-or-decide` skill.
 - Before using "dynamic workflows", "ultra code" or any harness feature that immediately spawns a large swarm of subagents, always explain the tradeoffs and ask the user for explicit approval.
+
+## Opinions
+
+When the work would benefit from knowing my viewpoints on engineering, product, or tooling, read `~/OPINIONS.md`.
 
 ## Maintaining this file
 
