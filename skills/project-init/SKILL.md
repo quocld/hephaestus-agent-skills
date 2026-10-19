@@ -93,53 +93,26 @@ For each persona the E2E skills need: an account per environment in the registry
 
 ## 4. Doctor: check every tool the skills call and the block's drift
 
-Run every check yourself in one pass, batching the commands into as few shell calls as you can, then print one table: check, status (`OK` / `MISSING` / `FAILING` / `DRIFT` / `SKIP`), and the fix.
-Never spawn subagents for it, and never re-run a check that already passed in this session.
-A row whose precondition is absent (no registry, no `op://` reference, no GitLab remote) is `SKIP`, not run.
+```bash
+python3 <this skill>/scripts/doctor.py    # from the project root; --help lists every probe and flag
+```
 
-| Check | Command |
-| --- | --- |
-| agent-skills plugin installed | `claude plugin list` shows `agent-skills@quocld` enabled; the skills, hooks and global rules all come with it |
-| Hooks registered and working | `bash <agent-skills plugin or checkout>/hooks/test.sh` passes: it checks the plugin's `hooks.json` mounts every gate (feature-status-guard included) and runs the deny and allow probes |
-| Git platform CLI logged in | `gh auth status` or `glab auth status` |
-| Integration branch exists | `git ls-remote --exit-code --heads origin refs/heads/<int>`, with `<int>` from `worktree-flow` section 0 |
-| Node and package manager | `node --version`, `pnpm --version` (or the repo's manager) |
-| `jq` (version commands) | `jq --version` |
-| Registry valid | The `environments` skill's validation command |
-| Secrets resolve | Every `env:` name has a value in the shell or `.agents/secrets.env` (check presence, never print); `op whoami` when `op://` references exist |
-| SSH aliases | For every `access.ssh`, `ssh -G <alias> 2>/dev/null \| awk '$1=="hostname"{print $2}'` prints a host other than the lowercased alias (`ssh -G` exits 0 and echoes the name back when no `Host` entry matches) |
-| Platform CLIs used by the registry | `vercel whoami`, `supabase --version`, `docker compose version` |
-| Version endpoints | Each environment's `version` prints a 40-character SHA (asks first on `confirm-each-step` environments) |
-| Browser tool for E2E | The first tool in the `e2e-verify` order is available: Playwright MCP, otherwise `npx -y --prefer-offline chrome-devtools-axi --help` runs |
-| Better Stack MCP connected | `claude mcp list 2>/dev/null \| grep -E '^(plugin:betterstack:)?betterstack(-ro)?: .*Connected'` prints a line; a `Needs authentication` line means run `/mcp` and sign in (`betterstack-logs` section 1) |
-| Log sources registered | `jq -r '.environments \| to_entries[] \| select(.value.url // "" \| test("//localhost") \| not) \| .key as $e \| .value.services[]? \| select(.type != "local") \| if (.logs \| type) == "string" then "\($e)/\(.name): old string logs, rename to logsCommand" elif (.logs.source // "") == "" then "\($e)/\(.name)" else empty end' .agents/environments.json` prints nothing; each printed service lacks `logs.source` or needs the `environments` section 1 rename |
-| Logger contract | The project's logger test passes; no such test: log one line with the project's logger, Better Stack env unset so nothing ships, and check the keys, e.g. `out=$(env -u BETTER_STACK_SOURCE_TOKEN -u BETTER_STACK_INGESTING_HOST NODE_ENV=production node -e "import('<built logger entry>').then((m) => m.createLogger({ service: 'doctor' }).info('probe'))" \| head -1); [ -n "$out" ] && printf '%s\n' "$out" \| jq -r 'keys as $k \| $ARGS.positional - $k \| if . == [] then "OK" else "MISSING \(join(" "))" end' --args <every key logging-standard section 1 requires on every line> \|\| echo FAILING` prints `OK`; a crash, no output, or a non-JSON line prints `FAILING` |
-| Feature status files valid (only when `git ls-tree -d origin/<int> docs/status` prints a line) | After `git fetch origin --prune`, `python3 <feature-status skill>/scripts/status.py check --ref origin/<int>` exits 0 (it reads `origin/<int>`, not this checkout's possibly stale working tree) |
-| No leftover feature claims (same precondition) | For each `claim/<ID>` in `git ls-remote --heads origin 'refs/heads/claim/*'`, `python3 <feature-status skill>/scripts/status.py release <ID> --dry-run` exits 1 (it exits 0 only when that claim's own pick is merged on `<int>`, or dropped or deferred, so a re-pick's live claim is not flagged); an exit 0 is `DRIFT`, fixed by the same command without `--dry-run` |
-| Markers intact | `AGENTS.md` has exactly one `project-init:start` and one `project-init:end` |
-| Block paths exist | Every repo path the block names exists (`test -e <path>`); a gitignored path such as a storage state folder counts as `OK` when `git check-ignore -q <path>` succeeds, with a trailing slash on folders (`e2e/.auth/`) so dir-only patterns match |
-| Block commands resolve | Each listed command, checked with the cheap probe below, never by running it |
-| Project checks valid | `python3 <verify-loop skill>/scripts/checks.py list` exits 0; `SKIP` when `.agents/checks/` does not exist |
-| Open `TODO(<owner>)` | `grep -n 'TODO(' AGENTS.md .agents/environments.json`, one row per hit |
+The script runs every doctor check and prints one table: check, status (`OK` / `MISSING` / `FAILING` / `DRIFT` / `SKIP`), detail, and fix.
+Its machine rows (plugin, hooks, CLIs, logins, MCP) come from the `harness-map` collectors, so each check has one owner.
+Run it yourself, never through a subagent, and rerun it only to confirm a fix.
 
-Print the block once with `sed -n '/project-init:start/,/project-init:end/p' AGENTS.md` and take its paths and commands from that output.
-Cheap probes for block commands:
+- It never writes a project file, never prints a secret value, and never runs one of the project's own build, test, install, migrate, or server commands; the tool probes it runs are listed in `--help`.
+- A row whose precondition is absent is `SKIP`; so is a `version` on a `confirm-each-step` environment, with the command to run once the user says yes.
+- When the block has a Logging line, run it in the same pass with `--logger-test '<the logger's own test command>'`, or `--logger-entry <built logger entry>` when there is no test; that is the one exception to the rule above, runs with the Better Stack variables unset, and without either flag the row is `DRIFT`, not a finished doctor.
+- `--no-probe` skips the tool probes and the `version` commands when the user wants it offline; their rows become `SKIP`.
 
-- Package script (`pnpm lint`, `npm run e2e`, `pnpm --filter web test`): `jq -e --arg s <script> '.scripts[$s]' <package dir>/package.json` plus `command -v <manager>`.
-- Package manager built-in (`pnpm install --frozen-lockfile`): `command -v <manager>` and the lockfile exists.
-- Make target: `make -n <target>`.
-- Any other binary: `command -v <bin>`, then `<bin> --version` or `<bin> --help`.
-- Never run a command that builds, tests, installs, migrates, starts a server, or writes, unless the user asks for that run; the logger contract row is the one exception, and runs only the logger's own test file or its one-line probe with the Better Stack variables unset.
-
-The doctor itself never writes.
 Fix cheap drift in this skill's own block and files through the normal flow of section 0 (worktree, PR/MR into `<int>`):
 
-- A path that was renamed (`git log -1 --format= --name-status -M --full-diff -- <old path>` shows an `R` line naming the new one): update the block.
-- A script that now exists under another name or package with the same body in `package.json`: update the block.
+- A block path the table shows as renamed, or a script that now has another name with the same body in `package.json`: update the block.
 - A fact the user just answered in place of a `TODO(<owner>)`: replace the TODO.
 - Missing gitignore lines or example files from the `environments` skill's create section: add them.
 
-Report everything else with the exact command the user should run, using `! <command>` for logins.
+Report every other row with its fix command, using `! <command>` for logins.
 
 ## 5. Report
 

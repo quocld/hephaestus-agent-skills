@@ -33,9 +33,9 @@ ICONS = {
 }
 
 
-def run(cmd, cwd=None, timeout=20):
+def run(cmd, cwd=None, timeout=20, env=None):
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
         return p.returncode, p.stdout, p.stderr
     except (OSError, subprocess.TimeoutExpired) as e:
         return 127, "", str(e)
