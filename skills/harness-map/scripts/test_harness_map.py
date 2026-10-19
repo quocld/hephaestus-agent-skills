@@ -287,17 +287,39 @@ def main():
         check("SLACK_TOKEN" not in html_ and "notify.py" not in html_, "docs site: hooks come from the repo's hooks.json, not this machine's settings")
         check('id="wheel"' in html_ and 'data-tab="dash"' not in html_, "docs site: has the harness wheel and no Dashboard tab")
 
+    # An existing harness: a project skill that shares a name with ours is reported, so it can be forked.
+    with tempfile.TemporaryDirectory() as tmp:
+        home, project = Path(tmp) / "home", Path(tmp) / "project"
+        (home / ".claude" / "skills" / "root-cause").mkdir(parents=True)
+        (home / ".claude" / "skills" / "root-cause" / "SKILL.md").write_text(
+            (HERE.parents[1] / "root-cause" / "SKILL.md").read_text())
+        (project / ".claude" / "skills" / "worktree-flow").mkdir(parents=True)
+        (project / ".claude" / "skills" / "worktree-flow" / "SKILL.md").write_text("---\nname: worktree-flow\ndescription: ours\n---\nmain only\n")
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        code, out, page = run(home, project)
+        check("worktree-flow: name clash" in page and "hx-worktree-flow" in page, "existing harness: a different same-name project skill is a clash, with the fork fix")
+        check("root-cause: duplicate copy" in page and "root-cause: name clash" not in page, "existing harness: an identical copy is only a duplicate")
+
     # The onboarding prompt has one source (assets/onboard-prompt.md); the README and the docs site carry it verbatim.
+    # It stays one line that points at the install guide, which the docs site publishes as is.
     prompt = (HERE.parent / "assets" / "onboard-prompt.md").read_text().strip()
     readme = (HERE.parents[2] / "README.md").read_text()
-    check(prompt in readme and readme.index("## Onboard your agent") < readme.index("## Install"),
-          "onboard prompt: the README carries it verbatim, before Install")
+    check(prompt in readme and "## Onboard your agent" not in readme
+          and readme.index("## Install") < readme.index(prompt) < readme.index("<summary><b>Or install by hand</b>") < readme.index("### Update"),
+          "onboard prompt: the README leads Install with it, the manual install is a folded alternative")
     with tempfile.TemporaryDirectory() as tmp:
         p_ = subprocess.run([sys.executable, str(SCRIPT), "--docs-only", tmp], capture_output=True, text=True)
         site = (Path(tmp) / "index.html").read_text() if (Path(tmp) / "index.html").exists() else ""
         import html as _html
-        check('id="onboard"' in site and _html.escape(prompt, quote=True) in site and site.index('id="onboard"') < site.index('id="wheel"'),
-              "onboard prompt: the docs site shows it first, with a copy button")
+        skill_page = (Path(tmp) / "skills" / "root-cause" / "index.html").read_text()
+        guide = (HERE.parent / "assets" / "install-guide.md").read_text()
+        check(len(prompt.splitlines()) == 1 and "https://hephaestus-skills-docs.vercel.app/install.md" in prompt,
+              "onboard prompt: one line pointing at the published install guide")
+        check((Path(tmp) / "install.md").exists() and (Path(tmp) / "install.md").read_text() == guide
+              and "hx-&lt;name&gt;" in (Path(tmp) / "install" / "index.html").read_text(),
+              "install guide: the docs site serves it raw at install.md and as a page at install/")
+        check('data-open="onboard-src"' in site and 'id="onboard-src"' in site and _html.escape(prompt, quote=True) in site
+              and 'data-open="onboard-src"' in skill_page, "onboard prompt: a header button on every docs page opens it")
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:

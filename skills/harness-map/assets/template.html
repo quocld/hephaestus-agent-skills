@@ -202,6 +202,9 @@ box-shadow:-24px 0 56px -16px rgba(16,16,40,.35);display:flex;flex-direction:col
 .crumbs{margin:0 0 12px;font-size:13px;color:var(--muted)}.crumbs a{color:var(--accent-text);text-decoration:none}.crumbs a:hover{text-decoration:underline}
 nav.side a[aria-current="page"]{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
 .skillpage .card .rbody{padding:22px 26px 36px}
+.onboard-btn{margin-right:4px}
+.rmeta .bar{display:flex;gap:8px;flex-wrap:wrap;margin:0}
+@media (max-width:640px){.onboard-btn{padding:6px 10px;font-size:12px}}
 .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .tierblock{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:4px}
 .tierblock.core{border-top:3px solid var(--accent)}.tierblock.optional{border-top:3px solid var(--neutral)}
@@ -284,23 +287,28 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
     var t=b.previousElementSibling.textContent;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1200)},function(){b.textContent='Select'});}});
   // Copy and expand buttons for a block of text by id (the setup prompt).
-  document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){
-    var t=document.getElementById(b.dataset.copy).textContent, label=b.textContent;
+  document.addEventListener('click',function(e){
+    var b=e.target.closest&&e.target.closest('[data-copy]'); if(!b)return;
+    var src=(b.closest('.rbody')||document).querySelector('#'+b.dataset.copy)||document.getElementById(b.dataset.copy);
+    var t=src.textContent, label=b.textContent;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent=label},1400)},
-      function(){var r=document.createRange();r.selectNodeContents(document.getElementById(b.dataset.copy));var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Press Cmd+C'});}});
+      function(){var r=document.createRange();r.selectNodeContents(src);var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Press Cmd+C'});});
   document.querySelectorAll('[data-expand]').forEach(function(b){b.onclick=function(){
     var el=document.getElementById(b.dataset.expand); b.textContent=el.classList.toggle('open')?'Collapse':'Expand';}});
   // Respect reduced motion for the SVG gradient too (CSS covers the HTML one).
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){document.querySelectorAll('.ult-anim').forEach(function(a){a.remove()})}
   // Skill reader: any [data-skill] (table names, diagram chips, catalog, wheel popover) opens its SKILL.md.
   var reader=document.getElementById('reader'), rbody=document.getElementById('rbody'), rscrim=document.getElementById('rscrim'), opener=null;
-  function openSkill(name, fromEl){
-    var src=document.getElementById('skill-src-'+name); if(!src||!reader)return false;
+  function openSrc(id, hash, fromEl){
+    var src=document.getElementById(id); if(!src||!reader)return false;
+    var kick=hash.indexOf('#skill=')===0?'Skill':'Setup';
+    reader.querySelector('.rkick').textContent=kick; reader.setAttribute('aria-label',kick);
     rbody.innerHTML=src.innerHTML; reader.hidden=false; rscrim.hidden=false; rbody.scrollTop=0;
-    opener=fromEl||opener; reader.dataset.open=name;   // not data-skill: that would make every click inside reopen it
-    if(location.hash!=='#skill='+name)history.replaceState(null,'','#skill='+name);
+    opener=fromEl||opener; reader.dataset.open=hash.slice(1);   // not data-skill: that would make every click inside reopen it
+    if(location.hash!==hash)history.replaceState(null,'',hash);
     rbody.focus(); return true;
   }
+  function openSkill(name, fromEl){ return openSrc('skill-src-'+name, '#skill='+name, fromEl); }
   function closeSkill(){
     if(!reader||reader.hidden)return;
     reader.hidden=true; rscrim.hidden=true;
@@ -309,6 +317,8 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   }
   if(reader){
     document.addEventListener('click',function(e){
+      var o=e.target.closest&&e.target.closest('[data-open]');
+      if(o&&openSrc(o.getAttribute('data-open'),'#'+o.getAttribute('data-open').replace(/-src$/,''),o)){e.preventDefault();return;}
       var t=e.target.closest&&e.target.closest('[data-skill]');
       if(t&&openSkill(t.getAttribute('data-skill'),t)){e.preventDefault();e.stopPropagation();var p=document.getElementById('wpop');if(p)p.hidden=true;}
     },true);
@@ -320,7 +330,7 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
     rscrim.addEventListener('click',closeSkill);
     document.getElementById('rclose').addEventListener('click',closeSkill);
     document.getElementById('rcopy').addEventListener('click',function(){
-      var b=this,u=location.href.split('#')[0]+'#skill='+reader.dataset.open;
+      var b=this,u=location.href.split('#')[0]+'#'+reader.dataset.open;
       (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy link'},1200)},function(){b.textContent=u});
     });
   }
@@ -333,6 +343,7 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   function fromHash(){
     var id=decodeURIComponent(location.hash.slice(1)), el=id&&document.getElementById(id);
     if(id.indexOf('skill=')===0){openSkill(id.slice(6));return;}
+    if(id==='onboard'&&document.getElementById('onboard-src')){openSrc('onboard-src','#onboard');return;}
     if(docsPane)setTab(id==='docs'||(el&&docsPane.contains(el))?'docs':'dash');
     if(el)el.scrollIntoView(); else if(id==='docs')scrollTo(0,0);
   }
