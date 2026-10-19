@@ -173,11 +173,32 @@ def lifecycle_svg(hooks):
 
 # ---------------------------------------------------------------- task path svg
 
+CW, CH, GAP = 7.4, 21, 27   # chip char width, chip height, chip row pitch in the larger diagrams
+
+
+def chip_line_svg(items, center, y):
+    """One centered row of chips [(kind, label)]; returns (svg, width)."""
+    widths = [round(len(lab) * CW + 16) for _, lab in items]
+    total = sum(widths) + 6 * (len(items) - 1)
+    x, out = center - total / 2, []
+    for (kind, lab), w in zip(items, widths):
+        bg, fg = CHIP[kind]
+        out.append(f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{CH}" rx="5" fill="{bg}"/>'
+                   f'<text x="{x + w / 2:.1f}" y="{y + 14.5}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+        x += w + 6
+    return "".join(out), total
+
+
+def chips_stacked(items, center, width, bottom):
+    """Wrap chips into rows that fit `width`, stacked upward so the last row ends at `bottom`."""
+    lines = chip_rows(items, 0, width, CW)
+    return "".join(chip_line_svg([(k, lab) for k, lab, _, _ in line], center, bottom - (len(lines) - i) * GAP)[0]
+                   for i, line in enumerate(lines))
+
 def task_path_svg():
     """Prompt -> agentic loop (gather, act, verify, retry) -> response -> back to the next prompt,
     with each skill placed on the step where it comes into play (assets/lifecycle.json `path`)."""
     W, H, NY, NH = 1280, 500, 262, 62
-    CW, CH, GAP = 7.4, 21, 27   # chip char width, chip height, chip row pitch (larger text than the lifecycle map)
     nodes = {"setup": (16, 150), "prompt": (196, 180), "gather": (432, 180), "act": (646, 180),
              "verify": (860, 180), "response": (1080, 184)}
     look = {"setup": ("var(--surface)", "var(--border-2)", "5 4"), "prompt": ("var(--surface-3)", "none", ""),
@@ -192,34 +213,19 @@ def task_path_svg():
          '<defs><marker id="t-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
          '<path d="M0 0L8 4L0 8z" fill="var(--muted)"/></marker></defs>']
 
-    def chips_line(items, center, y):
-        """One centered row of chips; returns its svg and width."""
-        widths = [round(len(lab) * CW + 16) for _, lab in items]
-        total = sum(widths) + 6 * (len(items) - 1)
-        x, out = center - total / 2, []
-        for (kind, lab), w in zip(items, widths):
-            bg, fg = CHIP[kind]
-            out.append(f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{CH}" rx="5" fill="{bg}"/>'
-                       f'<text x="{x + w / 2:.1f}" y="{y + 14.5}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
-            x += w + 6
-        return "".join(out), total
-
     def chips_above(step):
         x, w = nodes[step]
-        lines = chip_rows(skills_at(step), 0, w + 30, CW)
-        for k, line in enumerate(lines):
-            y = NY - 14 - (len(lines) - k) * GAP
-            p.append(chips_line([(kind, lab) for kind, lab, _, _ in line], x + w / 2, y)[0])
+        p.append(chips_stacked(skills_at(step), x + w / 2, w + 30, NY - 14))
 
     def label_on_line(text_, step, cxv, y):
         """Text ends where the chips start, so the gap is exact whatever the font measures."""
         items = skills_at(step)
         tw = len(text_) * 7.2  # generous estimate, only used for the mask behind the label
-        _, cw = chips_line(items, 0, 0)
+        _, cw = chip_line_svg(items, 0, 0)
         join = cxv - cw / 2 + tw / 2
         p.append(f'<rect x="{join - tw - 18:.1f}" y="{y - 14}" width="{tw + cw + 36:.1f}" height="28" fill="var(--surface)"/>')
         p.append(f'<text x="{join - 8:.1f}" y="{y + 4.5}" text-anchor="end" class="tl">{esc(text_)}</text>')
-        p.append(chips_line(items, join + cw / 2, y - CH / 2)[0])
+        p.append(chip_line_svg(items, join + cw / 2, y - CH / 2)[0])
 
     # Agentic loop frame with its label sitting in a gap of the dashed line.
     bx, by, bw, bh = 404, 40, 646, 376
@@ -255,6 +261,82 @@ def task_path_svg():
     return "".join(p)
 
 
+# ---------------------------------------------------------------- verification loop svg
+
+def verify_loop_svg():
+    """verify-loop section 2: seven gates on one head, a red gate loops back to gate 2, the table goes into the PR."""
+    vl = LIFE["verify_loop"]
+    W, H, NY, NH = 1280, 330, 172, 62
+    GW, GG, GX = 124, 14, 160
+    gates = [(GX + i * (GW + GG), g) for i, g in enumerate(vl["gates"])]
+    fill = {"machine": "var(--ok-soft)", "evidence": "var(--accent-soft)"}
+    mid = NY + NH / 2
+    p = [f'<svg viewBox="0 0 {W} {H}" class="life tp vlsvg" role="img" aria-label="verify-loop gates in order">',
+         '<defs><marker id="v-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
+         '<path d="M0 0L8 4L0 8z" fill="var(--muted)"/></marker>'
+         '<marker id="v-r" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
+         '<path d="M0 0L8 4L0 8z" fill="var(--bad)"/></marker></defs>']
+
+    # Frame: every gate runs on one head.
+    bx, by, bw, bh = 146, 22, 978, 290
+    p.append(f'<rect x="{bx}" y="{by}" width="{bw}" height="{bh}" rx="6" fill="none" stroke="var(--border-3, var(--muted))" stroke-width="1.5" stroke-dasharray="5 5"/>')
+    p.append(f'<rect x="{bx + bw - 160}" y="{by - 13}" width="140" height="26" fill="var(--surface)"/>')
+    p.append(f'<text x="{bx + bw - 90}" y="{by + 6}" text-anchor="middle" class="tframe">One head</text>')
+
+    # Start and end nodes, and the forward arrows.
+    ends = [(16, 110, vl["start"]), (1144, 124, vl["end"])]
+    for x, w, n in ends:
+        p.append(f'<rect x="{x}" y="{NY}" width="{w}" height="{NH}" rx="7" fill="var(--surface-3)"/>')
+        p.append(text(x + w / 2, NY + 28, n["label"], "gn", "middle"))
+        p.append(text(x + w / 2, NY + 46, n["sub"], "tsub", "middle"))
+    xs = [(126, GX)] + [(gates[i][0] + GW, gates[i + 1][0]) for i in range(len(gates) - 1)] + [(gates[-1][0] + GW, 1144)]
+    for x1, x2 in xs:
+        p.append(f'<path d="M{x1 + 3} {mid} H{x2 - 4}" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#v-a)"/>')
+
+    # Red gate: stubs from gates 3..7 to one line that returns into gate 2.
+    RY = 280
+    g2 = gates[1][0] + GW / 2
+    for x, _ in gates[2:]:
+        p.append(f'<path d="M{x + GW / 2} {NY + NH + 2} V{RY}" stroke="var(--bad)" stroke-width="1.2" stroke-dasharray="3 3"/>')
+    p.append(f'<path d="M{gates[-1][0] + GW / 2} {RY} H{g2 + 8} Q{g2} {RY} {g2} {RY - 8} V{NY + NH + 8}" fill="none" '
+             f'stroke="var(--bad)" stroke-width="1.6" marker-end="url(#v-r)"/>')
+    items = [("skill", "root-cause")]
+    _, cw = chip_line_svg(items, 0, 0)
+    tw = len(vl["retry"]) * 7.2
+    cx_ = (gates[2][0] + gates[-1][0] + GW) / 2
+    join = cx_ - cw / 2 + tw / 2
+    p.append(f'<rect x="{join - tw - 18:.1f}" y="{RY - 14}" width="{tw + cw + 36:.1f}" height="28" fill="var(--surface)"/>')
+    p.append(f'<text x="{join - 8:.1f}" y="{RY + 4.5}" text-anchor="end" class="tl" style="fill:var(--bad-text)">{esc(vl["retry"])}</text>')
+    p.append(chip_line_svg(items, join + cw / 2, RY - CH / 2)[0])
+
+    # Gates with their number badge and the skills or commands that own them.
+    for i, (x, g) in enumerate(gates, 1):
+        p.append(f'<rect x="{x}" y="{NY}" width="{GW}" height="{NH}" rx="7" fill="{fill[g["kind"]]}"/>')
+        p.append(f'<circle cx="{x + 4}" cy="{NY + 4}" r="10" fill="var(--accent)"/>'
+                 f'<text x="{x + 4}" y="{NY + 8}" text-anchor="middle" class="gno">{i}</text>')
+        p.append(text(x + GW / 2, NY + 28, g["label"], "gn", "middle"))
+        p.append(text(x + GW / 2, NY + 46, g["sub"], "tsub", "middle"))
+        chips = [("skill", n) for n in g["skills"]] + [("plugin", n) for n in g["items"]]
+        p.append(chips_stacked(chips, x + GW / 2, GW + 12, NY - 12))
+    p.append('</svg>')
+    return "".join(p)
+
+
+def verify_loop_html():
+    vl = LIFE["verify_loop"]
+    rules = "".join(f"<li>{esc(r)}</li>" for r in vl["rules"])
+    rows = "".join(f'<tr><td class="mono">{esc(g)}</td><td><span class="pill {"ok" if st == "PASS" else "skip" if st == "SKIP" else "fail"}">{st}</span></td>'
+                   f'<td class="mono">{esc(ev)}</td></tr>' for g, st, ev in vl["example"])
+    legend = ('<div class="legend"><span><i class="sw" style="background:var(--ok-soft)"></i>machine check</span>'
+              '<span><i class="sw" style="background:var(--accent-soft)"></i>evidence gate</span>'
+              '<span><i style="display:inline-block;width:18px;border-top:2px solid var(--bad)"></i>red gate loops back to gate 2</span></div>')
+    return (f'<div class="scroll">{verify_loop_svg()}</div>{legend}'
+            f'<div class="vl"><div><div class="lbl3">Rules</div><ul class="vrules">{rules}</ul></div>'
+            f'<div><div class="lbl3">The table that goes into the PR body</div>'
+            f'<table class="vt"><tr><th>gate</th><th>status</th><th>evidence</th></tr>{rows}</table>'
+            '<p class="vnote">Statuses: PASS, FAIL, SKIP or DEFER, each with its evidence or reason.</p></div></div>')
+
+
 # ---------------------------------------------------------------- page
 
 DOC_CSS = """<style>
@@ -277,6 +359,16 @@ DOC_CSS = """<style>
 .life .tl{font-size:12.5px;fill:var(--muted);font-weight:500}
 .life .tframe{font-family:"Host Grotesk",Inter,sans-serif;font-size:17px;fill:var(--muted)}
 .tp .chip-t{font-size:12px}
+.life .gn{font-family:"Host Grotesk",Inter,sans-serif;font-size:15px;font-weight:500}
+.life .gno{font-size:11px;font-weight:700;fill:#fff}
+.vlsvg .gn{font-size:17px}.vlsvg .tsub{font-size:13px}.vlsvg .tl{font-size:13.5px}
+.vl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:24px;padding:4px 18px 20px}
+.vrules{margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--text-2)}.vrules li{margin:5px 0}
+table.vt{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+table.vt th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)}
+table.vt td{padding:6px 8px;border-top:1px solid var(--border);vertical-align:top;color:var(--text-2)}
+table.vt td.mono{font-size:11.5px}
+.vnote{margin:8px 0 0;font-size:12px;color:var(--muted)}
 .prose{padding:16px 18px;color:var(--text-2);max-width:820px}
 .prose p{margin:0 0 10px}.prose ul{margin:0 0 10px;padding-left:18px}.prose li{margin:3px 0}
 table.t{width:100%;border-collapse:collapse;font-size:13px}
@@ -284,7 +376,7 @@ table.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacin
 table.t td{padding:10px 18px;border-top:1px solid var(--border);vertical-align:top;color:var(--text-2)}
 table.t td:first-child{color:var(--text);font-weight:500;white-space:nowrap}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
-@media (max-width:900px){.kpis{grid-template-columns:1fr 1fr}
+@media (max-width:900px){.vl{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}
 table.t td:first-child{white-space:normal}}
 </style>"""
 
@@ -317,7 +409,7 @@ def docs_body(hooks):
         for n, c, l in [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
                         (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")]) + '</div>')
 
-    nav = [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
+    nav = [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
     h.append('<div class="grid"><nav class="side"><div class="h">Docs</div>' +
              "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in nav) + '</nav><div>')
 
@@ -332,6 +424,9 @@ def docs_body(hooks):
 
     h.append(card("path", "Skills", "Task path", "Where each skill comes into play on a normal task",
                   f'<div class="scroll">{task_path_svg()}</div>'))
+    h.append(card("verification", "Hooks", "Verification loop",
+                  "verify-loop: every gate in order on one head before a change is called done or a PR opens",
+                  verify_loop_html()))
 
 
     rows = []

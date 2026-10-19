@@ -28,6 +28,39 @@
     {"label": "CwdChanged / FileChanged", "sub": "env reactive", "row": "post_compact", "arrow": false, "hooks": ["CwdChanged", "FileChanged"], "skills": []},
     {"label": "InstructionsLoaded", "sub": "async", "row": "session_end", "arrow": false, "hooks": ["InstructionsLoaded"], "skills": ["knowledge-placement"]}
   ],
+  "verify_loop": {
+    "start": {"label": "Change ready", "sub": "done or PR"},
+    "end": {"label": "PR + table", "sub": "final head"},
+    "gates": [
+      {"label": "Base", "sub": "on latest <int>", "kind": "machine", "skills": ["worktree-flow"], "items": []},
+      {"label": "Toolchain", "sub": "exit codes", "kind": "machine", "skills": [], "items": ["build", "typecheck", "lint", "tests", "tech/ Verify"]},
+      {"label": "Script checks", "sub": "checks.py run", "kind": "machine", "skills": [], "items": [".agents/checks/"]},
+      {"label": "Proof", "sub": "fails without it", "kind": "evidence", "skills": ["root-cause"], "items": ["revert test"]},
+      {"label": "Review", "sub": "fresh eyes", "kind": "evidence", "skills": ["fresh-review", "security-pass", "flow-trace"], "items": []},
+      {"label": "Behavior", "sub": "user-facing", "kind": "evidence", "skills": ["e2e-verify"], "items": []},
+      {"label": "Requirements", "sub": "one row per AC", "kind": "evidence", "skills": [], "items": ["AC list"]}
+    ],
+    "retry": "Red gate: fix the cause, commit, restart at gate 2",
+    "rules": [
+      "One head: every gate runs on the same commit; the table's head must equal HEAD when the PR opens.",
+      "A red gate never restarts itself: fix the cause (root-cause when it is not obvious), commit, restart at gate 2.",
+      "A fix after gate 4 reproves only the behaviors it touched; fresh-review reviews only its delta; e2e-verify reruns only what its rule names.",
+      "Never make a gate green by weakening it: no skipped or retried tests, raised timeouts, lint disables or deleted checks.",
+      "A SKIP on a gate the change needs is a FAIL; a DEFER names who runs the gate and where its result will be.",
+      "The same mistake corrected twice becomes a project check in .agents/checks/ (checks.py new <id>)."
+    ],
+    "example": [
+      ["base", "PASS", "rebased, 0 commits behind"],
+      ["toolchain", "PASS", "pnpm typecheck (exit 0); pnpm lint (exit 0); pnpm --filter web test (212 passed)"],
+      ["script checks", "PASS", "2 run: no-console, migration-order"],
+      ["proof", "PASS", "billing.test.ts \"keeps paid invoice unlocked\" fails with the fix reverted"],
+      ["review", "PASS", "fresh-review 2 rounds, risk low"],
+      ["security", "SKIP", "no security-pass trigger"],
+      ["flow", "PASS", "flow-trace docs/flow-traces/invoice.md"],
+      ["behavior", "PASS", "e2e/reports/WEST-12-...json at a1b2c3d, no AC path touched since"],
+      ["requirements", "PASS", "AC1 test, AC2 test, AC3 e2e step 4"]
+    ]
+  },
   "skills": {
     "harness-map": {"tier": "core", "events": ["session_start"], "path": ["setup"], "when": "Setup audit: what is installed, missing or failing, as one HTML page"},
     "project-init": {"tier": "core", "events": ["session_start"], "path": ["setup"], "when": "Repo has no agent block yet, or a doctor run"},
