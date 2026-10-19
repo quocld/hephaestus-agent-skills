@@ -40,7 +40,7 @@
       {"label": "Behavior", "sub": "user-facing", "kind": "evidence", "skills": ["e2e-verify"], "items": []},
       {"label": "Requirements", "sub": "one row per AC", "kind": "evidence", "skills": [], "items": ["AC list"]}
     ],
-    "retry": "Red gate: fix the cause, commit, restart at gate 2",
+    "retry": "Red gate: fix the cause, commit, rerun per the rerun table",
     "rules": [
       "One head: every gate runs on the same commit; the table's head must equal HEAD when the PR opens.",
       "A red gate never restarts itself: fix the cause (root-cause when it is not obvious), commit, restart at gate 2.",

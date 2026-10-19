@@ -16,6 +16,16 @@ LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
 # ---------------------------------------------------------------- live hooks
 
+def hook_does():
+    """{hook name: what it does} from the README hooks table, the one owner of that description."""
+    try:
+        text = (REPO / "README.md").read_text()
+    except OSError:
+        return {}
+    return {m.group(1): m.group(2).replace("`", "")
+            for m in re.finditer(r"^\| `([\w-]+)\.py` \| (.+?) \|\s*$", text, re.M)}
+
+
 def hook_source(cmd):
     """Name who owns a hook command: one of this repo's scripts, a plugin, or a custom command."""
     m = re.search(r"agent-skills-hooks/([\w-]+)\.py", cmd)
@@ -516,11 +526,13 @@ def docs_body(hooks, standalone=False):
                   '<div style="overflow-x:auto"><table class="t"><tr><th>Skill</th><th>Tier</th><th>Loads</th><th>Lifecycle</th><th>When</th></tr>'
                   + "".join(rows) + '</table></div>'))
 
+    does = hook_does()
     hrows = "".join(
-        f'<tr><td>{esc(ev)}</td><td class="mono">{esc(m)}</td><td><span class="chip {"bad" if k == "gate" else ""}">{esc(n)}</span></td><td>{esc(src)}</td></tr>'
+        f'<tr><td>{esc(ev)}</td><td class="mono">{esc(m)}</td><td><span class="chip {"bad" if k == "gate" else ""}">{esc(n)}</span></td>'
+        f'<td>{esc(does.get(n, "") if k == "gate" else "")}</td><td>{esc(src)}</td></tr>'
         for ev, m, k, n, src in sorted(hooks, key=lambda r: (r[0], r[2] != "gate", r[3])))
     h.append(card("hooks-wired", "Hooks", "Hooks wired", "Read live from ~/.claude settings and enabled plugins",
-                  '<div style="overflow-x:auto"><table class="t"><tr><th>Event</th><th>Matcher</th><th>Hook</th><th>From</th></tr>'
-                  + (hrows or '<tr><td colspan="4">No hooks registered.</td></tr>') + '</table></div>'))
+                  '<div style="overflow-x:auto"><table class="t"><tr><th>Event</th><th>Matcher</th><th>Hook</th><th>Does</th><th>From</th></tr>'
+                  + (hrows or '<tr><td colspan="5">No hooks registered.</td></tr>') + '</table></div>'))
     h.append('</div></div>')
     return "".join(h)
