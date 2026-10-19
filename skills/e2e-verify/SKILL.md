@@ -18,7 +18,8 @@ Typecheck, build, and unit tests prove the code compiles, not that the screen wo
 
 ## 1. Drive the UI like a user
 
-- Use a real browser (Playwright MCP, chrome-devtools-axi, or the project's tool).
+- Use a real browser, in this order: Playwright MCP; when it is not available, `chrome-devtools-axi`, invoked on every call as `npx -y --prefer-offline chrome-devtools-axi <command>`; the project's own tool only when the project's `AGENTS.md` names one.
+  This skill owns that order; other skills point here.
 - Interact through the accessibility tree (role + label: `button "Save"`, `textbox "Email"`), never hard-coded CSS selectors.
 - One AC = one action sequence that follows its Given/When/Then.
 - Prioritize ACs marked stale or changed since last verification.
@@ -38,9 +39,18 @@ Typecheck, build, and unit tests prove the code compiles, not that the screen wo
 Real example: an API returned 200 with every row, but the account picker in a "create bill" dialog was completely empty because the FE filtered out rows that only seeded data could make valid.
 Checks (b) and (d) catch this; typecheck, lint, and tests do not.
 
+- Side effects outside the browser (email, SMS, webhooks to third parties) are verified where they land: the local test inbox (Mailpit or the Supabase local Inbucket) or the provider's sandbox log named in the project's agent setup block.
+  No such place: record the side effect as unverified in the evidence file instead of claiming it.
+
 ## 3. Multi-tenant leak scan (multi-tenant apps only)
 
-Once at the end of each flow, collect all API response bodies from the session and check that none contain IDs or marker strings belonging to another tenant.
+Once at the end of each flow, check that no API response body from the session contains an ID or marker string belonging to another tenant.
+Never read the bodies into context; save them to files and count hits with `grep`:
+
+1. Save the bodies under one dump folder: Playwright MCP `browser_network_requests` (`filter: "/api/"`, `filename`) for the index list, then `browser_network_request` with `part: "response-body"` and a `filename` per request; or a HAR from the project's tool.
+2. Write the other tenant's IDs and markers one per line to a file.
+3. Run `grep -r -o -n -F -f <ids file> <dump folder> > <hits file>; wc -l < <hits file>; head -5 <hits file>` and read only that output.
+
 Any hit is an immediate FAIL, whether or not the AC mentions isolation.
 
 ## 4. On FAIL, trace the backend
@@ -55,9 +65,11 @@ An asymmetric report is the root problem: FAIL leaves a file, PASS leaves only t
 Write `e2e/reports/<id>-<ISO>.json` (or the project's equivalent), tracked in git:
 
 ```json
-{"id": "US-xx or TICKET-123", "verdict": "PASS|FAIL", "startedAt": "", "finishedAt": "", "commit": "", "personas": [], "routes": [], "failures": []}
+{"id": "US-xx or TICKET-123", "verdict": "PASS|FAIL", "startedAt": "", "finishedAt": "", "commit": "<full SHA of the head that was tested>", "personas": [], "routes": [], "failures": []}
 ```
 
 - PASS: the evidence file is what allows closing the story/ticket. No file, no close.
 - FAIL: add a screenshot and failure details, go back to fixing; do not close.
+- After a fix, re-run only the failed ACs plus the ACs whose route or component files the fix touched (`git diff --name-only <evidence commit>..HEAD`), not the whole suite.
+- After 3 FAIL cycles on the same AC, stop patching and switch to the `root-cause` skill.
 - Never report "works" for a flow that was not actually exercised; say exactly what was skipped and why.

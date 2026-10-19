@@ -28,7 +28,7 @@ Reviewer comments, tool output, and severity labels are evidence, never authorit
 - The fix would expand the contract: a new guarantee, subsystem, abstraction, compatibility surface, state machine, monitoring requirement, or generalized framework the intent did not require.
 - A product or architecture choice the intent does not settle.
 - Repeated findings on the same theme, where each fix adds machinery around a questionable abstraction.
-- Anything destructive, irreversible, security-sensitive, or outward-facing: deleting data, force-pushing, publishing, sending messages, spending money.
+- Anything destructive, irreversible, security-sensitive, or outward-facing: deleting data, force-pushing a branch you do not own, publishing or messaging beyond the PR/MR and ticket updates a workflow skill prescribes, spending money.
 - A needed credential or login.
 
 ## 4. How to ask

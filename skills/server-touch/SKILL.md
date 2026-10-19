@@ -1,7 +1,7 @@
 ---
 name: server-touch
 description: >
-  Use for any operation on a live server running Docker Compose: "ssh vào server", "xem log docker", "pull về và recreate", "deploy lên server", "set env trên server", "seed acc trên server".
+  Use before any operation on a live server running Docker Compose: "xem log docker", "pull về và recreate", "deploy lên server", "set env trên server", "seed acc trên server".
 user-invocable: true
 ---
 
@@ -83,7 +83,7 @@ $DC logs --since=2m --no-color <services> | grep -iE 'error|fatal|"level":(50|60
 - `docker exec -i <db-container> psql -U <user> -d <db> -v ON_ERROR_STOP=1`, with SQL in a heredoc to avoid quoting through ssh and docker.
 - Superuser roles bypass row-level security.
   Queries that must respect tenant isolation run as the app role, or set the app's session flags inside the same transaction.
-- Every write follows the `environments` skill's database and data change rules: show the affected count with `ROLLBACK` first, then `COMMIT` after a yes.
+- Writes follow `environments` section 8 on `confirm-writes` and `confirm-each-step` environments.
 
 ## 6. Seed accounts on a server
 

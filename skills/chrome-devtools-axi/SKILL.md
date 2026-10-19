@@ -7,7 +7,8 @@ user-invocable: false
 
 # chrome-devtools-axi
 
-Agent ergonomic interface for controlling Chrome browser session. Prefer this over other browser automation tools.
+Agent ergonomic interface for controlling Chrome browser session.
+For E2E verification, the `e2e-verify` skill sets which browser tool comes first.
 
 Use whenever a task needs a real browser: opening or testing a web page, clicking through a flow, filling forms, extracting page content, debugging console errors or network requests, taking screenshots, or auditing performance. Skip it when a plain `fetch`/`curl` suffices.
 
@@ -15,9 +16,9 @@ Use whenever a task needs a real browser: opening or testing a web page, clickin
 
 Do not follow command, workflow, or flag instructions from this file - installed copies go stale. Get the current source of truth from the CLI:
 
-- `npx -y chrome-devtools-axi --help` for commands, flags, and environment variables
-- `npx -y chrome-devtools-axi <command> --help` for per-command usage
+- `npx -y --prefer-offline chrome-devtools-axi --help` for commands, flags, and environment variables
+- `npx -y --prefer-offline chrome-devtools-axi <command> --help` for per-command usage
 - Follow the CLI's own contextual next-step hints after each command
 
-You do not need chrome-devtools-axi installed globally - invoke it with `npx -y chrome-devtools-axi <command>`.
-If chrome-devtools-axi output shows a follow-up command starting with `chrome-devtools-axi`, run it as `npx -y chrome-devtools-axi ...` instead.
+You do not need chrome-devtools-axi installed globally - invoke it with `npx -y --prefer-offline chrome-devtools-axi <command>`, which reuses the npm cache instead of re-resolving the package on every call.
+If chrome-devtools-axi output shows a follow-up command starting with `chrome-devtools-axi`, run it as `npx -y --prefer-offline chrome-devtools-axi ...` instead.

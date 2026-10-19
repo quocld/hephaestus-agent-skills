@@ -168,7 +168,7 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
     Every shell call starts fresh, so load the file in the same call: `set -a; . .agents/secrets.env; set +a; <cmd>`.
     If the file holds `op://` values, use `op run --env-file .agents/secrets.env -- <cmd>` instead.
     Loading secrets this way does not count as changing a registry command.
-  - `{"secret": "op://vault/item/field"}`: 1Password, read on demand without printing: `NAME="$(op read 'op://...')" <cmd>`.
+  - `{"secret": "op://vault/item/field"}`: 1Password, read on demand without printing, assigned and exported in the same shell call: `NAME="$(op read 'op://...')"; export NAME; <cmd>`.
 - Never let a value appear in output, files, commits, command lines as a literal, logs, tickets, or chat, unless the user asks to see it.
 - Browser logins: prefer a saved session (Playwright storage state) per account; when a password must be typed, it goes only into the login field, never into a reply.
 - A reference does not resolve: tell the user which reference and why (`op whoami` fails = not signed in; item not found = missing entry; env var empty = missing line in `.agents/secrets.env`).

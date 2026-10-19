@@ -35,7 +35,7 @@ Always search the spec and the project's decision log first; decision logs are o
 
 ## 3. Pick the depth by risk triggers, not by diff size
 
-Five triggers: **status / state machine**, **webhook or external event**, **scheduled job**, **money**, **access gate (guard, permission, paywall)**.
+The triggers are the risk triggers named in `AGENTS.md`; an access gate includes guards, permissions, and paywalls.
 
 | Tier | Condition | Do |
 | --- | --- | --- |
@@ -54,19 +54,22 @@ An "empty screen" bug must be traced to its read endpoint before concluding anyt
 - The reproduction test runs the reporter's exact sequence **in one test** (save -> enable -> 422 -> verify -> enable OK), never split into separate single-step tests.
 - **Break the fix to prove the test catches it**, for every bug, with the revert-only-the-fix commands in `root-cause`.
 - If tightening a guard breaks old fixtures, fix the fixtures to match the new precondition; never loosen the guard.
-- Performance fixes: measure on the real environment first, and add an equivalence test (new path equals old path) before trusting it.
+- Performance fixes: follow the legacy and performance subsection of `root-cause`.
 
-## 5. Commit and deploy
+## 5. Commit and open the PR/MR
 
 - Commit and open the PR/MR per `worktree-flow`.
+- Merging and deploying to dev is the user's step (or CI after a merge the user asked for), per `worktree-flow` section 4.
 
 ## 6. "Pushed" is not "deployed"
 
+- While the PR/MR is open or the merge is not deployed yet, the bug is **pending deploy**, never "fixed": do not transition or reassign the ticket, report it to the user as pending deploy with the PR/MR link, and come back to this step once it is deployed.
 - Confirm the running build contains the fix: grep a marker string from the change inside the running container or the served bundle.
 - Then verify on the deployed environment with a real persona (API with a cookie jar, or a browser run), following that environment's policy and testing scope in `environments`.
 
 ## 7. Hand back to the reporter
 
+Hand back only after step 6 passed on the deployed environment.
 Comment in English, written for QA:
 the cause in plain words, what changed, **how to retest and the expected result**, and what did **not** change (so the ticket is not reopened by mistake).
 No AI-slop phrasing.
@@ -76,5 +79,5 @@ Never send the same ticket back to QA a third time without asking the user first
 
 ## 8. Report to the user
 
-A short table: ticket -> result -> new status.
+A short table: ticket -> result (fixed, pending deploy, or another step 2 branch) -> new status.
 Then the list of decisions the user must make, each with context, options, and a recommendation.

@@ -66,7 +66,8 @@ Everything files to a local destination by default; an external system such as a
    Mark each entry written into a memory file or `.stow-notes.md` per the tier contract below, but never add tier markers to an existing `TODO`/`BACKLOG`/`NOTES` file.
    File each undone next step with what it is waiting on, when it is genuinely blocked on something.
 
-7. **Curate every memory file this pass has open, not only the one a finding routes to.**
+7. **Curate only the memory files that receive a finding this pass, plus `.stow-notes.md` when it exists.**
+   Leave every other discovered memory file untouched unless the user asks for a full sweep (for example `/stow --sweep`); only then curate all of them.
    Evaluate each dated entry against its tier clock per the tier contract below, refreshing what current evidence re-validates and archiving what stays stale.
    Archive what is no longer current, including completed chronology, stale versions and paths, transient task state, resolved alternatives, old metrics, and report-sized procedures; merge or remove only superseded claims and duplicates whose facts are preserved elsewhere.
    Prefer one concise current rule, or a pointer to the authoritative source, over duplicate prose.
@@ -128,7 +129,7 @@ Rules:
   Increment the counter of every dated entry that pass did not reinforce before judging staleness, read a dated marker with no `/N` as counter zero so nothing needs migrating, and clear the counter only by refreshing the date on real evidence.
   In a file that is not opted in, never write a counter and never read one that is already there; preserve any existing `/N` byte-for-byte instead of normalizing or removing it.
 - Re-confirm a stale `perishable` entry against its named condition: still open means refresh the date, while resolved, expired, or no longer checkable means archive it now.
-- Decay is evaluated only when this skill runs; nothing happens between passes, so an infrequently stowed project experiences the clocks at its stow interval.
+- Decay is evaluated only when this skill runs, and only in the files that pass curates; nothing happens between passes, so an infrequently stowed project experiences the clocks at its stow interval.
 - Stale never means deleted: a stale entry moves to a `.stow-archive.md` in the source file's own directory, never loaded by any session, and its archive record includes the source filename, tier, reinforcement date when present, and a one-line reason.
   Include the unreinforced-pass counter only when the pass horizon itself made the entry stale, using the exact reason `unreinforced <N>p`; omit the counter when the wall-clock horizon or any other reason caused archival, even if the active marker carried one.
   In a git worktree, verify that this archive path is not already tracked in the index before writing any archived fact there.

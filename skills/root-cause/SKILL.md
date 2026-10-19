@@ -1,7 +1,7 @@
 ---
 name: root-cause
 description: >
-  Use when facing a bug, a failing or flaky test, a build, CI, or deploy failure, or any unexpected behavior, before proposing a fix; when a fix did not work; and when writing or reviewing the test that proves a fix.
+  Use when facing a bug, a failing or flaky test, a build, CI, or deploy failure, or any unexpected behavior, before proposing a fix; when a fix did not work; when writing or reviewing the test that proves a fix; and before refactoring untested legacy code or rewriting a slow path ("sửa bug", "fix lỗi", "refactor code cũ", "tối ưu performance").
 user-invocable: true
 ---
 
@@ -23,6 +23,9 @@ For the ticket loop around a bug (reading the ticket, depth by risk, hand-back),
 When the error surfaces deep in a call stack, ask "who passed this value?" one level at a time until you reach where it was created, and fix it there.
 When you cannot follow it by reading, log just before the failing operation with its inputs, `process.cwd()`, the relevant env, and `new Error().stack`; in tests use `console.error`, since loggers are often silenced.
 After fixing the origin, add a guard at the layer where the damage happened (refuse an empty path, an out-of-tenant id), so the same class of bug fails loudly next time, with a test proving the guard is actually mounted (`AGENTS.md`).
+Then try to get past your own fix: name one input that reaches the same bad state without passing through your change (another route or job, a direct DB write, `null` instead of `""`, another tenant's id).
+If you can name one, the fix is at the wrong layer; move it toward the origin and try again.
+Hunt variants of the same flaw: `git grep -n '<the pattern>'` for sibling call sites, and fix each one that shares the cause in this branch or list it in the report with why it was left.
 
 ## 3. One hypothesis, one change
 
@@ -54,6 +57,8 @@ After fixing the origin, add a guard at the layer where the damage happened (ref
 - A file, folder, or record appears after the suite and you do not know which test creates it:
   `bash <this skill>/scripts/find-polluter.sh <path> '<test glob>' '<command that runs one test file>'` runs each test file alone and stops at the first one that creates it.
   Run the command on one file by hand first, to be sure it runs exactly that file.
+  Each file runs alone and pays the runner's startup, so narrow the glob first to the files that mention the path, for example the folders of `git grep -l '<path name>'`.
+  In the glob, `*` also crosses `/` (like `**`), so `apps/*.test.ts` matches files in subfolders too.
 - A test that fails only in parallel runs shares state (database, port, temp folder) with another; isolate the state rather than serializing the suite.
 - Prove a flaky fix by repetition under load: run the test 50 or more times (the runner's repeat option or a loop) with parallel workers or CPU stress; it must fail before the fix and never after.
 
@@ -79,6 +84,18 @@ It must also catch the bug for the right reason:
   When the mock setup grows bigger than the test, switch to an integration test with real components.
 - Before finishing, imagine these mutations of the fix; at least one test should fail for each: a wrong constant or argument, the wrong branch, a missing state change or side effect, an empty or default return, missing handling of empty, zero, unauthorized, or malformed input.
 
+### Legacy code or a performance rewrite: pin current behavior first
+
+Before changing code no test pins, or rewriting a path for speed, write characterization tests against the current code, then change it.
+For speed, measure first on the real environment where it is slow (same data volume, same build), never only locally, and measure again there after the change.
+
+- Each case has literal inputs and the literal output the current code gives: one case per branch, plus zero, empty, negative, and maximum values.
+- The current code is the oracle: when it disagrees with the spec, assert what it does now and report the discrepancy; fixing it is a separate change with its own failing test.
+- A performance rewrite also gets an equivalence test that feeds the same inputs to the old and the new path and compares the results; keep the old path callable until it passes.
+- An old path or recorded fixture that is missing makes the comparison fail, never skip; report how many cases ran, and zero means not proven.
+- Recorded fixtures get fake tokens, passwords, and cookies of the same shape, never real ones.
+- These tests pass before and after by design, so instead of the revert check, break the new code in one small way (a rounding mode, an off-by-one threshold, a flipped comparison), confirm a case goes red, and restore it.
+
 ## Report
 
-The cause in one sentence with its evidence (the log line, the trace, the diff), the fix at the origin, the guard added, and the test with proof that it failed without the fix.
+The cause in one sentence with its evidence (the log line, the trace, the diff), the fix at the origin, the guard added, the bypass input you tried and why it no longer reaches the bad state, the sibling call sites checked, and the test with proof that it failed without the fix.

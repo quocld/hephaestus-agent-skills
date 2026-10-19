@@ -1,7 +1,7 @@
 ---
 name: worktree-flow
 description: >
-  Use at the start of any task that will change files in a git repo, when answering questions about the code, before committing or opening a PR/MR, when resuming, finishing, or abandoning a task, and when asked "tạo worktree", "mở PR", "mở MR", "xong thì commit", "dọn worktree", "lên staging".
+  Use at the start of any task that will change files in a git repo, before committing or opening a PR/MR, when resuming, finishing, or abandoning a task, and when asked "tạo worktree", "mở PR", "mở MR", "xong thì commit", "dọn worktree", "lên staging".
 user-invocable: true
 ---
 
@@ -16,22 +16,18 @@ Every task gets its own worktree and branch, work is pushed as it goes, and fini
 git fetch origin --prune
 ```
 
-- The integration branch is the `branch` of the `dev` environment in `.agents/environments.json`, otherwise `dev` if `git ls-remote --exit-code --heads origin refs/heads/dev` succeeds.
-- Neither exists: stop and ask which branch PRs/MRs go into.
+- The integration branch is the `branch` of the `dev` environment in `.agents/environments.json` (written by `project-init`), otherwise `dev` if `git ls-remote --exit-code --heads origin refs/heads/dev` succeeds.
+- None of these: stop and ask which branch PRs/MRs go into.
   Never fall back to `main`, `master`, or any branch the registry lists for staging or prod.
 - Below, `<int>` means that branch.
-
-Read-only questions ("explain this function") need no worktree, but answer from `origin/<int>` (`git show origin/<int>:<path>`), not from the main checkout, which may be on another branch or hold someone's edits.
-Say which ref you read.
 
 ## 1. Start or resume: one task = one worktree = one branch
 
 0. Check whether you already stand in a linked worktree (a harness may have started you in one):
    ```bash
    git rev-parse --path-format=absolute --git-dir --git-common-dir   # two different paths = linked worktree
-   git rev-parse --show-superproject-working-tree                    # prints a path = submodule, not a worktree
    ```
-   - Linked worktree on this task's branch: use it and go to section 2.
+   - Linked worktree on this task's branch: use it, read its progress file (section 3), and go to section 2.
    - Linked worktree on a detached HEAD with a clean tree (made for you by the harness): continue with steps 1 and 2, then in step 3 create the branch in place with `git switch --no-track -c <branch> origin/<int>` instead of adding a worktree.
    - Linked worktree on another task's branch: do not work there; continue with step 1 to create your own.
 1. Look for existing work on the ticket:
@@ -41,7 +37,7 @@ Say which ref you read.
    gh pr list --state open --search '<ticket>'      # GitLab: glab mr list --search '<ticket>'
    ```
    - Nothing found: create it (step 2).
-   - Found, and the user asked to continue or resume that work: reuse that worktree or branch; do not create a second one.
+   - Found, and the user asked to continue or resume that work: reuse that worktree or branch, read its progress file first, and do not create a second one.
    - Found otherwise: another agent may be on it; stop and ask.
 2. Name the branch `<type>/<ticket>-<slug>` (`fix/WEST-12-paid-invoice-lock`); with no ticket, `<type>/<slug>`.
    Types follow Conventional Commits: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
@@ -57,7 +53,7 @@ Say which ref you read.
 ## 2. Make the worktree runnable without touching other agents
 
 - Install dependencies (`pnpm install --frozen-lockfile` or the repo's equivalent).
-  Docs-only or config-only changes may skip install, baseline, and E2E; still run the linters that cover those files.
+  Docs-only or config-only changes may skip install and E2E; still run the linters that cover those files.
 - Gitignored local config: symlink files that only hold secrets (`.agents/secrets.env`) from the main checkout; copy and edit files whose values must differ per worktree (`.env.local` with its port, database name, callback URLs).
   Never commit either.
 - Processes you did not start (dev servers, watchers, containers) belong to someone else; never kill them.
@@ -67,10 +63,30 @@ Say which ref you read.
 - Databases: never reset or migrate a database another worktree uses.
   When the task changes the schema or runs destructive tests, use your own database or schema.
   If the app cannot run isolated, say so instead of fighting over shared resources.
-- Record the baseline of already-failing tests before changing anything.
+- No test baseline up front: run the touched packages' tests once after your change.
+  Only for a test that fails, run that one test on `origin/<int>` in a throwaway worktree (`git worktree add --detach "$WT.base" origin/<int>`, removed afterwards) to tell whether it already failed, and record the result in Decisions (section 3).
   A test that fails only while other agents share the test database is a shared-state flake: confirm it in isolation, then fix the isolation in its own branch per `root-cause`, not inside this task.
 
-## 3. Commit and push as you go
+## 3. Commit, push, and keep the progress file as you go
+
+Context gets summarized or reset mid-task, and chat is lost with it, so the worktree keeps its own short resume file outside the working tree, where it can never be committed:
+
+```bash
+P="$(git rev-parse --path-format=absolute --git-path agent-progress.md)"   # run inside $WT; lives in this worktree's private git dir
+```
+
+- It is per worktree, needs no `.gitignore` change, and `git worktree remove` deletes it.
+  Do not use `info/exclude` for this; it is shared by every worktree of the repo.
+- Its content, replaced rather than appended, under about 30 lines:
+  1. `# <branch>` and the ticket or request in one line.
+  2. `## Done`: finished steps with their commit short hashes.
+  3. `## In progress`: the one step underway and its current state.
+  4. `## Next`: the remaining steps in order.
+  5. `## Decisions`: one line each, `<what> - <why> - <cost if wrong>`, plus any pre-existing test failures from section 2.
+- Read it before anything else on resume and right after a context summary; trust it and `git log origin/<int>..HEAD` over memory.
+- Update it with every commit; it is not a journal, so drop lines that no longer help the next step.
+
+Then commit and push in small steps:
 
 - Small commits at each working step; check `git status` first and stage only files you meant to change.
   Never commit secrets, build output, or local config.
@@ -85,7 +101,8 @@ Say which ref you read.
 
 ## 4. Done means a PR/MR into `<int>`
 
-A task is finished only when all of these hold:
+A task is finished only when all of these hold.
+If the repo uses the no-mistakes gate, its pipeline does the rebase, checks, review, and PR/MR in steps 1-4; run it per `no-mistakes` instead of repeating them.
 
 1. Rebased on the latest base: `git fetch origin && git rebase origin/<int>`, conflicts resolved keeping other people's work, then `git push --force-with-lease`.
 2. Checks pass: typecheck, lint, tests of the touched packages, and the project's own gates; E2E evidence (`e2e-verify`) when the change is user-facing.
@@ -101,11 +118,12 @@ A task is finished only when all of these hold:
 - Do not merge your own PR/MR unless the user asks.
 - Blocked or partly done work becomes a draft (`gh pr create --draft`, `glab mr create --draft`) whose body lists what remains.
   Do this as soon as you know you will stop, not at the very end.
+- The progress file is local and dies with the worktree: carry its Decisions and Next into the PR/MR body, the only record another machine or agent sees.
 
-## 5. Staging and prod only on the user's explicit word
+## 5. Promote to staging and prod
 
-- Never open a PR/MR into, merge into, push to, or deploy the staging or production branches unless the user says so explicitly in this conversation.
-  The approval covers exactly what was named, this time only.
+Only on the user's explicit word, per `AGENTS.md`.
+
 - "Lên staging" by default means promoting `<int>` as a whole: open a PR/MR from `<int>` into the staging branch, and list in its body every commit it carries, since that includes other people's merged work.
   Merge a single feature branch directly into staging only when the user asks for exactly that.
 - Merge the promotion PR/MR only if the user asked to merge.
@@ -114,9 +132,26 @@ A task is finished only when all of these hold:
 
 ## 6. Clean up
 
-- At the start of a session, sweep the worktrees under `<repo>.worktrees/`: when its PR/MR is merged or closed (check `gh pr view <branch>` or `glab mr view <branch>`), the tree is clean, and the branch head equals the PR/MR's head commit (`gh pr view <branch> --json headRefOid -q .headRefOid`, or `glab mr view <branch>`), remove it with `git worktree remove "$WT"` and `git branch -D <branch>`.
-  `-D` is needed after squash merges; only use it once the PR/MR state confirms the merge.
-- Never remove a worktree with uncommitted or unpushed work, or one whose PR/MR is still open.
+Merged branches whose remote was deleted show as `[gone]` after the fetch in section 0, which makes them the cheap candidates; check only those at session start.
+On an explicit cleanup request ("dọn worktree"), also check every worktree under `<repo>.worktrees/`, since repos that keep merged branches never show `[gone]`.
+
+```bash
+git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == "[gone]" {print $1}'
+git worktree list --porcelain | awk -v b="refs/heads/<branch>" '/^worktree /{p=substr($0,10)} $0=="branch "b{print p}'   # its worktree ($WT), if any
+gh pr view <branch> --json state,headRefOid -q '.state + " " + .headRefOid'   # GitLab: glab mr view <branch> --output json | jq -r '.state + " " + .sha'
+```
+
+Remove a candidate only when all of these hold:
+
+- Its PR/MR is merged or closed; `[gone]` alone proves nothing, since anyone can delete a remote branch.
+- `git -C "$WT" status --porcelain` prints nothing.
+- `git rev-parse <branch>` equals the PR/MR head commit, so no unpushed commit is lost.
+- It is not the worktree you stand in, nor the main checkout.
+
+Then `git worktree remove "$WT"` (skip it when the branch has no worktree) and `git branch -D <branch>`; `-D` is needed after squash merges and is safe only after the checks above.
+
+- Never pass `--force` to `git worktree remove`; a refusal means there is work to keep, so leave it and report it.
+- Never remove anything whose PR/MR is open, or a branch with no PR/MR; report those instead.
 - Stop the dev servers and containers you started.
 
 ## Report

@@ -51,6 +51,15 @@ Rules:
 
 ## Copy
 
+- Prefer the exact copy from the design or spec; the rules below apply only to copy you write yourself.
 - Sentence case, plain English, no raw schema text ("Country must be 100 characters or fewer", not "String must contain at most 100 character(s)").
-- No em dash, no AI-slop words (seamlessly, effortlessly, unlock, empower, elevate, streamline) and no "X - Y" filler constructions.
-- Prefer the exact copy from the design or spec.
+- Use the user's words, not system terms: "Notifications", not "Webhook config".
+- An action keeps one name through the whole flow: a Publish button leads to a "Publish post?" dialog and a "Published" toast, never Submit, Save, or Done.
+- An error you write states what happened and what to do next, and never apologizes ("Couldn't save the invoice. Check your connection and try again.", not "Oops, something went wrong").
+- An empty state names the next action and offers it ("No clients yet" plus an "Add client" button), not just "No data".
+- Avoid these AI tells in copy and layout:
+  - em dashes and "Word - fragment" labels;
+  - slop words (seamlessly, effortlessly, unlock, empower, elevate, streamline) and filler taglines that sell instead of explain;
+  - meta strings joined by middle dots ("A · B · C");
+  - an arrow appended to link or button text ("View all →");
+  - all-caps labels and eyebrows.

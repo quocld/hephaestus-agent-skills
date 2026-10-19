@@ -23,7 +23,7 @@ Choose exactly one mode for the run.
 Use when the task is bounded, verification is clear, and the user wants one configured run to proceed without steering.
 
 - Prepare a precise prompt with constraints, non-goals, verification, and stop condition.
-- Launch GNHF and wait for completion.
+- Launch GNHF as a background run and wait for its exit notification; do not poll.
 - Intervene early only for hard failure, runaway scope, destructive behavior, or impossible prerequisites.
 - Report the final GNHF status after exit.
 
@@ -39,10 +39,11 @@ Use when the task is uncertain, exploratory, design-heavy, research-heavy, or li
 Default to Companion when the user asks to iterate until satisfied, requests multi-round work, provides review findings, asks for design/skill/documentation improvement, or asks for supervision.
 
 - Keep a note of original intent, branch, session id, and last known result.
-- Poll the active GNHF process until exit or until an intervention point appears.
+- Run GNHF in the background and wait on its exit notification, or on a Monitor until-loop that wakes at each iteration boundary in its log, instead of polling.
 - Intervene when the worker optimizes the wrong thing, repeats failed fixes, skips requested research, drifts scope, or claims success without evidence.
 - Treat review findings as the next acceptance criteria.
 - Prefer a new bounded GNHF prompt over manually taking over implementation.
+- Relaunch at most 3 times per user request, counting Steer, Companion Review, and Findings relaunches together; then report the remaining findings and evidence to the user instead of relaunching again.
 
 Examples:
 
@@ -68,6 +69,7 @@ gnhf \
   "<worker prompt>"
 ```
 
+Default to `--max-iterations 10` unless the user names a number.
 Use `--model <model>` to select a model for a run. For config defaults and agent-specific restrictions, follow the README [Configuration](../../README.md#configuration).
 
 Before launch:
@@ -124,6 +126,7 @@ Use only in Companion mode, when the host is supervising quality or deciding whe
 1. Inspect branch, status, commits, changed files, and diff.
 2. Read GNHF notes/logs as claims, not evidence.
 3. Run independent verification: tests, lint, build, typecheck, manual QA, or domain-specific checks.
+   Between rounds, verify only the packages the round touched; run the full suite once, before the final verdict.
 4. Compare the result to the stop condition and the user's latest feedback.
 5. Decide: **Mergeable**, **Needs follow-up GNHF run**, or **Do not merge**.
 
@@ -139,6 +142,7 @@ Use when the user provides findings such as "not preserved", "scope drift", "mis
 4. Prompt the worker to fix only the bounded finding, preserve completed valid work, verify, and stop only when the finding is no longer true.
 5. Review again after the follow-up.
 6. Repeat until no blocking findings remain, verification passes, or a real blocker is found.
+   The Companion relaunch cap still applies.
 
 ## Morning Review
 

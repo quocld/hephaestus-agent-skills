@@ -17,5 +17,11 @@ License texts for each source are in `LICENSES/`.
 | `skills/knowledge-placement` | distilled from firstmate `firstmate-coding-guidelines` | MIT |
 | `skills/root-cause` (incl. `scripts/find-polluter.sh`) | distilled from github.com/obra/superpowers `systematic-debugging` and `test-driven-development/writing-good-tests.md` | MIT |
 | `skills/knowledge-placement` (skill-writing rules), `skills/worktree-flow` (existing-worktree check), `AGENTS.md` (verification rule) | ideas from github.com/obra/superpowers `writing-skills`, `using-git-worktrees`, `verification-before-completion` | MIT |
+| `skills/fresh-review` (conditional dimensions, confidence filter), `skills/feature-build`, `skills/root-cause` (characterization tests), `skills/worktree-flow` (gone-branch cleanup), `skills/project-init` (drift checks), `skills/knowledge-placement` (hook tier) | adapted from github.com/anthropics/claude-plugins-official `code-review`, `pr-review-toolkit`, `feature-dev`, `code-modernization`, `commit-commands`, `claude-md-management`, `hookify` | Apache-2.0 |
+| `skills/knowledge-placement` (trigger and reader tests), `skills/fe-guardrails` (copy rules) | adapted from github.com/anthropics/skills `skill-creator`, `doc-coauthoring`, `frontend-design` | Apache-2.0 |
+| `skills/security-pass`, `skills/root-cause` (fix self-check, variant hunt) | adapted from github.com/anthropics/defending-code-reference-harness; ideas only (no text) from claude-plugins-official `claude-security`, which is proprietary | Apache-2.0 |
+| `skills/worktree-flow` (resume file) | ideas from github.com/anthropics/cwc-long-running-agents | Apache-2.0 |
+| `hooks/` | mine | mine |
+| local changes to vendored skills | `gnhf` (iteration and relaunch caps), `stow` (curate only touched files), `no-mistakes` (recovery rules moved to `references/custody-recovery.md`), `chrome-devtools-axi` (browser order defers to `e2e-verify`, `--prefer-offline`) | reapply after any upstream sync |
 | `reference/opinions-example.md` | github.com/kunchenguid/kun `OPINIONS.md` (no upstream license; keep this repo private) | none |
 | `skills/flow-trace`, `skills/e2e-verify`, `skills/bug-triage`, `skills/fe-guardrails`, `skills/server-touch` | distilled from my westmont-erp project workflow | mine |

@@ -63,7 +63,7 @@ Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedH
 - `version`: `psql "$DB_URL" -tAc "select max(version) from supabase_migrations.schema_migrations"`; after deploy it must equal the newest file in `supabase/migrations/` at `<sha>`.
   `supabase migration list` is useful in the plan but prints a table, not one value.
 - `deploy`, in this order:
-  1. Backup (prod): `supabase db dump` saves only the schema by default; take two dumps, `-f .agents/backups/<env>-<timestamp>-schema.sql` and `--data-only -f .agents/backups/<env>-<timestamp>-data.sql`, or confirm a point-in-time restore point exists in the dashboard.
+  1. Backup (prod): `supabase db dump` saves only the schema by default; take two dumps, `supabase db dump --db-url "$DB_URL" -f .agents/backups/<env>-<timestamp>-schema.sql` and `supabase db dump --db-url "$DB_URL" --data-only -f .agents/backups/<env>-<timestamp>-data.sql`, or confirm a point-in-time restore point exists in the dashboard.
      Dumps contain customer data: `.agents/backups/` is gitignored; delete dumps when no longer needed.
   2. `supabase db push --db-url "$DB_URL" --dry-run`, and show the list of migrations it would apply.
   3. `supabase db push --db-url "$DB_URL"`.

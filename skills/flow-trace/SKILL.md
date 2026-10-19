@@ -1,7 +1,7 @@
 ---
 name: flow-trace
 description: >
-  Use before calling done any change that touches a status column or state machine, a webhook or external event, a scheduled job, money, or an access gate, or when asked to "trace luồng", "rà luồng", "check this flow end to end".
+  Use before calling done any change that alters how a status or state machine moves (writes, transitions, guards on it), a webhook or external event, a scheduled job, money, or an access gate, or when asked to "trace luồng", "rà luồng", "check this flow end to end".
 user-invocable: true
 ---
 

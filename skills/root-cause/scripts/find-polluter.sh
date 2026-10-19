@@ -3,6 +3,7 @@
 # Runs each matching test file alone, in order, and stops at the first one after which <path> exists.
 # Usage: bash find-polluter.sh <path> <test-glob> <test-command>
 #   <test-command> must run exactly one file, given as its last argument.
+# In <test-glob>, '*' also matches '/' (find -path semantics), so a single star crosses directories like '**'.
 # Example: bash find-polluter.sh tmp-uploads 'apps/**/*.test.ts' 'pnpm vitest run'
 # Exit codes: 1 = polluter found, 0 = none found, 2 = usage error or the runs could not be trusted.
 # Output of every run goes to a log file whose path is printed at the start.
@@ -16,7 +17,8 @@ fi
 POLLUTION="$1"
 PATTERN="${2#./}"
 TEST_CMD="$3"
-LOG="$(mktemp -t find-polluter.XXXXXX)"
+TMP_ROOT="${TMPDIR:-/tmp}"
+LOG="$(mktemp "${TMP_ROOT%/}/find-polluter.XXXXXX")"
 
 if [ -e "$POLLUTION" ]; then
   echo "$POLLUTION already exists; remove it first so the run starts clean." >&2
