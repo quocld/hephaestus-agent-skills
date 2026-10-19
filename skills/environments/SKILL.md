@@ -92,6 +92,7 @@ After the last step: run every `verify`; code services' `version` must print `<s
 - A remote service needs `version`, `deploy`, `verify`, and `rollback`; `logs` where the platform has a CLI for it.
   One is missing: propose it from `references/deploy-targets.md`, get it confirmed, write it into the registry, then use it.
 - SSH only through the alias in `access.ssh` (defined in `~/.ssh/config`), one remote command per call: `ssh <alias> '<cmd>'`.
+- Docker Compose on a server (shared hosts above all): follow the `server-touch` skill.
 - "Pushed" is not "deployed": a deploy is done when `version` matches the target and `verify` passes.
 - Read the section of `references/deploy-targets.md` for each service type you touch; it holds the platform traps (Supabase link state, Vercel git vs. CLI deploys, VPS release folders).
 

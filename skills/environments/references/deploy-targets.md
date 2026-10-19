@@ -36,10 +36,11 @@ If the project has no such endpoint, propose adding one; "pushed" is not "deploy
 
 ## docker-compose (on a VPS)
 
-- `deploy`: `ssh <alias> 'cd <appDir> && docker compose pull'`, then `ssh <alias> 'cd <appDir> && docker compose up -d'`.
+The `server-touch` skill owns the mechanics: scoping every command with `-p` and all compose files, the commands forbidden on a shared host, verify, and two-level rollback.
+Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedHost`.
+
+- Prefer the project's versioned deploy script as `deploy` when one exists.
 - Pin image tags to the commit SHA, not `latest`; otherwise `version` and `rollback` have nothing to point at.
-- `rollback`: set the previous tag and `docker compose up -d` again.
-- `logs`: `ssh <alias> 'cd <appDir> && docker compose logs --tail 200 <service>'`.
 
 ## vercel
 

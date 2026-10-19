@@ -26,6 +26,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | Jira access (MCP or API) |
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
 | `environments` | Per-project registry of dev/staging/prod: servers, deploy commands (VPS, Vercel, Supabase), test accounts, rules; prod confirmed step by step. | `.agents/environments.json` in the project |
+| `server-touch` | Docker Compose ops over SSH on a possibly shared host: scoped commands, deploy script, logs, .env, psql, rollback. | `environments` registry |
 | `stow` | Save durable knowledge from a session to disk before a reset or break. | - |
 | `vision` | Draft and stress-test a project VISION.md. | node (`npx lavish-axi`) |
 | `no-mistakes` | Push through an AI review/test/lint gate before a clean PR. | `no-mistakes` CLI |

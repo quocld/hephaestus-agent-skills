@@ -224,6 +224,21 @@
             "vercelOrgId": {
               "description": "orgId from .vercel/project.json.",
               "type": "string"
+            },
+            "composeProject": {
+              "description": "docker compose -p value; every compose command must carry it.",
+              "type": "string"
+            },
+            "composeFiles": {
+              "description": "Every -f file, in order.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sharedHost": {
+              "description": "The server runs other projects too. Absent means treat as shared.",
+              "type": "boolean"
             }
           }
         },
