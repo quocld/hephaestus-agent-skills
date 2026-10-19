@@ -194,6 +194,19 @@ def reasons(command, directory, depth=0):
             yield "glab mr merge (agents never merge an MR without the user's word)"
 
 
+NO_PROMPT_MODES = {"bypassPermissions", "dontAsk"}
+
+
+def allowed_branches(cwd):
+    """Branches the user opted out of the guard for this repo: git config agentguard.allow <branch> (repeatable)."""
+    try:
+        out = subprocess.run(["git", "-C", cwd, "config", "--get-all", "agentguard.allow"],
+                             capture_output=True, text=True, timeout=5)
+        return {b.strip() for b in out.stdout.split() if b.strip()}
+    except (OSError, subprocess.SubprocessError):
+        return set()
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -202,15 +215,30 @@ def main():
     if not isinstance(payload, dict):
         return 0
     command = (payload.get("tool_input") or {}).get("command") or ""
-    found = list(dict.fromkeys(reasons(command, os.path.abspath(payload.get("cwd") or "."))))
-    if found:
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "ask",
-                "permissionDecisionReason": "Protected-branch guard: " + "; ".join(found) + ". Approve only if you asked for this.",
-            }
-        }))
+    cwd = os.path.abspath(payload.get("cwd") or ".")
+    found = list(dict.fromkeys(reasons(command, cwd)))
+    allow = allowed_branches(cwd)
+    found = [r for r in found if not any(f"'{b}'" in r for b in allow)]
+    if not found:
+        return 0
+    reason = "Protected-branch guard: " + "; ".join(found) + "."
+    if payload.get("permission_mode") in NO_PROMPT_MODES:
+        decision = "deny"
+        reason += (" This permission mode shows no prompt, so the guard denies instead of asking."
+                   " If the user explicitly asked for this, tell them to run it themselves with `! <command>`")
+        # agentguard.allow only lifts reasons that name a branch; a PR/MR merge never names one.
+        if any("branch '" in r for r in found):
+            reason += ", or to opt this repo out with `git config agentguard.allow <branch>`; never set that yourself."
+        else:
+            reason += "; `git config agentguard.allow` does not cover PR/MR merges."
+    else:
+        decision = "ask"
+        reason += " Approve only if you asked for this."
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": decision,
+        "permissionDecisionReason": reason,
+    }}))
     return 0
 
 

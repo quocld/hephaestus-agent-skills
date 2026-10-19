@@ -62,6 +62,8 @@ Conditional dimensions:
   - Flag shapes that can represent illegal states (status "paid" with no paid_at, optional fields that are required together) and invariants enforced only by convention.
 - comment-rot, when comments or the code they describe changed:
   - Flag TODO or FIXME comments the change already addressed, comments that describe code it refactored, and claims the code no longer satisfies.
+- logging, when the range adds or changes log calls or the logger:
+  - Read the `logging-standard` skill and flag log lines that break it: missing contract fields, a wrong level, missing redaction, and secrets or PII in messages or fields.
 - security, when the range hits any of the security triggers:
   - Report what you see as findings, set security_pass_needed to true, and list the touched paths in security_paths.
 - flow, when the range hits any of the flow triggers:
@@ -108,7 +110,7 @@ Rules:
 Return JSON:
 {
   "findings": [{
-    "dimension": "intent|correctness|simplification|silent-failure|test-gap|type-design|comment-rot|security|flow|history",
+    "dimension": "intent|correctness|simplification|silent-failure|test-gap|type-design|comment-rot|logging|security|flow|history",
     "severity": "error|warning|info",
     "action": "ask-user|auto-fix|no-op",
     "confidence": 0,

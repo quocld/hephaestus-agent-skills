@@ -96,7 +96,12 @@
           "rollback": [
             "vercel rollback --scope acme"
           ],
-          "logs": "vercel logs https://staging.acme.com --scope acme"
+          "logsCommand": "vercel logs https://staging.acme.com --scope acme",
+          "logs": {
+            "provider": "betterstack",
+            "source": "acme-staging",
+            "shipping": "sdk"
+          }
         },
         {
           "name": "db",
@@ -123,7 +128,12 @@
           ],
           "notes": [
             "Logs: Logs Explorer at the dashboardUrl."
-          ]
+          ],
+          "logs": {
+            "provider": "betterstack",
+            "source": "acme-staging-supabase",
+            "shipping": "drain"
+          }
         }
       ],
       "accounts": [
@@ -192,7 +202,13 @@
             "ssh acme-prod 'ln -sfn /srv/acme/releases/<previous-sha> /srv/acme/current'",
             "ssh acme-prod 'pm2 reload acme-web --update-env'"
           ],
-          "logs": "ssh acme-prod 'pm2 logs acme-web --lines 200 --nostream'"
+          "logsCommand": "ssh acme-prod 'pm2 logs acme-web --lines 200 --nostream'",
+          "logs": {
+            "provider": "betterstack",
+            "source": "acme-prod",
+            "sourceId": 123456,
+            "shipping": "sdk"
+          }
         },
         {
           "name": "db",
@@ -215,6 +231,11 @@
           "verify": [
             "psql \"$PROD_DB_URL\" -tAc \"select max(version) from supabase_migrations.schema_migrations\""
           ],
+          "logs": {
+            "provider": "betterstack",
+            "source": "acme-prod-supabase",
+            "shipping": "drain"
+          },
           "notes": [
             "Run every command from the clean deploy checkout of <sha> (or <previous-sha> for rollback), never the working tree.",
             "Migrations are forward-only; rollback is a reverse migration. Restoring the backup is a last resort the user decides; prefer point-in-time recovery if the plan has it.",

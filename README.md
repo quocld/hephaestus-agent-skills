@@ -33,6 +33,8 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
 | `environments` | Per-project registry of dev/staging/prod: servers, deploy commands (VPS, Vercel, Supabase), test accounts, rules, version status; prod confirmed step by step. | `.agents/environments.json` in the project |
 | `server-touch` | Docker Compose ops over SSH on a possibly shared host: scoped commands, deploy script, logs, .env, psql, rollback. | `environments` registry |
+| `logging-standard` | Structured log contract for code that logs and for loggers: fields, levels, correlation, errors, redaction, volume, tests. | - |
+| `betterstack-logs` | Better Stack log setup per project (MCP, shipping path, sources) and reading an environment's logs while debugging. | Better Stack MCP (official plugin or `claude mcp add`), `environments` registry |
 | `stow` | Save durable knowledge from a session to disk before a reset or break. | - |
 | `vision` | Draft and stress-test a project VISION.md. | node (`npx lavish-axi`) |
 | `no-mistakes` | Push through an AI review/test/lint gate before a clean PR. | `no-mistakes` CLI |

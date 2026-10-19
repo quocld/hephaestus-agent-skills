@@ -41,6 +41,14 @@ raw_case() {
   if [ "$got" = "$2" ]; then echo "ok   $got  $3"; else echo "FAIL want $2 got $got  $3"; FAIL=1; fi
 }
 
+# mode_case <expected> <cwd> <permission_mode> <command>
+mode_case() {
+  local payload got
+  payload="$(python3 -c 'import json,sys; print(json.dumps({"cwd": sys.argv[1], "permission_mode": sys.argv[2], "tool_input": {"command": sys.argv[3]}}))' "$2" "$3" "$4")"
+  got="$(decision guard-protected-branches.py "$payload")"
+  if [ "$got" = "$1" ]; then echo "ok   $got  [${2##*/} $3] $4"; else echo "FAIL want $1 got $got  [${2##*/} $3] $4"; FAIL=1; fi
+}
+
 echo "== guard-protected-branches.py"
 bash_case allow "$FEAT" 'git push'
 bash_case ask   "$MAIN" 'git push'
@@ -85,6 +93,28 @@ raw_case no-em-dash.py allow 'Write with plain dash' '{"tool_name":"Write","tool
 raw_case no-em-dash.py allow 'Edit removing an em dash' '{"tool_name":"Edit","tool_input":{"file_path":"a.md","old_string":"aEMDASHb","new_string":"a - b"}}'
 raw_case no-em-dash.py allow 'bad JSON fails open' 'not json'
 raw_case no-em-dash.py allow 'non-object JSON fails open' '[1]'
+
+echo "== permission modes and per-repo opt-out"
+mode_case deny  "$FEAT" bypassPermissions 'git push origin main'
+mode_case deny  "$FEAT" dontAsk 'gh pr merge 3'
+mode_case ask   "$FEAT" default 'git push origin main'
+mode_case allow "$FEAT" bypassPermissions 'git push origin feature'
+git -C "$MAIN" config agentguard.allow main
+mode_case allow "$MAIN" bypassPermissions 'git push'
+mode_case deny  "$MAIN" bypassPermissions 'git push origin staging'
+mode_case deny  "$MAIN" bypassPermissions 'gh pr merge 3'
+git -C "$MAIN" config --unset agentguard.allow
+
+# hint_case <expected: yes|no> <cwd> <command>: does the deny reason suggest agentguard.allow?
+hint_case() {
+  local payload got
+  payload="$(python3 -c 'import json,sys; print(json.dumps({"cwd": sys.argv[1], "permission_mode": "bypassPermissions", "tool_input": {"command": sys.argv[2]}}))' "$2" "$3")"
+  got="$(printf '%s' "$payload" | python3 "$HOOKS/guard-protected-branches.py" | python3 -c 'import json,sys; r=json.load(sys.stdin)["hookSpecificOutput"]["permissionDecisionReason"]; print("yes" if "opt this repo out" in r else "no")')"
+  if [ "$got" = "$1" ]; then echo "ok   hint=$got  $3"; else echo "FAIL want hint=$1 got $got  $3"; FAIL=1; fi
+}
+hint_case yes "$FEAT" 'git push origin main'
+hint_case no  "$FEAT" 'gh pr merge 3'
+hint_case no  "$FEAT" 'glab mr merge 3'
 
 echo "== settings registration ($SETTINGS)"
 if [ ! -f "$SETTINGS" ]; then

@@ -24,10 +24,12 @@ Below, `$DC` means the fully scoped compose command run inside `appDir`: `docker
    - Anything over `$(docker ps -aq)` or a similar sweep.
    - `docker compose down` without `-p`, and `down -v` anywhere (it deletes volumes, which means databases).
    - Restarting the Docker daemon, editing the host's reverse proxy, firewall, or system packages.
+   - Installing a host-wide log collector such as the Better Stack Collector, which reads every team's containers; ship logs as `betterstack-logs` section 2 says.
    Cleanup is the user's call: ask, and scope it to this project (e.g. remove only this project's old image tags).
 3. Stay inside `appDir`; never read or write another project's directory.
 4. Recreate instead of down/up: `$DC up -d --force-recreate --no-build <services>`.
 5. Logs never follow: use `--tail=N` or `--since=Nm`, never `-f`, which blocks the session.
+   `$DC logs --tail=N` is for live container output only; history and search across services go through `betterstack-logs`.
 6. SSH with `-o ConnectTimeout=15` (put it in the `~/.ssh/config` entry), one command per call.
    Before the first connection to a new host, show the user the host key fingerprint instead of blindly accepting it.
 7. Back up any server file before editing it: `cp .env .env.bak.$(date +%s)`.

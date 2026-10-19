@@ -73,6 +73,7 @@ export function GET() {
 ```
 
 Then add `/api/version` to the public paths in `middleware.ts` (or whatever guards routes) and check it with a logged-out request.
+In a project that follows `logging-standard`, wrap this handler with its `route()` wrapper (`references/nextjs.md`), so each call writes the info line that `betterstack-logs` section 5 looks for.
 
 ## Node API (Express, Fastify, NestJS)
 

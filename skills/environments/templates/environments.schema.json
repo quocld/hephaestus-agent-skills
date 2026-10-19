@@ -88,14 +88,15 @@
           ]
         },
         "allowedWithoutAsking": {
-          "description": "Registry commands (all read-only) that skip confirmation under confirm-each-step.",
+          "description": "Registry commands (all read-only) that skip confirmation under confirm-each-step. logsQuery allows bounded Better Stack reads (betterstack-logs section 4).",
           "type": "array",
           "uniqueItems": true,
           "items": {
             "enum": [
-              "version",
-              "logs",
-              "verify"
+              "logsCommand",
+              "logsQuery",
+              "verify",
+              "version"
             ]
           }
         },
@@ -257,8 +258,45 @@
         "rollback": {
           "$ref": "#/$defs/commandList"
         },
-        "logs": {
+        "logsCommand": {
+          "description": "Read-only command printing recent live output, bounded (e.g. --lines 200 --nostream, --tail=N); never follows.",
           "type": "string"
+        },
+        "logs": {
+          "description": "Where this service's log history lives, read with the betterstack-logs skill. Replaces the old string command, now logsCommand. No tokens here: the ingest token is env:BETTER_STACK_SOURCE_TOKEN and the host BETTER_STACK_INGESTING_HOST, set per environment in that environment's secret store. One source per project per environment (<project>-<env>); a Supabase drain uses <project>-<env>-supabase, and a Vercel platform drain's own source (<project>-<env>-vercel) is recorded in the service notes.",
+          "type": "object",
+          "required": [
+            "provider",
+            "source",
+            "shipping"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": [
+                "betterstack"
+              ]
+            },
+            "source": {
+              "description": "Better Stack source name. App logs: one per project and environment, <project>-<env>, shared by its services and told apart by the service field. A platform drain gets its own source, <project>-<env>-<platform> (acme-prod-vercel), never the app source. Exceptions: betterstack-logs section 3.",
+              "type": "string",
+              "minLength": 1
+            },
+            "sourceId": {
+              "description": "Numeric source id, when known; speeds up MCP lookups.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "shipping": {
+              "description": "sdk: in-app transport. vector: project-scoped Vector. collector: Better Stack Collector, dedicated hosts only. drain: platform drain (Vercel, Supabase).",
+              "enum": [
+                "sdk",
+                "vector",
+                "collector",
+                "drain"
+              ]
+            }
+          }
         },
         "notes": {
           "type": "array",
