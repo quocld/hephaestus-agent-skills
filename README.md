@@ -30,6 +30,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `feature-build` | Implement a feature or user story end to end inside a worktree: gaps, small exploration, design options, verify, PR. Loads lean per-technology files from `tech/` (Next.js, React, Vercel, Supabase, NestJS) that point at the installed version's docs. | - |
 | `security-pass` | Per-PR security pass for Next.js/Supabase multi-tenant apps: RLS, service role, auth on routes, tenant-isolation proof. | - |
 | `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | Jira access (MCP or API) |
+| `jira-bug-hunter` | Work through my assigned Jira bugs one by one (up to 3 workers): fix, review, merge into `dev`, verify on dev with video, and add each result to one shared HTML demo report grouped by day. | Jira access, Playwright MCP, `environments` registry |
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
 | `environments` | Per-project registry of dev/staging/prod: servers, deploy commands (VPS, Vercel, Supabase), test accounts, rules, version status; prod confirmed step by step. | `.agents/environments.json` in the project |
 | `server-touch` | Docker Compose ops over SSH on a possibly shared host: scoped commands, deploy script, logs, .env, psql, rollback. | `environments` registry |

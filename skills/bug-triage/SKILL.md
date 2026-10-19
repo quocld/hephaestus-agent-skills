@@ -1,7 +1,7 @@
 ---
 name: bug-triage
 description: >
-  Use when taking a bug or QA ticket from report to fix and hand-back: "fix bug X", "fix ticket ABC-123", "loop qua bug Jira", "QA báo lỗi", "màn Y bị lỗi". Not for implementing a whole user story.
+  Use when taking a bug or QA ticket from report to fix and hand-back: "fix bug X", "fix ticket ABC-123", "QA báo lỗi", "màn Y bị lỗi". Not for implementing a whole user story, and not for working through all my assigned bugs (`jira-bug-hunter`).
 user-invocable: true
 ---
 
