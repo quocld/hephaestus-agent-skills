@@ -107,7 +107,6 @@ Then commit and push in small steps:
 ## 4. Done means a PR/MR into `<int>`
 
 A task is finished only when all of these hold.
-If the repo uses the no-mistakes gate, run `verify-loop` first, then its pipeline per `no-mistakes` for the push, the PR/MR, and CI (`verify-loop` section 1).
 
 1. Rebased on the latest base: `git fetch origin && git rebase origin/<int>`, conflicts resolved keeping other people's work, then `git push --force-with-lease`.
 2. `verify-loop` passed on the final head: toolchain, project checks, proof tests, `fresh-review` for any change beyond docs or config, `e2e-verify` evidence when user-facing, and requirements.
@@ -123,6 +122,7 @@ If the repo uses the no-mistakes gate, run `verify-loop` first, then its pipelin
    A draft MR adds `-o merge_request.draft`; updating the body of an existing MR (the `verify-loop` table) becomes a step for the user, handed the new text.
    Never read a stored git password or credential to call a forge API.
 5. The body says: the ticket or request, what changed and why, how it was verified (the `verify-loop` table, evidence files), risks, and what is deliberately left out.
+6. CI on the PR/MR head is green (`verify-loop` section 3).
 
 - Do not merge your own PR/MR unless the user asks.
 - Repo opted in to `feature-status`: the PR/MR opens in `in-review`, `merged` is set by the last push before the merge, and the claim is released after it (its section 3); a PR/MR the user merged while the file said `in-review` needs that section's recovery before `release`.

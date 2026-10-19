@@ -152,8 +152,7 @@
           "fresh-review",
           "security-pass",
           "flow-trace",
-          "root-cause",
-          "no-mistakes"
+          "root-cause"
         ],
         "sections": [
           "Hooks"

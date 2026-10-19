@@ -28,8 +28,6 @@ Before writing "passes", "fixed", "done", or any word that implies it, run the c
 - Classify the change from `git diff --name-only origin/<int>...HEAD`: docs or config only, code, user-facing (routes, components, copy), and whether it hits the `security-pass` triggers (its section 0) or the `flow-trace` triggers (`AGENTS.md`).
 - A caller skill can hand a gate to someone else (`jira-bug-hunter` defers gate 6 until its PR is merged and deployed to dev): mark it DEFER with who runs it, and that runner runs the whole gate, `security-pass` and `flow-trace` included.
   No caller can rule a gate out; a user-facing change gets gate 6 whatever the bug's tier.
-- A repo that uses the `no-mistakes` gate: run every gate here first, then hand over to its pipeline for the push, the PR/MR, and CI; its own review is a second opinion.
-  When the pipeline adds commits, sync the branch the way `no-mistakes` says first, treat them as a fix commit (section 2), and update the table in the PR/MR body afterwards (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4); its head is the pipeline's final head.
 - Project checks: `python3 <this skill>/scripts/checks.py match origin/<int>` lists the checks in `.agents/checks/` whose paths the change touches.
 
 ## 2. Gates, in order
@@ -81,6 +79,10 @@ requirements  PASS    AC1 test, AC2 test, AC3 e2e step 4
 Statuses: PASS, FAIL, SKIP, or DEFER, each with its evidence or reason.
 A SKIP on a gate the change needs is a FAIL; a DEFER names who runs that gate and where its result will be.
 The head in the table must equal `git rev-parse HEAD` when the PR/MR opens, and the base row is rechecked then: after `git fetch origin`, `git rev-list --count HEAD..origin/<int>` prints 0, otherwise rebase and restart at gate 2.
+
+Once the PR/MR is open, its CI on that head is the last gate: `gh pr checks <n> --watch --fail-fast --required`, or `glab ci status --live` on GitLab, until every required check has finished.
+A pending check is not a pass, and a red check is a red gate: fix the cause, commit, push, restart at gate 2, then update the table in the PR/MR body (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4).
+A repo with no CI on PRs/MRs says so in the report; section 5 is where to propose it.
 
 ## 4. Add a project check
 
