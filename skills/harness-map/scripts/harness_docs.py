@@ -98,11 +98,11 @@ def chips_for(row, hooks):
     return items
 
 
-def chip_rows(items, x0, x1):
+def chip_rows(items, x0, x1, char_w=6.3):
     """Greedy line wrap of chips into [(kind, label, x, width)] per line."""
     lines, cur, x = [], [], x0
     for kind, label in items:
-        w = round(len(label) * 6.3 + 16)
+        w = round(len(label) * char_w + 16)
         if cur and x + w > x1:
             lines.append(cur)
             cur, x = [], x0
@@ -197,6 +197,90 @@ def lifecycle_svg(hooks):
     return "".join(p)
 
 
+# ---------------------------------------------------------------- task path svg
+
+def task_path_svg():
+    """Prompt -> agentic loop (gather, act, verify, retry) -> response -> back to the next prompt,
+    with each skill placed on the step where it comes into play (assets/lifecycle.json `path`)."""
+    W, H, NY, NH = 1280, 500, 262, 62
+    CW, CH, GAP = 7.4, 21, 27   # chip char width, chip height, chip row pitch (larger text than the lifecycle map)
+    nodes = {"setup": (16, 150), "prompt": (196, 180), "gather": (432, 180), "act": (646, 180),
+             "verify": (860, 180), "response": (1080, 184)}
+    look = {"setup": ("var(--surface)", "var(--border-2)", "5 4"), "prompt": ("var(--surface-3)", "none", ""),
+            "response": ("var(--surface-3)", "none", ""), "gather": ("var(--ok-soft)", "none", ""),
+            "act": ("var(--ok-soft)", "none", ""), "verify": ("var(--accent-soft)", "none", "")}
+    path = LIFE["path"]
+    skills_at = lambda step: [("skill", n) for n, sk in LIFE["skills"].items() if step in sk["path"]] + \
+                             [("plugin", f) for f in path[step]["files"]]
+    cx = lambda k: nodes[k][0] + nodes[k][1] / 2
+    mid = NY + NH / 2
+    p = [f'<svg viewBox="0 0 {W} {H}" class="life tp" role="img" aria-label="Task path through the agentic loop">',
+         '<defs><marker id="t-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
+         '<path d="M0 0L8 4L0 8z" fill="var(--muted)"/></marker></defs>']
+
+    def chips_line(items, center, y):
+        """One centered row of chips; returns its svg and width."""
+        widths = [round(len(lab) * CW + 16) for _, lab in items]
+        total = sum(widths) + 6 * (len(items) - 1)
+        x, out = center - total / 2, []
+        for (kind, lab), w in zip(items, widths):
+            bg, fg = CHIP[kind]
+            out.append(f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{CH}" rx="5" fill="{bg}"/>'
+                       f'<text x="{x + w / 2:.1f}" y="{y + 14.5}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+            x += w + 6
+        return "".join(out), total
+
+    def chips_above(step):
+        x, w = nodes[step]
+        lines = chip_rows(skills_at(step), 0, w + 30, CW)
+        for k, line in enumerate(lines):
+            y = NY - 14 - (len(lines) - k) * GAP
+            p.append(chips_line([(kind, lab) for kind, lab, _, _ in line], x + w / 2, y)[0])
+
+    def label_on_line(text_, step, cxv, y):
+        """Text ends where the chips start, so the gap is exact whatever the font measures."""
+        items = skills_at(step)
+        tw = len(text_) * 7.2  # generous estimate, only used for the mask behind the label
+        _, cw = chips_line(items, 0, 0)
+        join = cxv - cw / 2 + tw / 2
+        p.append(f'<rect x="{join - tw - 18:.1f}" y="{y - 14}" width="{tw + cw + 36:.1f}" height="28" fill="var(--surface)"/>')
+        p.append(f'<text x="{join - 8:.1f}" y="{y + 4.5}" text-anchor="end" class="tl">{esc(text_)}</text>')
+        p.append(chips_line(items, join + cw / 2, y - CH / 2)[0])
+
+    # Agentic loop frame with its label sitting in a gap of the dashed line.
+    bx, by, bw, bh = 404, 40, 646, 376
+    p.append(f'<rect x="{bx}" y="{by}" width="{bw}" height="{bh}" rx="6" fill="none" stroke="var(--border-3, var(--muted))" stroke-width="1.5" stroke-dasharray="5 5"/>')
+    p.append(f'<rect x="{bx + bw - 160}" y="{by - 13}" width="140" height="26" fill="var(--surface)"/>')
+    p.append(f'<text x="{bx + bw - 90}" y="{by + 6}" text-anchor="middle" class="tframe">Agentic loop</text>')
+
+    # Forward arrows.
+    order = ["setup", "prompt", "gather", "act", "verify", "response"]
+    for a, b in zip(order, order[1:]):
+        x1 = nodes[a][0] + nodes[a][1] + 6
+        x2 = nodes[b][0] - 6
+        dash = ' stroke-dasharray="5 4"' if a == "setup" else ""
+        p.append(f'<path d="M{x1} {mid} H{x2}" stroke="var(--muted)" stroke-width="1.6"{dash} marker-end="url(#t-a)"/>')
+    # Verify fails: back to gather. Response: back to the next prompt.
+    p.append(f'<path d="M{cx("verify")} {NY + NH + 4} V364 Q{cx("verify")} 372 {cx("verify") - 8} 372 H{cx("gather") + 8} '
+             f'Q{cx("gather")} 372 {cx("gather")} 364 V{NY + NH + 8}" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#t-a)"/>')
+    p.append(f'<path d="M{cx("response")} {NY + NH + 4} V462 Q{cx("response")} 470 {cx("response") - 8} 470 H{cx("prompt") + 8} '
+             f'Q{cx("prompt")} 470 {cx("prompt")} 462 V{NY + NH + 8}" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#t-a)"/>')
+    label_on_line(path["retry"]["label"], "retry", (cx("gather") + cx("verify")) / 2, 372)
+    label_on_line(path["remember"]["label"], "remember", (cx("prompt") + cx("response")) / 2, 470)
+
+    # Nodes and the skills that act at each.
+    for k in order:
+        x, w = nodes[k]
+        fill, stroke, dash = look[k]
+        p.append(f'<rect x="{x}" y="{NY}" width="{w}" height="{NH}" rx="7" fill="{fill}" stroke="{stroke}"'
+                 f'{f" stroke-dasharray=\"{dash}\"" if dash else ""}/>')
+        p.append(text(x + w / 2, NY + 28, path[k]["label"], "tn", "middle"))
+        p.append(text(x + w / 2, NY + 47, path[k]["sub"], "tsub", "middle"))
+        chips_above(k)
+    p.append('</svg>')
+    return "".join(p)
+
+
 # ---------------------------------------------------------------- ultracode svg
 
 def ultracode_svg():
@@ -260,12 +344,11 @@ DOC_CSS = """<style>
 .legend{display:flex;flex-wrap:wrap;gap:14px;padding:0 18px 16px;color:var(--muted);font-size:12px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .sw{width:14px;height:10px;border-radius:3px;display:inline-block}
-.path{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;padding:18px}
-.stage{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);padding:12px;display:flex;flex-direction:column;gap:8px}
-.stage .no{font-size:11px;font-weight:600;color:var(--accent-text)}
-.stage b{font-family:"Host Grotesk",Inter,sans-serif;font-size:14px}
-.stage .s{font-size:11.5px;color:var(--muted)}
-.stage:not(:last-child)::after{content:"";position:absolute;right:-9px;top:22px;width:8px;height:8px;border-top:1.5px solid var(--muted);border-right:1.5px solid var(--muted);transform:rotate(45deg)}
+.life .tn{font-family:"Host Grotesk",Inter,sans-serif;font-size:18px;font-weight:500}
+.life .tsub{font-size:12px;fill:var(--muted)}
+.life .tl{font-size:12.5px;fill:var(--muted);font-weight:500}
+.life .tframe{font-family:"Host Grotesk",Inter,sans-serif;font-size:17px;fill:var(--muted)}
+.tp .chip-t{font-size:12px}
 .prose{padding:16px 18px;color:var(--text-2);max-width:820px}
 .prose p{margin:0 0 10px}.prose ul{margin:0 0 10px;padding-left:18px}.prose li{margin:3px 0}
 table.t{width:100%;border-collapse:collapse;font-size:13px}
@@ -273,7 +356,7 @@ table.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacin
 table.t td{padding:10px 18px;border-top:1px solid var(--border);vertical-align:top;color:var(--text-2)}
 table.t td:first-child{color:var(--text);font-weight:500;white-space:nowrap}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
-@media (max-width:900px){.path{grid-template-columns:1fr 1fr}.stage::after{display:none}.kpis{grid-template-columns:1fr 1fr}
+@media (max-width:900px){.kpis{grid-template-columns:1fr 1fr}
 table.t td:first-child{white-space:normal}}
 </style>"""
 
@@ -324,14 +407,8 @@ def render(hooks, version, now):
     h.append(card("lifecycle", "Flow", "Lifecycle map", "Claude Code hook events, top to bottom; chips are what acts at each one",
                   f'<div class="scroll">{lifecycle_svg(hooks)}</div>{legend}'))
 
-    stages = []
-    for i, st in enumerate(LIFE["stages"], 1):
-        names = [n for n, s in LIFE["skills"].items() if s["stage"] == st["id"]]
-        chips = "".join(f'<span class="chip acc">{esc(n)}</span>' for n in names)
-        stages.append(f'<div class="stage"><span class="no">{i:02d}</span><b>{esc(st["label"])}</b>'
-                      f'<span class="s">{esc(st["sub"])}</span><div class="chips">{chips}</div></div>')
-    h.append(card("path", "Skills", "Task path", "The order skills come into play on a normal task",
-                  f'<div class="path">{"".join(stages)}</div>'))
+    h.append(card("path", "Skills", "Task path", "Where each skill comes into play on a normal task",
+                  f'<div class="scroll">{task_path_svg()}</div>'))
 
     uc = ('<div class="prose"><p><b>Ultracode</b> is the keyword that opts a turn into multi-agent orchestration: '
           'the main agent writes a Workflow script, which fans the task out to many subagents, verifies their findings '
