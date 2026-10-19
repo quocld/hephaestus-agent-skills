@@ -15,9 +15,22 @@
         "Phân biệt nguồn sự thật, thông tin tạm thời và giả định."
       ],
       "covered_by": {
-        "files": ["AGENTS.md", "OPINIONS.md", "project-init block", ".agents/environments.json"],
-        "skills": ["project-init", "knowledge-placement", "environments"],
-        "sections": ["Global instructions", "Project"]
+        "files": [
+          "AGENTS.md",
+          "OPINIONS.md",
+          "project-init block",
+          ".agents/environments.json",
+          "feature-build tech/ files (docs per installed framework version)"
+        ],
+        "skills": [
+          "project-init",
+          "knowledge-placement",
+          "environments"
+        ],
+        "sections": [
+          "Global instructions",
+          "Project"
+        ]
       },
       "gaps": []
     },
@@ -34,11 +47,23 @@
         "Điều phối subagents khi có lợi, không mặc định multi-agent."
       ],
       "covered_by": {
-        "files": ["Agent and Workflow tools (ask first)"],
-        "skills": ["worktree-flow", "feature-build", "bug-triage", "ask-or-decide", "gnhf"],
+        "files": [
+          "Agent and Workflow tools (ask first)"
+        ],
+        "skills": [
+          "worktree-flow",
+          "verify-loop",
+          "feature-build",
+          "bug-triage",
+          "ask-or-decide",
+          "gnhf",
+          "jira-bug-hunter"
+        ],
         "sections": []
       },
-      "gaps": ["No shared timeout or retry policy across skills; each skill states its own stop rule."]
+      "gaps": [
+        "No shared timeout or retry budget across skills; verify-loop owns the gate order, each skill still states its own stop rule."
+      ]
     },
     {
       "id": "rules",
@@ -54,9 +79,18 @@
       ],
       "principle": "Rules quyết định phải tuân thủ điều gì; skills hướng dẫn thực hiện công việc như thế nào.",
       "covered_by": {
-        "files": ["AGENTS.md", "skills/*/SKILL.md"],
-        "skills": ["knowledge-placement", "fe-guardrails", "axi"],
-        "sections": ["Skills"]
+        "files": [
+          "AGENTS.md",
+          "skills/*/SKILL.md"
+        ],
+        "skills": [
+          "knowledge-placement",
+          "fe-guardrails",
+          "axi"
+        ],
+        "sections": [
+          "Skills"
+        ]
       },
       "gaps": []
     },
@@ -73,11 +107,25 @@
         "Sandbox, giới hạn phạm vi chỉnh sửa và kiểm soát side effects."
       ],
       "covered_by": {
-        "files": ["git worktrees", "MCP plugins"],
-        "skills": ["chrome-devtools-axi", "server-touch", "environments", "worktree-flow"],
-        "sections": ["Tools", "Plugins & MCP"]
+        "files": [
+          "git worktrees",
+          "MCP plugins",
+          "Better Stack MCP"
+        ],
+        "skills": [
+          "chrome-devtools-axi",
+          "server-touch",
+          "environments",
+          "worktree-flow"
+        ],
+        "sections": [
+          "Tools",
+          "Plugins & MCP"
+        ]
       },
-      "gaps": ["No per-task tool permission profile; settings allow the same tools for every task."]
+      "gaps": [
+        "No per-task tool permission profile; settings allow the same tools for every task."
+      ]
     },
     {
       "id": "gates",
@@ -92,9 +140,22 @@
         "Chặn chuyển trạng thái nếu các điều kiện bắt buộc chưa đạt."
       ],
       "covered_by": {
-        "files": ["hooks: no-em-dash, guard-protected-branches"],
-        "skills": ["e2e-verify", "fresh-review", "security-pass", "flow-trace", "root-cause", "no-mistakes"],
-        "sections": ["Hooks"]
+        "files": [
+          "hooks: no-em-dash, guard-protected-branches",
+          ".agents/checks/ project checks"
+        ],
+        "skills": [
+          "verify-loop",
+          "e2e-verify",
+          "fresh-review",
+          "security-pass",
+          "flow-trace",
+          "root-cause",
+          "no-mistakes"
+        ],
+        "sections": [
+          "Hooks"
+        ]
       },
       "gaps": []
     },
@@ -112,11 +173,20 @@
       ],
       "principle": "Không đồng nhất memory với context window: context là những gì agent đang nhìn thấy; memory/state là thông tin có thể lưu lại và truy xuất ở các lần chạy sau.",
       "covered_by": {
-        "files": ["worktree resume file", "~/.claude memory", "PR/MR as the shared record"],
-        "skills": ["stow", "worktree-flow"],
+        "files": [
+          "worktree resume file",
+          "~/.claude memory",
+          "PR/MR as the shared record"
+        ],
+        "skills": [
+          "stow",
+          "worktree-flow"
+        ],
         "sections": []
       },
-      "gaps": ["No standard decision log file; project-init only points at one when the repo has it."]
+      "gaps": [
+        "No standard decision log file; project-init only points at one when the repo has it."
+      ]
     },
     {
       "id": "observability",
@@ -131,12 +201,25 @@
         "Model routing: dùng model phù hợp với độ khó của từng bước."
       ],
       "covered_by": {
-        "files": ["claude-code-tracing plugin (Arize / Phoenix)", "gnhf iteration caps"],
-        "skills": ["harness-map", "gnhf"],
-        "plugins": ["claude-code-tracing"],
+        "files": [
+          "claude-code-tracing plugin (Arize / Phoenix)",
+          "Better Stack log sources per environment",
+          "gnhf iteration caps"
+        ],
+        "skills": [
+          "logging-standard",
+          "betterstack-logs",
+          "harness-map",
+          "gnhf"
+        ],
+        "plugins": [
+          "claude-code-tracing"
+        ],
         "sections": []
       },
-      "gaps": ["No cost budget per task and no model routing rule in AGENTS.md."]
+      "gaps": [
+        "No token or cost budget per task and no model routing rule in AGENTS.md."
+      ]
     },
     {
       "id": "evaluation",
@@ -152,11 +235,21 @@
       ],
       "principle": "Không chỉ đánh giá câu trả lời đẹp hay code chạy được, mà đánh giá task có đạt mục tiêu ban đầu hay không.",
       "covered_by": {
-        "files": ["hooks/test.sh", "red/green skill tests"],
-        "skills": ["knowledge-placement", "harness-map"],
+        "files": [
+          ".agents/checks/ (rules learned from repeated bugs)",
+          "hooks/test.sh",
+          "red/green skill tests"
+        ],
+        "skills": [
+          "verify-loop",
+          "knowledge-placement",
+          "harness-map"
+        ],
         "sections": []
       },
-      "gaps": ["No benchmark task set with expected outcomes; skill tests are run by hand, not kept as a suite."]
+      "gaps": [
+        "No benchmark task set with expected outcomes; skill red/green tests are run by hand, not kept as a suite."
+      ]
     }
   ]
 }

@@ -215,7 +215,12 @@ def collect_tools(probe, registry, project):
     return out, rows
 
 
-def collect_plugins():
+def uses_betterstack(registry):
+    return any(isinstance(s_.get("logs"), dict) and s_["logs"].get("provider") == "betterstack"
+               for e in env_map(registry).values() for s_ in e.get("services", []))
+
+
+def collect_plugins(project=None, registry=None):
     out, plugins = [], []
     settings = load_json(CLAUDE / "settings.json") or {}
     enabled = settings.get("enabledPlugins", {})
@@ -236,10 +241,34 @@ def collect_plugins():
         else:
             out.append(check("Plugins & MCP", pid, "ok",
                              f"v{inst.get('version', '?')}; {len(skills)} skills; MCP: {', '.join(servers) or 'none'}"))
-    user_mcp = sorted(((load_json(HOME / ".claude.json") or {}).get("mcpServers") or {}).keys())
+    cj = load_json(HOME / ".claude.json") or {}
+    user_mcp = sorted((cj.get("mcpServers") or {}).keys())
     mcp_names += user_mcp
     if user_mcp:
         out.append(check("Plugins & MCP", "User MCP servers", "info", ", ".join(user_mcp)))
+    if project:
+        proj_mcp = sorted(set((((cj.get("projects") or {}).get(str(project)) or {}).get("mcpServers") or {}).keys())
+                          | set(((load_json(Path(project) / ".mcp.json") or {}).get("mcpServers") or {}).keys()))
+        mcp_names += proj_mcp
+        if proj_mcp:
+            out.append(check("Plugins & MCP", "Project MCP servers", "info", ", ".join(proj_mcp)))
+    names = " ".join(mcp_names).lower() + " " + " ".join(enabled).lower()
+    # Key names only: whether a Jira token is configured, never its value.
+    jira_env = any(k.startswith("JIRA_") for k in list((settings.get("env") or {}).keys()) + list(os.environ))
+    if "atlassian" in names or "jira" in names:
+        out.append(check("Plugins & MCP", "Jira access", "ok", "Atlassian/Jira MCP available for bug-triage and jira-bug-hunter"))
+    elif jira_env:
+        out.append(check("Plugins & MCP", "Jira access", "ok", "JIRA_* variables set; skills use the REST API (no MCP)"))
+    else:
+        out.append(check("Plugins & MCP", "Jira access", "warn", "no Atlassian MCP and no JIRA_* variables; bug-triage and jira-bug-hunter cannot read tickets",
+                         "claude mcp add --transport http --scope user atlassian https://mcp.atlassian.com/v1/sse"))
+    if "betterstack" in names:
+        out.append(check("Plugins & MCP", "Better Stack MCP", "ok", "available for betterstack-logs"))
+    elif uses_betterstack(registry):
+        out.append(check("Plugins & MCP", "Better Stack MCP", "missing", "the registry names Better Stack log sources but no Better Stack MCP is connected",
+                         "! claude mcp add --transport http --scope user betterstack https://mcp.betterstack.com"))
+    else:
+        out.append(check("Plugins & MCP", "Better Stack MCP", "info", "not connected; needed only once a project ships logs to Better Stack (betterstack-logs)"))
     if any("playwright" in n.lower() for n in mcp_names):
         out.append(check("Plugins & MCP", "Browser tool for e2e-verify", "ok", "Playwright MCP is available (first choice)"))
     elif shutil.which("npx"):
@@ -349,6 +378,11 @@ def collect_project(project):
                          f"origin/{cand} not found in fetched refs; worktree-flow will stop and ask where PRs go",
                          "create the branch or record it as the dev environment's branch in .agents/environments.json"))
 
+    pc = sorted((p / ".agents" / "checks").glob("*.md"))
+    out.append(check(sec, "Project checks (verify-loop)", "ok" if pc else "info",
+                     f"{len(pc)} in .agents/checks/: " + ", ".join(x.stem for x in pc[:8]) if pc else
+                     "none yet; add one when a bug class repeats (verify-loop: checks.py new <id>)"))
+
     pw = list(p.glob("playwright.config.*")) + list(p.glob("*/playwright.config.*")) + list(p.glob("apps/*/playwright.config.*"))
     out.append(check(sec, "Playwright config", "ok" if pw else "info",
                      ", ".join(short(x) for x in pw[:3]) if pw else "none found; e2e-verify drives the browser ad hoc"))
@@ -401,6 +435,10 @@ def env_checks(registry, project):
             miss = ", ".join(s_.get("name", "?") for s_ in remote if not s_.get("version"))
             out.append(check("Project", f"{name}: version command", "warn", f"no version command for {miss}; what runs there is unknown",
                              "add the version endpoint per the environments skill (references/version-endpoint.md)"))
+        old = [s_.get("name", "?") for s_ in e.get("services", []) if isinstance(s_.get("logs"), str)]
+        if old:
+            out.append(check("Project", f"{name}: logs field", "warn", f"{', '.join(old)} still use the old string `logs`; it is now `logsCommand`, and `logs` names a Better Stack source",
+                             "rename logs to logsCommand in .agents/environments.json (environments skill)"))
         refs = [a.get("password") for a in e.get("accounts", [])] + \
                [s_.get("access", {}).get("dbUrl") for s_ in e.get("services", []) if s_.get("access", {}).get("dbUrl")]
         unresolved = [lab for lab, st in (secret_state(r, known) for r in refs if r) if st == "missing"]
@@ -434,8 +472,10 @@ def env_panel(project, registry):
     _, remote, _ = run(["git", "-C", str(project), "remote", "get-url", "origin"])
     _, branch, _ = run(["git", "-C", str(project), "branch", "--show-current"])
     platform = "GitHub" if "github" in remote else "GitLab" if "gitlab" in remote else "no remote"
+    checks_ = sorted((Path(project) / ".agents" / "checks").glob("*.md"))
     head = [("Repository", short(project)), ("Remote", (remote.strip() or "none") + f" ({platform})"),
-            ("Current branch", branch.strip() or "detached")]
+            ("Current branch", branch.strip() or "detached"),
+            ("Project checks", f"{len(checks_)} in `.agents/checks/`" if checks_ else "none in `.agents/checks/` (verify-loop)")]
     facts = project_facts(project)
     kv = "".join(f'<div class="kv"><span>{esc(k)}</span><b>{inline_code(v)}</b></div>' for k, v in head + facts)
     block = (kv if facts else kv + '<div class="kvempty">No project-init block yet: integration branch, tracker, commands, '
@@ -461,7 +501,10 @@ def env_panel(project, registry):
             for s_ in e.get("services", []):
                 acc = s_.get("access", {})
                 where = acc.get("ssh") or acc.get("vercelProjectId") or acc.get("supabaseProjectRef") or acc.get("composeProject") or ""
-                flags = "".join(f'<span class="chip {"" if s_.get(k) else "warn"}">{k}{"" if s_.get(k) else " missing"}</span>'
+                lg = s_.get("logs")
+                logs = (f'<span class="chip acc">logs: {esc(lg.get("source", "?"))} ({esc(lg.get("shipping", "?"))})</span>' if isinstance(lg, dict) else "") + \
+                       ('<span class="chip">logsCommand</span>' if s_.get("logsCommand") or isinstance(lg, str) else "")
+                flags = logs + "".join(f'<span class="chip {"" if s_.get(k) else "warn"}">{k}{"" if s_.get(k) else " missing"}</span>'
                                 for k in ("deploy", "verify", "rollback", "version")
                                 if (s_.get("type") != "local" and e.get("policy") != "autonomous") or k in ("deploy", "verify"))
                 runtime = f'<div class="sr">{esc(s_["runtime"])}</div>' if s_.get("runtime") else ""
@@ -515,14 +558,15 @@ CMD = re.compile(r"^(~|/|!|\$|(brew|npm|npx|bash|echo|rm|claude|corepack|git|gh|
 
 # Core = every session depends on it; optional = only some skills, stacks or habits need it.
 OPTIONAL_TITLES = {"~/OPINIONS.md -> OPINIONS.md", "Other user skills", "settings.json backups",
-                   "Bypass-permissions prompt skipped", "Playwright config", "Open TODO(owner)", "Repository"}
+                   "Bypass-permissions prompt skipped", "Playwright config", "Open TODO(owner)", "Repository",
+                   "Project checks (verify-loop)"}
 CORE_PLUGIN_TITLES = {"Browser tool for e2e-verify"}
 TOOL_KIND = {name: kind for name, kind, _, _ in TOOLS}
 
 
 def tier_of(c):
     sec, title = c["section"], c["title"]
-    if title in OPTIONAL_TITLES:
+    if title in OPTIONAL_TITLES or title.endswith(": logs field"):
         return "optional"
     if sec == "Skills":
         return SKILL_TIER.get(title, "optional")
@@ -767,7 +811,7 @@ def main():
     pc, registry = collect_project(project)
     tc, _ = collect_tools(probe, registry, project)
     checks += tc
-    plc, plugins = collect_plugins()
+    plc, plugins = collect_plugins(project, registry)
     checks += plc + collect_hygiene() + pc
     for c in checks:
         c["tier"] = tier_of(c)
