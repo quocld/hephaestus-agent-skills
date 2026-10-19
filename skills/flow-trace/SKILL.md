@@ -75,6 +75,18 @@ For every blocked state, open the exact screen the user lands on:
 For every privileged or cross-tenant query in the flow: is the WHERE clause scoped to exactly one tenant?
 Does every table the flow touches have a tenant column and an access policy?
 
+## Done when
+
+The trace is done only when every line below holds:
+- every reachable cell of the section 1 state table has answers to (a)-(d);
+- every provider event of section 2 is diffed against the handler, and each unhandled one is either harmless with a written reason or recorded as a finding;
+- every opposing event pair of section 2 is checked reversed and repeated;
+- every dedup guard of section 3 has its three lines;
+- every backend-built URL of section 4 has its host checked;
+- every blocked state of section 5 has its screen opened;
+- every privileged or cross-tenant query of section 6 is checked for single-tenant scope;
+- every finding has where, trigger, impact and class, and is either fixed with a one-test sequence or escalated per `ask-or-decide`.
+
 ## Output
 
 Write `docs/flow-traces/<flow>-<YYYY-MM-DD>.md` (or the project's equivalent).

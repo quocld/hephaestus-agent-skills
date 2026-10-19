@@ -14,7 +14,9 @@ Typecheck, build, and unit tests prove the code compiles, not that the screen wo
 
 - Seed data and test personas exist for every role the AC involves (e.g. admin vs. regular user; they often hit different code paths and FKs).
 - Login is bypassed with a saved session state per persona (Playwright storage state, injected cookies/localStorage), so no tokens are spent on the login flow every run.
-- If any prerequisite is missing, build it first; do not record PASS without it.
+- A missing prerequisite that is small and local to the AC is in scope: build it first (a persona and saved session for the roles this AC needs, a seed for this AC's own data).
+- A larger setup (a new seed framework, shared fixtures, auth bypass infrastructure) is a question for the user per `ask-or-decide` section 4; mark the AC blocked until it is answered and keep verifying the ACs that do not need it.
+- Either way, never record PASS for an AC without its prerequisites.
 
 ## 1. Drive the UI like a user
 

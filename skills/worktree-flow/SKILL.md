@@ -7,163 +7,115 @@ user-invocable: true
 
 # worktree-flow
 
-Several agents work on the same repo at the same time, so the main checkout belongs to nobody.
-Every task gets its own worktree and branch, work is pushed as it goes, and finished work always ends as a PR/MR.
+Many agents share the repo, so the main checkout belongs to nobody: each task gets its own worktree and branch, pushes as it goes, and ends as a PR/MR.
 
-## 0. Before anything: fetch and find the integration branch
+## 0. Fetch and find the integration branch
 
-```bash
-git fetch origin --prune
-```
-
-- The integration branch is the `branch` of the `dev` environment in `.agents/environments.json` (written by `project-init`), otherwise `dev` if `git ls-remote --exit-code --heads origin refs/heads/dev` succeeds.
-- None of these: stop and ask which branch PRs/MRs go into.
-  Never fall back to `main`, `master`, or any branch the registry lists for staging or prod.
-- Below, `<int>` means that branch.
+Run `git fetch origin --prune`.
+`<int>` is the `branch` of the `dev` environment in `.agents/environments.json`, otherwise `dev` if `git ls-remote --exit-code --heads origin refs/heads/dev` succeeds.
+Neither: stop and ask which branch PRs/MRs go into; never fall back to `main`, `master`, or a staging or prod branch.
 
 ## 1. Start or resume: one task = one worktree = one branch
 
-Repo opted in to `feature-status` (its section 0: `docs/status/` exists on `origin/<int>`, or its `AGENTS.md` names `feature-status`): steps 1-3 are replaced by its `pick`, run from the checkout you stand in before any worktree exists; it claims the ticket, names the branch, and creates the worktree.
-`pick` performs step 1's checks itself (existing claims, branches for the ID, and an active status file on `<int>`), so the only part of step 1 that remains is reading the existing worktree's progress file (section 3) when you resume with `pick --resume`.
-In a harness's detached worktree (step 0), run `pick ... --no-worktree`, then `git switch -c <branch> --track origin/<branch>` in place of step 3's switch, so the branch starts from the pushed pick commit.
+Repo opted in to `feature-status` (its section 0): for ticket work and for no-ticket features other agents could collide on, its `pick`, run before any worktree exists, replaces steps 1-3 (in a harness's detached worktree: `pick --no-worktree`, then `git switch -c <branch> --track origin/<branch>`); on `pick --resume` still read the progress file (section 3).
+A small no-ticket change follows the steps below alone; `feature-status` section 1 owns who picks.
 
-0. Check whether you already stand in a linked worktree (a harness may have started you in one):
-   ```bash
-   git rev-parse --path-format=absolute --git-dir --git-common-dir   # two different paths = linked worktree
-   ```
-   - Linked worktree on this task's branch: use it, read its progress file (section 3), and go to section 2.
-   - Linked worktree on a detached HEAD with a clean tree (made for you by the harness): continue with steps 1 and 2, then in step 3 create the branch in place with `git switch --no-track -c <branch> origin/<int>` instead of adding a worktree.
-   - Linked worktree on another task's branch: do not work there; continue with step 1 to create your own.
-1. Look for existing work on the ticket:
+0. `git rev-parse --path-format=absolute --git-dir --git-common-dir` prints two different paths in a linked worktree.
+   - Linked, on this task's branch: use it, read its progress file, go to section 2.
+   - Linked, detached HEAD, clean tree (the harness's): steps 1-2, then in step 3 `git switch --no-track -c <branch> origin/<int>` in place.
+   - Another task's branch, or the main checkout: never work there; step 1.
+1. Look for existing work:
    ```bash
    git worktree list
    git branch -a --list '*/<ticket>-*' '<ticket>-*'
-   gh pr list --state open --search '<ticket>'      # GitLab: glab mr list --search '<ticket>'
+   gh pr list --state open --search '<ticket>'      # GitLab: glab mr list --search '<ticket>' (no glab: references/gitlab.md)
    ```
-   - Nothing found: create it (step 2).
-   - Found, and the user asked to continue or resume that work: reuse that worktree or branch, read its progress file first, and do not create a second one.
-   - Found otherwise: another agent may be on it; stop and ask.
-2. Name the branch `<type>/<ticket>-<slug>` (`fix/WEST-12-paid-invoice-lock`); with no ticket, `<type>/<slug>`.
-   Types follow Conventional Commits: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
-3. Create it as a sibling of the main checkout, so watchers, linters, and test runners there never scan it, and without tracking `<int>`:
+   Nothing: step 2.
+   Found and the user asked to resume it: reuse it, read its progress file first, never create a second.
+   Found otherwise: another agent may be on it; stop and ask.
+2. Branch `<type>/<ticket>-<slug>` (`fix/WEST-12-paid-invoice-lock`), or `<type>/<slug>` without a ticket; type is `feat`, `fix`, `refactor`, `chore`, `docs`, or `test`.
+3. Create it beside the main checkout, so the watchers, linters, and test runners there never scan it, without tracking `<int>`, using these commands rather than a harness feature (which may nest it in the repo or use a stale local HEAD):
    ```bash
    MAIN="$(git worktree list --porcelain | sed -n 's/^worktree //p' | head -n 1)"
    WT="$(dirname "$MAIN")/$(basename "$MAIN").worktrees/<branch-with-slashes-as-dashes>"
    git worktree add --no-track -b <branch> "$WT" origin/<int>
    ```
-   Use these commands rather than a harness's built-in worktree feature, which may put the worktree inside the repo or base it on a stale local HEAD.
-4. Work only inside `$WT` from now on; every command runs there.
+4. Every command from now on runs in `$WT`.
 
-## 2. Make the worktree runnable without touching other agents
+## 2. Run without touching other agents
 
-- Install dependencies (`pnpm install --frozen-lockfile` or the repo's equivalent).
-  Docs-only or config-only changes may skip install and E2E; still run the linters that cover those files.
-- Gitignored local config: symlink files that only hold secrets (`.agents/secrets.env`) from the main checkout; copy and edit files whose values must differ per worktree (`.env.local` with its port, database name, callback URLs).
-  Never commit either.
-- Processes you did not start (dev servers, watchers, containers) belong to someone else; never kill them.
-  Run yours on a free port and update the URLs that depend on it.
-- Docker Compose: your own project name (`-p <repo>-<slug>`).
-  Fixed `ports:` or `container_name:` in the compose file cannot run twice; say so and use the already running stack read-only, or ask.
-- Databases: never reset or migrate a database another worktree uses.
-  When the task changes the schema or runs destructive tests, use your own database or schema.
-  If the app cannot run isolated, say so instead of fighting over shared resources.
-- No test baseline up front: run the touched packages' tests once after your change.
-  Only for a test that fails, run that one test on `origin/<int>` in a throwaway worktree (`git worktree add --detach "$WT.base" origin/<int>`, removed afterwards) to tell whether it already failed, and record the result in Decisions (section 3).
-  A test that fails only while other agents share the test database is a shared-state flake: confirm it in isolation, then fix the isolation in its own branch per `root-cause`, not inside this task.
+- Install dependencies (`pnpm install --frozen-lockfile` or equivalent); docs- or config-only changes may skip install and E2E, not the linters for those files.
+- Symlink secrets-only gitignored files (`.agents/secrets.env`) from the main checkout; copy and edit per-worktree ones (`.env.local`: port, database, callback URLs); never commit either.
+- Never kill processes you did not start; run yours on a free port and fix the URLs that depend on it.
+- Docker Compose: `-p <repo>-<slug>`; with fixed `ports:` or `container_name:`, say so and use the running stack read-only, or ask.
+- Never reset or migrate another worktree's database; schema changes and destructive tests get your own database or schema; if the app cannot run isolated, say so instead of running them on the shared one.
+- Run the touched packages' tests once after your change; only a failing test is rerun on `origin/<int>` (`git worktree add --detach "$WT.base" origin/<int>`, removed after) and the result goes in Decisions.
+- A test failing only on a shared test database is a flake: confirm in isolation, fix the isolation in its own branch per `root-cause`.
 
 ## 3. Commit, push, and keep the progress file as you go
 
-Context gets summarized or reset mid-task, and chat is lost with it, so the worktree keeps its own short resume file outside the working tree, where it can never be committed:
+Context resets lose chat, so each worktree keeps a resume file in its private git dir (never committed, no `.gitignore`, removed with the worktree; never `info/exclude`, which all worktrees share):
 
 ```bash
-P="$(git rev-parse --path-format=absolute --git-path agent-progress.md)"   # run inside $WT; lives in this worktree's private git dir
+P="$(git rev-parse --path-format=absolute --git-path agent-progress.md)"   # inside $WT
 ```
 
-- It is per worktree, needs no `.gitignore` change, and `git worktree remove` deletes it.
-  Do not use `info/exclude` for this; it is shared by every worktree of the repo.
-- Its content, replaced rather than appended, under about 30 lines:
-  1. `# <branch>` and the ticket or request in one line.
-  2. `## Done`: finished steps with their commit short hashes.
-  3. `## In progress`: the one step underway and its current state.
-  4. `## Next`: the remaining steps in order.
-  5. `## Decisions`: one line each, `<what> - <why> - <cost if wrong>`, plus any pre-existing test failures from section 2.
-- Read it before anything else on resume and right after a context summary; trust it and `git log origin/<int>..HEAD` over memory.
-- Update it with every commit; it is not a journal, so drop lines that no longer help the next step.
-
-Then commit and push in small steps:
-
-- Small commits at each working step; check `git status` first and stage only files you meant to change.
-  Never commit secrets, build output, or local config.
-- Conventional Commit with the ticket id: `fix(billing): [WEST-12] keep paid invoices unlocked`, body wrapped at 72 characters (commitlint's conventional config rejects body lines over 100).
-- Temporary helper files a tool needs inside the repo (a local test config, a probe script) are named in your notes and deleted before the commit; everything else goes in the scratchpad.
-- Push after the first commit and keep pushing, so nothing lives only on this machine:
-  ```bash
-  git push -u origin HEAD
-  ```
-- Rewriting history only on your own branch, then `git push --force-with-lease`.
-  Never force-push a branch you do not own.
-- Something unrelated found along the way: fix a trivial one in this PR and mention it in the body; anything bigger gets its own branch and PR/MR, after checking an open PR/MR does not already fix it.
+- Under 30 lines, rewritten not appended, stale lines dropped: `# <branch>` and the ticket, `## Done` (steps, short hashes), `## In progress` (one step, its state), `## Next`, `## Decisions` (`<what> - <why> - <cost if wrong>`, pre-existing test failures).
+- Read it first on resume and after a context summary; trust it and `git log origin/<int>..HEAD` over memory; update it with every commit.
+- Small commits; check `git status` and stage only what you meant; never secrets, build output, or local config.
+- Conventional Commit with the ticket id: `fix(billing): [WEST-12] keep paid invoices unlocked`, body wrapped at 72 (commitlint rejects body lines over 100).
+- Helper files a tool needs in the repo are named in your notes and deleted before committing; the rest goes in the scratchpad.
+- `git push -u origin HEAD` after the first commit, then keep pushing.
+- Rewrite history only on your own branch, then `git push --force-with-lease`; never force-push a branch you do not own.
+- Unrelated findings: per `AGENTS.md`.
 
 ## 4. Done means a PR/MR into `<int>`
 
-A task is finished only when all of these hold.
+All of these hold:
 
-1. Rebased on the latest base: `git fetch origin && git rebase origin/<int>`, conflicts resolved keeping other people's work, then `git push --force-with-lease`.
-2. `verify-loop` passed on the final head: toolchain, project checks, proof tests, `fresh-review` for any change beyond docs or config, `e2e-verify` evidence when user-facing, and requirements.
-3. Its table is in the PR/MR body, and its head equals `git rev-parse HEAD`.
-4. A PR/MR is open into `<int>` (detect GitHub or GitLab from `git remote get-url origin`):
+1. `git fetch origin && git rebase origin/<int>`, conflicts resolved keeping others' work, `git push --force-with-lease`.
+2. `verify-loop` passed all its gates on the final head (including `fresh-review` beyond docs or config, `e2e-verify` when user-facing).
+3. Its table is in the body, with head equal to `git rev-parse HEAD`.
+4. A PR/MR is open into `<int>` (forge per `git remote get-url origin`):
    ```bash
    gh pr create --base <int> --head <branch> --title "<conventional title>" --body-file <file>
    glab mr create --source-branch <branch> --target-branch <int> --title "<conventional title>" --description "$(cat <file>)" --yes
    ```
-   A missing or unauthenticated `gh` is a blocker to report, not a reason to skip the PR.
-   GitLab without `glab` (suggest `! glab auth login` once installed; until then, the existing-MR checks in sections 1 and 6 rely on `git branch -r` and the user, and say so): create the MR with push options on a push that carries commits (options are not sent when nothing is pushed), `git push -u origin HEAD -o merge_request.create -o merge_request.target=<int> -o merge_request.title="<title>"`; push options cannot hold newlines (`merge_request.description` takes one line), so for the full body open a prefilled form for the user, `https://<host>/<group path>/<repo>/-/merge_requests/new?merge_request[source_branch]=<branch>&merge_request[target_branch]=<int>&merge_request[title]=<title>&merge_request[description]=<body>`, every value URL-encoded; past about 8 KB, prefill a short body and paste the rest after creating.
-   The MR does not exist until the user submits the form: report it that way.
-   A draft MR adds `-o merge_request.draft`; updating the body of an existing MR (the `verify-loop` table) becomes a step for the user, handed the new text.
-   Never read a stored git password or credential to call a forge API.
-5. The body says: the ticket or request, what changed and why, how it was verified (the `verify-loop` table, evidence files), risks, and what is deliberately left out.
-6. CI on the PR/MR head is green (`verify-loop` section 3).
+   Missing or unauthenticated `gh` is a blocker to report, never a reason to skip; GitLab without `glab` follows `references/gitlab.md`.
+   Never read a stored git credential to call a forge API.
+5. The body: ticket or request, what changed and why, verification (table, evidence), risks, what is left out.
+6. CI on the head is green (`verify-loop` section 3).
 
-- Do not merge your own PR/MR unless the user asks.
-- Repo opted in to `feature-status`: the PR/MR opens in `in-review`, `merged` is set by the last push before the merge, and the claim is released after it (its section 3); a PR/MR the user merged while the file said `in-review` needs that section's recovery before `release`.
-- Blocked or partly done work becomes a draft (`gh pr create --draft`, `glab mr create --draft`) whose body lists what remains.
-  Do this as soon as you know you will stop, not at the very end.
-- The progress file is local and dies with the worktree: carry its Decisions and Next into the PR/MR body, the only record another machine or agent sees.
+- Never merge your own PR/MR unless asked.
+- `feature-status` repos: states, merge, release, and recovery per its section 3.
+- Blocked or partial work: a draft (`--draft`) listing what remains, as soon as you know you will stop.
+- Copy the progress file's Decisions and Next into the body; it dies with the worktree.
 
 ## 5. Promote to staging and prod
 
 Only on the user's explicit word, per `AGENTS.md`.
 
-- "Lên staging" by default means promoting `<int>` as a whole: open a PR/MR from `<int>` into the staging branch, and list in its body every commit it carries, since that includes other people's merged work.
-  Merge a single feature branch directly into staging only when the user asks for exactly that.
-- Merge the promotion PR/MR only if the user asked to merge.
-  If CI deploys on merge, merging is a deploy and follows the `environments` skill.
-- Prod works the same way, from staging into the production branch, under that environment's `confirm-each-step` policy.
+- "Lên staging" means a PR/MR from `<int>` into staging, listing every commit it carries (others' work too); a single feature branch only when asked for exactly that.
+- Merge it only if asked; if CI deploys on merge, that is a deploy under `environments`.
+- Prod: the same from staging, under its `confirm-each-step` policy.
 
 ## 6. Clean up
 
-Merged branches whose remote was deleted show as `[gone]` after the fetch in section 0, which makes them the cheap candidates; check only those at session start.
-On an explicit cleanup request ("dọn worktree"), also check every worktree under `<repo>.worktrees/`, since repos that keep merged branches never show `[gone]`.
+Session start: `[gone]` branches only; "dọn worktree": also every worktree under `<repo>.worktrees/` (repos keeping merged branches never show `[gone]`).
 
 ```bash
 git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == "[gone]" {print $1}'
-git worktree list --porcelain | awk -v b="refs/heads/<branch>" '/^worktree /{p=substr($0,10)} $0=="branch "b{print p}'   # its worktree ($WT), if any
-gh pr view <branch> --json state,headRefOid -q '.state + " " + .headRefOid'   # GitLab: glab mr view <branch> --output json | jq -r '.state + " " + .sha'
+git worktree list --porcelain | awk -v b="refs/heads/<branch>" '/^worktree /{p=substr($0,10)} $0=="branch "b{print p}'   # its $WT
+gh pr view <branch> --json state,headRefOid -q '.state + " " + .headRefOid'   # GitLab: glab mr view <branch> --output json | jq -r '.state + " " + .sha' (no glab: references/gitlab.md)
 ```
 
-Remove a candidate only when all of these hold:
+Remove only when its PR/MR is merged or closed (`[gone]` proves nothing), `git -C "$WT" status --porcelain` is empty, `git rev-parse <branch>` equals the PR/MR head, and it is neither your worktree nor the main checkout.
+`feature-status` repos, merged feature: `status.py release <ID>` first; when it names the recovery, do it in this worktree before removing anything.
+Then `git worktree remove "$WT"` (if any) and `git branch -D <branch>` (needed after squash merges, safe only after these checks).
 
-- Its PR/MR is merged or closed; `[gone]` alone proves nothing, since anyone can delete a remote branch.
-- `git -C "$WT" status --porcelain` prints nothing.
-- `git rev-parse <branch>` equals the PR/MR head commit, so no unpushed commit is lost.
-- It is not the worktree you stand in, nor the main checkout.
-
-Then `git worktree remove "$WT"` (skip it when the branch has no worktree) and `git branch -D <branch>`; `-D` is needed after squash merges and is safe only after the checks above.
-
-- Never pass `--force` to `git worktree remove`; a refusal means there is work to keep, so leave it and report it.
-- Never remove anything whose PR/MR is open, or a branch with no PR/MR; report those instead.
-- Stop the dev servers and containers you started.
-- Repo opted in to `feature-status`: before removing a merged feature's worktree, run `status.py release <ID>`; when it names the recovery, do that in this worktree first.
+- Never `git worktree remove --force`; on refusal, keep it and report.
+- Open PR/MR or no PR/MR: never remove, report.
+- Stop the servers and containers you started.
 
 ## Report
 

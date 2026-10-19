@@ -25,7 +25,8 @@ Before writing "passes", "fixed", "done", or any word that implies it, run the c
 ## 1. Scope the run
 
 - `<int>` per `worktree-flow` section 0; the range is `origin/<int>...HEAD` plus uncommitted files.
-- Classify the change from `git diff --name-only origin/<int>...HEAD`: docs or config only, code, user-facing (routes, components, copy), and whether it hits the `security-pass` triggers (its section 0) or the `flow-trace` triggers (`AGENTS.md`).
+- Classify the change from `git diff --name-only origin/<int>...HEAD`: docs or config only, copy only, no behavior change (rename, move, extract), code, user-facing (routes, components, copy, or config such as a redirect, route or flag), and whether it hits the `security-pass` triggers (its section 0) or the `flow-trace` triggers (`AGENTS.md`).
+  That classification picks the gate set: a small-change gate set (section 2) or every gate.
 - A caller skill can hand a gate to someone else (`jira-bug-hunter` defers gate 6 until its PR is merged and deployed to dev): mark it DEFER with who runs it, and that runner runs the whole gate, `security-pass` and `flow-trace` included.
   No caller can rule a gate out; a user-facing change gets gate 6 whatever the bug's tier.
 - Project checks: `python3 <this skill>/scripts/checks.py match origin/<int>` lists the checks in `.agents/checks/` whose paths the change touches.
@@ -33,7 +34,7 @@ Before writing "passes", "fixed", "done", or any word that implies it, run the c
 ## 2. Gates, in order
 
 Run them top to bottom on one head.
-A red gate stops the run: fix the cause (`root-cause` when it is not obvious), commit, and restart at gate 2, never at the gate that failed.
+A red gate stops the run: fix the cause (`root-cause` when it is not obvious), commit, and restart at gate 2 per the rerun table below, never at the gate that failed.
 
 1. **Base**: rebased on the latest `origin/<int>` (`worktree-flow` section 4 step 1), so nothing after this changes the head except fixes.
 2. **Toolchain**: build when the project-init block of `AGENTS.md` lists one, typecheck, lint, and tests of the touched packages, with that block's commands, plus the Verify section of each `feature-build` tech file the work loaded.
@@ -43,20 +44,50 @@ A red gate stops the run: fix the cause (`root-cause` when it is not obvious), c
 4. **Proof**: every behavior the change adds or fixes has a test that fails without it, proven with the revert-only-the-change commands of `root-cause` section 5.
    The failure must be the assertion: when the revert leaves only import or compile errors (new code), break the new code in one small way instead, per that section's mutation list.
    A migration's proof runs on your own database (`worktree-flow` section 2), never on a shared one.
-   A copy-only change has no unit proof (`root-cause` section 5 bans asserting on copy): its proof is the gate 6 step that shows the new text, so mark gate 4 `SKIP copy-only, proven in behavior`.
-   Docs or config only: skip with that reason.
 5. **Review**: the `fresh-review` loop, with the gate 3 reviewer lines pasted into its prompt.
    Run `security-pass` and `flow-trace` when section 1 found their triggers, even if the reviewer did not flag them, and when the reviewer flags them.
-   Docs or config only: skip with that reason.
-6. **Behavior**: user-facing change: `e2e-verify`, with its evidence file; otherwise skip with that reason.
+6. **Behavior**: user-facing change: `e2e-verify`, with its evidence file; otherwise `SKIP not user-facing`.
 7. **Requirements**: one row per acceptance criterion of the ticket, spec, or request (the `feature-build` step 1 list; for a bug, the reporter's expected result and every scope item the comments added), each with its evidence: a test name, an E2E step, or `open`.
    An `open` row is red unless the user already agreed to leave it out; a row whose evidence is a DEFER gate is DEFER too.
 
-- A fix commit after gate 4 restarts at gate 2, with these limits: gate 4 reproves only the behaviors whose files the fix touched, `fresh-review` reviews only its delta and counts the round against its own cap, and `e2e-verify` reruns only what its re-run rule names.
-  E2E evidence stays valid for an AC only when the fix touched no file on that AC's path (route, component, handler, service, query, migration); when unsure, rerun the AC.
+### Caps and never weaken
+
 - The owners keep their caps and what happens at them (3 review rounds, 3 E2E FAIL cycles then `root-cause`, 3 failed fixes then stop).
   Gates 2, 3, and 7 have no owner cap: the same failure after 3 fixes follows `root-cause` section 3.
 - Never make a gate green by weakening it: no skipped or retried tests, raised timeouts, lint disables, or deleted checks, unless the user asks for that by name.
+
+### Small-change gate sets
+
+These gate sets are independent of the `feature-build` lanes: a lane S one-line tweak that changes behavior still gets every gate.
+Section 1 picks a gate set only from facts in the diff; when any fact is in doubt, the change gets every gate.
+A risk trigger means a `security-pass` section 0 trigger or a `flow-trace` trigger from `AGENTS.md`; every gate set requires none.
+Gates 1, 2, 3, and 7 run in every gate set, and the report still has every row.
+
+| Gate set | The diff touches only | Gate 4 | Gate 5 | Gate 6 |
+| --- | --- | --- | --- | --- |
+| Docs or config | Docs or config files | `SKIP docs/config only` | `SKIP docs/config only` | Runs when section 1 found it user-facing (a redirect, route or flag config), else `SKIP not user-facing` |
+| Copy | User-visible text (string literals, translation files), nothing else on those lines | `SKIP copy-only, proven in behavior` (`root-cause` section 5 bans asserting on copy) | Runs | Runs; its evidence is the step that shows the new text |
+| No behavior change | Code whose behavior stays the same (rename, move, extract), with no test expectation changed | `SKIP no behavior added or fixed, gate 2 tests cover it` | Runs, with "no behavior change" stated in the prompt | Runs when section 1 found it user-facing, else `SKIP not user-facing` |
+
+The security and flow rows read `SKIP no trigger` in every gate set.
+A reviewer finding of a behavior change, or a fix commit that breaks a gate set's facts, moves the change out of that gate set, and the gates it now needs run in full.
+
+### Rerun after a fix commit
+
+"Touched" means `git diff --name-only <head the gate last passed on>..HEAD`, which also covers a rebase.
+A gate that has not yet passed on this branch runs in full.
+
+| Gate | Reruns |
+| --- | --- |
+| 1 Base | Not rerun; rechecked when the PR/MR opens (section 3) |
+| 2 Toolchain | Always, in full |
+| 3 Script checks | Always, in full |
+| 4 Proof | Only the behaviors with a touched file, plus every behavior the fix adds or fixes |
+| 5 Review | `fresh-review` on the delta (its own later-round range), counted against its cap; `security-pass` reruns unless its section 0 skip rule applies, and also when the delta meets a trigger it did not meet before; `flow-trace` reruns when the delta touches a file on a traced flow or meets a flow trigger |
+| 6 Behavior | Only what the `e2e-verify` re-run rule (its Output section) names |
+| 7 Requirements | Always: every row rechecked, evidence pointing at the head it ran on |
+
+A gate that does not rerun keeps its evidence with the head it ran on and "no touched file since" (the behavior row in section 3).
 
 ## 3. Report
 
@@ -78,10 +109,10 @@ requirements  PASS    AC1 test, AC2 test, AC3 e2e step 4
 
 Statuses: PASS, FAIL, SKIP, or DEFER, each with its evidence or reason.
 A SKIP on a gate the change needs is a FAIL; a DEFER names who runs that gate and where its result will be.
-The head in the table must equal `git rev-parse HEAD` when the PR/MR opens, and the base row is rechecked then: after `git fetch origin`, `git rev-list --count HEAD..origin/<int>` prints 0, otherwise rebase and restart at gate 2.
+The head in the table must equal `git rev-parse HEAD` when the PR/MR opens, and the base row is rechecked then: after `git fetch origin`, `git rev-list --count HEAD..origin/<int>` prints 0, otherwise rebase and restart at gate 2 per the rerun table (section 2).
 
 Once the PR/MR is open, its CI on that head is the last gate: `gh pr checks <n> --watch --fail-fast --required`, or `glab ci status --live` on GitLab, until every required check has finished.
-A pending check is not a pass, and a red check is a red gate: fix the cause, commit, push, restart at gate 2, then update the table in the PR/MR body (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4).
+A pending check is not a pass, and a red check is a red gate: fix the cause, commit, push, restart at gate 2 per the rerun table, then update the table in the PR/MR body (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4).
 A repo with no CI on PRs/MRs says so in the report; section 5 is where to propose it.
 
 ## 4. Add a project check
