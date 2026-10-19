@@ -1,6 +1,6 @@
 # agent-skills
 
-My agent setup: global instructions, opinions, and dev skills for Claude Code (and any harness that reads AGENTS.md).
+My agent setup: global instructions, opinions, dev skills and gate hooks, packaged as a Claude Code plugin (and readable by any harness that reads AGENTS.md).
 
 ## Layout
 
@@ -12,8 +12,9 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `skills/` | Skills, one folder each. |
 | `reference/` | Example material for writing my own files. |
 | `SOURCES.md`, `LICENSES/` | Upstream sources and their licenses. |
-| `hooks/` | Claude Code hooks that enforce `AGENTS.md` rules (see `hooks/README.md`). |
-| `install.sh` | Symlinks everything into `~/.claude` and `~`. |
+| `hooks/` | Claude Code hooks that enforce `AGENTS.md` rules and load it at session start; `hooks/hooks.json` registers them (see `hooks/README.md`). |
+| `.claude-plugin/` | Plugin manifest and the marketplace that serves it from this repo. |
+| `migrate-to-plugin.py` | Removes the links the old `install.sh` made, so nothing loads twice. |
 
 ## Skills
 
@@ -47,16 +48,24 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 
 ## Install
 
-```sh
-git clone https://github.com/quocld/agent-skills.git ~/agent-skills
-~/agent-skills/install.sh
+In Claude Code (the repo is private, so your GitHub login needs read access to it):
+
+```text
+/plugin marketplace add quocld/agent-skills
+/plugin install agent-skills@quocld
 ```
 
-Links `~/.claude/CLAUDE.md` -> `AGENTS.md`, `~/OPINIONS.md` -> `OPINIONS.md`, `~/.claude/agent-skills-hooks` -> `hooks/`, and every skill into `~/.claude/skills/`.
-Existing files that are not symlinks move to `~/.claude/backups/agent-skills-<timestamp>/`, never deleted.
-The hooks take effect only after you merge their entries from `hooks/README.md` into `hooks.PreToolUse` in `~/.claude/settings.json`.
-Then run `hooks/test.sh`, which exercises both hooks and checks that the settings register them.
+That brings every skill (namespaced, such as `/agent-skills:harness-map`), the gate hooks, and a `SessionStart` hook that loads `AGENTS.md` into every session and names the path of `OPINIONS.md`; no `~/.claude` file is written.
+Update with `claude plugin marketplace update quocld` and `claude plugin update agent-skills@quocld`, then restart the session.
+Then ask Claude to "finish my harness setup": `harness-map` checks the rest (tools, logins, project setup) and asks you for what it needs.
+
+Coming from the old `install.sh` links: run `python3 migrate-to-plugin.py` (add `--dry-run` to preview).
+It removes only symlinks into this repo, and keeps `~/.claude/agent-skills-hooks` until you delete the two `agent-skills-hooks` entries from `hooks.PreToolUse` in `~/.claude/settings.json`, since the plugin registers the same hooks.
+Run `hooks/test.sh` afterwards.
+
+Working on the skills themselves: edits reach your sessions after you commit, push, and update the marketplace; for a quick local try, `claude --plugin-dir <this checkout>` loads the working tree for one session.
 
 ## Adding a skill
 
-Follow `skills/knowledge-placement` first, then create `skills/<name>/SKILL.md` with `name` and `description` frontmatter and re-run `install.sh`.
+Follow `skills/knowledge-placement` first, then create `skills/<name>/SKILL.md` with `name` and `description` frontmatter, and place it in `skills/harness-map/assets/lifecycle.json`.
+`.claude-plugin/plugin.json` has no `version` on purpose: the commit SHA is the version, so every pushed commit reaches users through `claude plugin update`.

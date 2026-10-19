@@ -1,0 +1,17 @@
+{
+  "name": "quocld",
+  "owner": {
+    "name": "quocld",
+    "url": "https://github.com/quocld"
+  },
+  "metadata": {
+    "description": "quocld's agent harness for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "agent-skills",
+      "source": "./",
+      "description": "Global rules at session start, dev skills for the whole task loop, gate hooks, and harness-map."
+    }
+  ]
+}

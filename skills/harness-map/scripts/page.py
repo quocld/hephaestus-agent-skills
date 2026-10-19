@@ -124,6 +124,26 @@ def strip_userinfo(url):
     return scheme + rest[at + 1:], secret
 
 
+def is_agent_skills_dir(d):
+    """An agent-skills checkout or plugin folder: its manifest says so, or it has the repo's shape.
+    Identifies a legacy link's target by what it holds, so it works from a plugin folder that has no git."""
+    try:
+        if json.loads((d / ".claude-plugin" / "plugin.json").read_text()).get("name") == "agent-skills":
+            return True
+    except (OSError, ValueError, AttributeError):
+        pass
+    return (d / "AGENTS.md").is_file() and (d / "skills" / "worktree-flow" / "SKILL.md").is_file()
+
+
+def links_into_agent_skills(link, rel):
+    """True when link is a symlink to <an agent-skills checkout>/<rel>, comparing path parts."""
+    if not link.is_symlink():
+        return False
+    target = Path(os.path.realpath(link))
+    parts = Path(rel).parts
+    return target.exists() and target.parts[-len(parts):] == parts and is_agent_skills_dir(target.parents[len(parts) - 1])
+
+
 def plugin_entry(installed, pid):
     """The newest install record for a plugin id, whether the index stores a list of records or one record."""
     v = _dict(installed).get(pid)

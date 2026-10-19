@@ -22,7 +22,7 @@ The page opens on Dashboard; `#docs` (or any docs section, such as `#lifecycle`)
 - It checks the git repo of the current directory as the project; pass `--project <dir>` for another one. Outside a git repo the Project section is skipped.
 - The page goes elsewhere with `--out <file>`.
 - `--no-probe` skips `hooks/test.sh` and `gh auth status` when the user wants it instant or offline.
-- The skill list comes from the checkout the script runs from, and fix commands point at the main checkout's `install.sh`.
+- The skill list comes from the copy the script runs from (the plugin, or a checkout of the repo), and checks whether the agent-skills plugin is installed and enabled.
 
 The script is read-only, never prints a secret value (only the key name, and for registry secrets only whether they resolve), and runs nothing that builds, installs, deploys or reaches a remote environment.
 
@@ -45,8 +45,8 @@ When this skill runs from a checkout before step 1, read any skill this flow nam
 
    | Step | Gaps it closes | How |
    | --- | --- | --- |
-   | 1. Install | Global links, skills not installed, OPINIONS.md | `install.sh` in the agent-skills main checkout; confirm first, since it moves existing real files to `~/.claude/backups/` |
-   | 2. Hooks | settings.json missing, hook not registered | Ask first, then merge the entries from the checkout's `hooks/README.md` into `hooks.PreToolUse` of `~/.claude/settings.json` (create `{"hooks": {"PreToolUse": []}}` when the file is missing; never replace an existing array), then run the checkout's `hooks/test.sh` |
+   | 1. Install | agent-skills plugin missing, skills not installed, legacy links | Ask first, then `claude plugin marketplace add quocld/agent-skills` and `claude plugin install agent-skills@quocld` (or the user runs the `/plugin` commands); a legacy install also runs `migrate-to-plugin.py` after its settings entries are gone; a new session picks the plugin up |
+   | 2. Hooks | Hook not registered, or registered twice | The plugin registers the gates; a gate that runs twice has a legacy `agent-skills-hooks` entry in `~/.claude/settings.json`: ask, delete only that entry, then run the plugin's `hooks/test.sh` |
    | 3. Secrets | Plaintext secret in settings, backups that hold it | Tell the user where it is, to move it out and rotate it, and which backups hold it; never read, echo, move or delete it yourself |
    | 4. Tools and logins | CLI missing, `gh` not logged in, Jira access, browser tool, Better Stack MCP | The install command from the row; logins and MCP sign-ins as `! <command>` or `/mcp` for the user, marked waiting on you |
    | 5. Project | No AGENTS.md or project-init block, CLAUDE.md import, integration branch, `TODO(owner)` | `project-init`, which discovers first and asks the user only the gaps, in one batch; that batch includes which branch PRs go into, which this step's own PR then targets |

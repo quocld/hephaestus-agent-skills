@@ -117,20 +117,43 @@ hint_case no  "$FEAT" 'gh pr merge 3'
 hint_case no  "$FEAT" 'glab mr merge 3'
 
 echo "== settings registration ($SETTINGS)"
+# Structural: the plugin manifest mounts every gate with the right event and matcher.
+python3 - "$HOOKS/hooks.json" <<'PY' || FAIL=1
+import json, sys
+hooks = json.load(open(sys.argv[1]))["hooks"]
+want = [("PreToolUse", "Write", "no-em-dash.py"), ("PreToolUse", "Bash", "guard-protected-branches.py"),
+        ("SessionStart", "startup", "session-start.py")]
+bad = 0
+for event, match, script in want:
+    hit = any(match in (e.get("matcher") or "").split("|") and
+              any("${CLAUDE_PLUGIN_ROOT}/hooks/" + script in (h.get("command") or "") for h in e.get("hooks") or [])
+              for e in hooks.get(event) or [])
+    print(("ok   " if hit else "FAIL ") + f"hooks.json {event} matcher with {match} runs {script}")
+    bad |= not hit
+sys.exit(bad)
+PY
+
+# This machine: the gates run through the enabled plugin, or through legacy settings entries.
 if [ ! -f "$SETTINGS" ]; then
   echo "WARN $SETTINGS not found, skipping the registration check (expected in CI)"
 else
   python3 - "$SETTINGS" <<'PY' || FAIL=1
 import json, sys
-entries = (json.load(open(sys.argv[1])).get("hooks") or {}).get("PreToolUse") or []
+settings = json.load(open(sys.argv[1]))
+if any(k.startswith("agent-skills@") and v for k, v in (settings.get("enabledPlugins") or {}).items()):
+    print("ok   agent-skills plugin enabled, its hooks.json registers the gates")
+    sys.exit(0)
+entries = (settings.get("hooks") or {}).get("PreToolUse") or []
 want = {"no-em-dash.py": "Write", "guard-protected-branches.py": "Bash"}
 bad = 0
 for script, tool in want.items():
     hit = any(tool in (e.get("matcher") or "").split("|") and
               any("agent-skills-hooks/" + script in (h.get("command") or "") for h in e.get("hooks") or [])
               for e in entries)
-    print(("ok   " if hit else "FAIL ") + f"PreToolUse matcher with {tool} runs agent-skills-hooks/{script}")
+    print(("ok   " if hit else "FAIL ") + f"legacy settings: PreToolUse matcher with {tool} runs agent-skills-hooks/{script}")
     bad |= not hit
+if bad:
+    print("     install the agent-skills plugin (README) instead of registering the hooks by hand")
 sys.exit(bad)
 PY
 fi
