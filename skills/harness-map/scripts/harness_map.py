@@ -143,7 +143,9 @@ def collect_hooks(probe):
     out = []
     settings = load_json(CLAUDE / "settings.json")
     if settings is None:
-        return [check("Hooks", "settings.json", "missing", f"{short(CLAUDE / 'settings.json')} missing or not valid JSON")]
+        return [check("Hooks", "settings.json", "missing",
+                      f"{short(CLAUDE / 'settings.json')} missing or not valid JSON, so no hook is registered and no rule is enforced",
+                      "create it with the hooks.PreToolUse entries from hooks/README.md, then run hooks/test.sh")]
     local = load_json(CLAUDE / "settings.local.json") or {}
     cmds = [h.get("command", "") for src in (settings, local)
             for e in src.get("hooks", {}).get("PreToolUse", []) for h in e.get("hooks", [])]
