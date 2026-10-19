@@ -274,10 +274,10 @@ def render_markdown(md):
         line = lines[i]
         if line.strip().startswith("```"):
             flush()
-            code = []
+            code, indent = [], len(line) - len(line.lstrip(" "))   # a fence inside a list item: drop the item's indent
             i += 1
             while i < len(lines) and not lines[i].strip().startswith("```"):
-                code.append(lines[i])
+                code.append(lines[i][indent:] if lines[i][:indent].strip() == "" else lines[i])
                 i += 1
             out.append("<pre><code>" + "\n".join(code) + "</code></pre>")
             i += 1
@@ -304,7 +304,8 @@ def render_markdown(md):
             flush()
             # A list block: indentation decides nesting; continuation lines join the item above.
             items = []
-            while i < len(lines) and (re.match(r"^\s*([-*]|\d+\.)\s+", lines[i]) or (lines[i].startswith("  ") and lines[i].strip() and items)):
+            while i < len(lines) and (re.match(r"^\s*([-*]|\d+\.)\s+", lines[i]) or (lines[i].startswith("  ") and lines[i].strip() and items
+                                                                                           and not lines[i].strip().startswith("```"))):
                 lm = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", lines[i])
                 if lm:
                     items.append([len(lm.group(1)) // 2, lm.group(2)[-1] == ".", lm.group(3)])

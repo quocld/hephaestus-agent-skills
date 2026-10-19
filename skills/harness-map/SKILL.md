@@ -68,6 +68,7 @@ When this skill runs from a checkout before step 1, read any skill this flow nam
 | A new eval, CI check, or verify-loop rule | Evals and CI: `covered_by` of the Evaluation or Quality Gates pillar in `assets/pillars.json`; gates, rules, and the retry label: `verify_loop` in `assets/lifecycle.json` |
 | A gap closed or found in one of the eight components | `gaps` of that pillar in `assets/pillars.json` |
 | A new check | One collector per section in `scripts/harness_map.py`; a CLI goes in `TOOLS`; a new section also needs `DESCS` and an icon in `scripts/page.py`; a check of the project-init block or a registry probe goes in `project-init`'s `scripts/doctor.py` instead |
+| A new page on the public docs site | A repo file (license, policy, guide) goes in `REPO_PAGES` in `scripts/harness_map.py`, which renders it, adds it to the footer and the sitemap; any other page goes through `emit` or `doc_page` in `write_docs_site`, so it gets the SEO head, breadcrumbs and footer |
 | Look and feel | `assets/template.html` only; the page renders through `render_page` in `scripts/page.py`; the Docs tab body comes from `scripts/harness_docs.py` |
 
 A core item is one every session depends on; optional only matters for some skills, stacks or habits (`tier_of` in `harness_map.py`).
