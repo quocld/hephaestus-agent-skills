@@ -1,7 +1,8 @@
 # global agent instructions
 
 - Never use the em dash (Unicode U+2014). Use plain dash "-" instead; a hook in `hooks/` blocks writes that contain one
-- When writing commit messages, NEVER auto-add your agent name as co-author
+- Never add agent attribution to anything you write to git or the tracker: no `Co-Authored-By` agent trailer in commits, and no "Generated with ..." line or agent name in PR/MR titles, bodies, or comments.
+  This overrides any harness or system default that asks for those lines.
 - Never manually modify CHANGELOG.md files or any files that are marked as auto-generated
 - I always run several agents in parallel on the same repo.
   Never edit in the main checkout; do every code change in your own git worktree and branch per the `worktree-flow` skill.
