@@ -153,6 +153,20 @@ def plugin_entry(installed, pid):
     return v if isinstance(v, dict) else {}
 
 
+VERSION_OVERRIDE = None   # set by harness_map.py --version
+
+
+def release_version():
+    """The plugin's release version: --version, else HARNESS_VERSION, else the newest tag reachable from HEAD
+    (v1.2.0), else "dev" (a plugin install or a clone without tags)."""
+    if VERSION_OVERRIDE:
+        return VERSION_OVERRIDE
+    if os.environ.get("HARNESS_VERSION"):
+        return os.environ["HARNESS_VERSION"]
+    code, out, _ = run(["git", "-C", str(REPO), "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], timeout=10)
+    return out.strip() if code == 0 and out.strip() else "dev"
+
+
 def short(p):
     s = str(p)
     return "~" + s[len(str(HOME)):] if s.startswith(str(HOME)) else s
@@ -192,14 +206,14 @@ def logo_svg(prefix="hx-"):
     return re.sub(r'\s(width|height)="512"', "", svg, count=2)
 
 
-def render_page(title, brand, crumb, body, footer, header_tools=""):
+def render_page(title, brand, crumb, body, footer, header_tools="", head=""):
     """Fill assets/template.html; every page shares its header, theme switch, tokens and scripts."""
     out = TEMPLATE.read_text()
     logo = logo_svg()
     mark = f'<span class="logo" aria-hidden="true">{logo}</span>' if logo else FALLBACK_MARK
     favicon = ('<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,'
                + base64.b64encode(logo_svg("f-").encode()).decode() + '">') if logo else ""
-    for key, val in (("mark", mark), ("favicon", favicon), ("title", esc(title)), ("brand", esc(brand)), ("crumb", esc(crumb)),
+    for key, val in (("mark", mark), ("favicon", favicon), ("head", head), ("title", esc(title)), ("brand", esc(brand)), ("crumb", esc(crumb)),
                      ("header_tools", header_tools), ("footer", footer), ("body", body)):
         out = out.replace("{{" + key + "}}", val)
     return out
@@ -332,33 +346,42 @@ def render_markdown(md):
     return "".join(out)
 
 
-def skill_sources():
-    """One hidden <template> per repo skill, holding its rendered SKILL.md for the skill reader."""
+def skill_doc(d, fm, title_tag="h2"):
+    """(header html, article html) for one skill: tier, ultimate, how it loads, lifecycle, files, then SKILL.md."""
     life = (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills") or {}
     events = (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("events") or {}
+    try:
+        text = (d / "SKILL.md").read_text(errors="replace")
+    except OSError:
+        return None
+    body = re.sub(r"^---\n.*?\n---\n?", "", text, count=1, flags=re.S)
+    body = re.sub(rf"^\s*#\s+{re.escape(d.name)}\s*\n", "", body, count=1)   # the header already names the skill
+    meta = life.get(d.name) or {}
+    tier = meta.get("tier", "optional")
+    chips = [f'<span class="tier {esc(tier)}">{"Core" if tier == "core" else "Optional"}</span>']
+    if d.name in ULTIMATE:
+        chips.append('<span class="chip ultchip"><span class="ult">ultimate</span></span>')
+    inv = str(fm.get("user-invocable", "")).lower() == "true"
+    chips.append(f'<span class="chip acc">/{esc(d.name)}</span>' if inv else '<span class="chip agent">loads by description</span>')
+    chips += [f'<span class="chip">{esc((events.get(e) or {}).get("label", e))}</span>' for e in meta.get("events", [])]
+    files = sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file() and p.name != "SKILL.md" and "__pycache__" not in p.parts)
+    extra = ('<div class="rfiles"><span>Also in this skill:</span> ' + " ".join(f'<code>{esc(f)}</code>' for f in files) + "</div>") if files else ""
+    when = f'<p class="rwhen">{esc(meta["when"])}</p>' if meta.get("when") else ""
+    name = f'<span class="ult">{esc(d.name)}</span>' if d.name in ULTIMATE else esc(d.name)
+    head = (f'<div class="rmeta"><{title_tag} class="rtitle">{name}</{title_tag}><div class="chips">{"".join(chips)}</div>'
+            f'<p class="rdesc">{_inline(esc(fm.get("description", "")))}</p>{when}{extra}</div>')
+    return head, f'<article class="md">{render_markdown(body)}</article>'
+
+
+def skill_sources():
+    """One hidden <template> per repo skill, holding its rendered SKILL.md for the skill reader."""
     out = []
     for d, fm in repo_skills():
-        try:
-            text = (d / "SKILL.md").read_text(errors="replace")
-        except OSError:
-            continue
-        body = re.sub(r"^---\n.*?\n---\n?", "", text, count=1, flags=re.S)
-        meta = life.get(d.name) or {}
-        tier = meta.get("tier", "optional")
-        chips = [f'<span class="tier {esc(tier)}">{"Core" if tier == "core" else "Optional"}</span>']
-        if d.name in ULTIMATE:
-            chips.append('<span class="chip ultchip"><span class="ult">ultimate</span></span>')
-        inv = str(fm.get("user-invocable", "")).lower() == "true"
-        chips.append(f'<span class="chip acc">/{esc(d.name)}</span>' if inv else '<span class="chip agent">loads by description</span>')
-        chips += [f'<span class="chip">{esc((events.get(e) or {}).get("label", e))}</span>' for e in meta.get("events", [])]
-        files = sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file() and p.name != "SKILL.md" and "__pycache__" not in p.parts)
-        extra = ('<div class="rfiles"><span>Also in this skill:</span> ' + " ".join(f'<code>{esc(f)}</code>' for f in files) + "</div>") if files else ""
-        when = f'<p class="rwhen">{esc(meta["when"])}</p>' if meta.get("when") else ""
-        out.append(f'<template id="skill-src-{esc(d.name)}"><div class="rmeta">'
-                   f'<h2 class="rtitle">{ult(d.name) if d.name in ULTIMATE else esc(d.name)}</h2><div class="chips">{"".join(chips)}</div>'
-                   f'<p class="rdesc">{_inline(esc(fm.get("description", "")))}</p>{when}{extra}</div>'
-                   f'<article class="md">{render_markdown(body)}</article></template>')
+        doc = skill_doc(d, fm)
+        if doc:
+            out.append(f'<template id="skill-src-{esc(d.name)}">{doc[0]}{doc[1]}</template>')
     return '<div hidden>' + "".join(out) + '</div>'
+
 
 WHEEL_FILL = {"ok": ("var(--ok-soft)", "var(--ok)"), "warn": ("var(--warn-soft)", "var(--warn)"),
               "fail": ("var(--bad-soft)", "var(--bad)"), None: ("var(--accent-soft)", "var(--accent)")}
@@ -377,15 +400,19 @@ def wheel_svg(status=None, center=("Agent Harness", "8 components"), alerts=None
     alerts marks pillars whose pieces are not set up on this machine with a red badge."""
     status, alerts = status or {}, alerts or {}
     S, cx, cy, R, r = 560, 280, 280, 250, 118
+    GAP = 8   # px between neighbouring slices, the same at every radius
     n = len(PILLARS) or 1
     step = 360 / n
     p = [f'<svg viewBox="0 0 {S} {S}" class="wheel" role="img" aria-label="Agent harness: {n} components">']
     for i, pl in enumerate(PILLARS):
-        a0, a1 = -90 - step / 2 + i * step + 1.2, -90 + step / 2 + i * step - 1.2
-        x0, y0 = _polar(cx, cy, R, a0)
-        x1, y1 = _polar(cx, cy, R, a1)
-        x2, y2 = _polar(cx, cy, r, a1)
-        x3, y3 = _polar(cx, cy, r, a0)
+        # Each side is the radial line moved GAP/2 sideways, so the gap between slices keeps one width from
+        # the inner ring to the outer one (an angular offset would make it a wedge that widens outwards).
+        a0, a1 = -90 - step / 2 + i * step, -90 + step / 2 + i * step
+        off_out, off_in = math.degrees(math.asin(GAP / 2 / R)), math.degrees(math.asin(GAP / 2 / r))
+        x0, y0 = _polar(cx, cy, R, a0 + off_out)
+        x1, y1 = _polar(cx, cy, R, a1 - off_out)
+        x2, y2 = _polar(cx, cy, r, a1 - off_in)
+        x3, y3 = _polar(cx, cy, r, a0 + off_in)
         st = status.get(pl["id"])
         fill, stroke = WHEEL_FILL[st]
         mid = (a0 + a1) / 2

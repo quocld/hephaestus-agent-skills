@@ -7,6 +7,7 @@ import json
 import re
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -267,6 +268,21 @@ def main():
               "skill reader: markdown is escaped before rendering (no script, img or javascript: link)")
     except ImportError:
         check(False, "skill reader: page.render_markdown exists")
+
+    # The public docs site (--docs-only) carries nothing about the machine that built it.
+    with tempfile.TemporaryDirectory() as tmp:
+        home, project = leaky_machine(Path(tmp))
+        site = Path(tmp) / "site"
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("JIRA_", "CLAUDE_"))}
+        env["HOME"] = str(home)
+        p_ = subprocess.run([sys.executable, str(SCRIPT), "--docs-only", str(site)], capture_output=True, text=True, env=env, cwd=project)
+        html_ = (site / "index.html").read_text() if (site / "index.html").exists() else ""
+        check(p_.returncode == 0 and bool(html_) and (site / "version.json").exists(), "docs site: index.html and version.json are written")
+        check(all(v not in html_ for v in LEAKS.values()), "docs site: no secret value from the machine")
+        check(str(home) not in html_ and str(project) not in html_ and socket.gethostname().split(".")[0] not in html_,
+              "docs site: no home path, project path or host name")
+        check("SLACK_TOKEN" not in html_ and "notify.py" not in html_, "docs site: hooks come from the repo's hooks.json, not this machine's settings")
+        check('id="wheel"' in html_ and 'data-tab="dash"' not in html_, "docs site: has the harness wheel and no Dashboard tab")
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:

@@ -1,0 +1,345 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "environments.schema.json",
+  "title": "Project environment registry",
+  "description": "Committed file. Holds no secret values: every secret is a reference resolved at the moment of use.",
+  "type": "object",
+  "required": [
+    "project",
+    "defaultEnvironment",
+    "environments"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "defaultEnvironment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environments": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/environment"
+      }
+    }
+  },
+  "$defs": {
+    "secretRef": {
+      "type": "object",
+      "required": [
+        "secret"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "secret": {
+          "description": "env:NAME (shell env or gitignored .agents/secrets.env) or op://vault/item/field (1Password CLI).",
+          "type": "string",
+          "pattern": "^(env:[A-Z][A-Z0-9_]*|op://.+)$"
+        }
+      }
+    },
+    "secretLikeKeys": {
+      "description": "Any key that looks like a secret must be a secretRef, never a literal.",
+      "type": "object",
+      "patternProperties": {
+        "([Pp]assword|[Tt]oken|[Ss]ecret|[Kk]ey|[Dd]b[Uu]rl|[Cc]onnection[Ss]tring)$": {
+          "$ref": "#/$defs/secretRef"
+        }
+      }
+    },
+    "commandList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "policy",
+        "services"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "branch": {
+          "description": "Git branch this environment deploys from.",
+          "type": "string"
+        },
+        "policy": {
+          "description": "autonomous: act and report. confirm-writes: one confirmation for the whole write plan. confirm-each-step: every write step confirmed separately.",
+          "enum": [
+            "autonomous",
+            "confirm-writes",
+            "confirm-each-step"
+          ]
+        },
+        "allowedWithoutAsking": {
+          "description": "Registry commands (all read-only) that skip confirmation under confirm-each-step. logsQuery allows bounded Better Stack reads (betterstack-logs section 4).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "logsCommand",
+              "logsQuery",
+              "verify",
+              "version"
+            ]
+          }
+        },
+        "rules": {
+          "description": "Free-text rules for this environment, applied on top of the policy when stricter.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "testDataAllowed"
+          ],
+          "properties": {
+            "testDataAllowed": {
+              "description": "Kill switch. false: never create, modify, or delete records here outside reviewed migrations shipped through the deploy protocol, even when asked in chat.",
+              "type": "boolean"
+            },
+            "testDataMarker": {
+              "description": "Prefix put on every record an agent creates, so it can be found and deleted.",
+              "type": "string"
+            }
+          }
+        },
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/service"
+          }
+        },
+        "accounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/account"
+          }
+        },
+        "deployOrder": {
+          "description": "Service names in deploy order. Default when absent: db before web, which requires backward-compatible migrations.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "testing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope"
+          ],
+          "properties": {
+            "scope": {
+              "description": "full: anything incl. destructive and load tests. non-destructive: own marked data, cleaned up. smoke-only: read-only flows with listed accounts. none: no tests.",
+              "enum": [
+                "full",
+                "non-destructive",
+                "smoke-only",
+                "none"
+              ]
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "local",
+            "vps",
+            "vercel",
+            "supabase",
+            "docker-compose",
+            "custom"
+          ]
+        },
+        "runtime": {
+          "description": "Free text, e.g. \"Next.js 15 + pm2\".",
+          "type": "string"
+        },
+        "access": {
+          "type": "object",
+          "$ref": "#/$defs/secretLikeKeys",
+          "properties": {
+            "ssh": {
+              "description": "Host alias defined in ~/.ssh/config. Never a raw IP plus key path.",
+              "type": "string"
+            },
+            "appDir": {
+              "type": "string"
+            },
+            "processName": {
+              "type": "string"
+            },
+            "supabaseProjectRef": {
+              "type": "string"
+            },
+            "dashboardUrl": {
+              "type": "string"
+            },
+            "vercelProjectId": {
+              "description": "projectId from .vercel/project.json.",
+              "type": "string"
+            },
+            "vercelOrgId": {
+              "description": "orgId from .vercel/project.json.",
+              "type": "string"
+            },
+            "composeProject": {
+              "description": "docker compose -p value; every compose command must carry it.",
+              "type": "string"
+            },
+            "composeFiles": {
+              "description": "Every -f file, in order.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sharedHost": {
+              "description": "The server runs other projects too. Absent means treat as shared.",
+              "type": "boolean"
+            }
+          }
+        },
+        "version": {
+          "description": "Prints exactly one value and nothing else: the commit SHA the running process was built from, or for a database the latest applied migration version.",
+          "type": "string"
+        },
+        "deploy": {
+          "description": "Ordered steps. Under confirm-each-step, each item is one confirmed step.",
+          "$ref": "#/$defs/commandList"
+        },
+        "verify": {
+          "$ref": "#/$defs/commandList",
+          "description": "Read-only checks."
+        },
+        "rollback": {
+          "$ref": "#/$defs/commandList"
+        },
+        "logsCommand": {
+          "description": "Read-only command printing recent live output, bounded (e.g. --lines 200 --nostream, --tail=N); never follows.",
+          "type": "string"
+        },
+        "logs": {
+          "description": "Where this service's log history lives, read with the betterstack-logs skill. Replaces the old string command, now logsCommand. No tokens here: the ingest token is env:BETTER_STACK_SOURCE_TOKEN and the host BETTER_STACK_INGESTING_HOST, set per environment in that environment's secret store. One source per project per environment (<project>-<env>); a Supabase drain uses <project>-<env>-supabase, and a Vercel platform drain's own source (<project>-<env>-vercel) is recorded in the service notes.",
+          "type": "object",
+          "required": [
+            "provider",
+            "source",
+            "shipping"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": [
+                "betterstack"
+              ]
+            },
+            "source": {
+              "description": "Better Stack source name. App logs: one per project and environment, <project>-<env>, shared by its services and told apart by the service field. A platform drain gets its own source, <project>-<env>-<platform> (acme-prod-vercel), never the app source. Exceptions: betterstack-logs section 3.",
+              "type": "string",
+              "minLength": 1
+            },
+            "sourceId": {
+              "description": "Numeric source id, when known; speeds up MCP lookups.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "shipping": {
+              "description": "sdk: in-app transport. vector: project-scoped Vector. collector: Better Stack Collector, dedicated hosts only. drain: platform drain (Vercel, Supabase).",
+              "enum": [
+                "sdk",
+                "vector",
+                "collector",
+                "drain"
+              ]
+            }
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "account": {
+      "type": "object",
+      "required": [
+        "role",
+        "login"
+      ],
+      "$ref": "#/$defs/secretLikeKeys",
+      "properties": {
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "login": {
+          "description": "Email or username. Not a secret.",
+          "type": "string"
+        },
+        "password": {
+          "$ref": "#/$defs/secretRef"
+        },
+        "mfa": {
+          "description": "How to get the second factor, e.g. a TOTP secretRef or \"ask the user\".",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/secretRef"
+            }
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
