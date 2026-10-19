@@ -30,6 +30,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test the version picker
+        run: bash .github/scripts/test_next_version.sh
+
       - name: Next version
         id: v
         run: python3 .github/scripts/next_version.py | tee -a "$GITHUB_OUTPUT"
