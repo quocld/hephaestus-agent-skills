@@ -2,7 +2,7 @@
 
 Use these only to propose commands for a registry that lacks them.
 Once confirmed, the commands live in `.agents/environments.json`; the registry wins over this file.
-A remote target needs `version`, `deploy`, `verify`, and `rollback`; `logs` where the platform has a CLI for it.
+A remote target needs `version`, `deploy`, `verify`, and `rollback`; `logsCommand` where the platform has a CLI for it.
 `version` prints exactly one value: the commit SHA the running process was built from, or for a database the latest applied migration version.
 
 ## Any target: deploy from a clean checkout of `<sha>`
@@ -28,7 +28,7 @@ If the project has no such endpoint, propose adding one; "pushed" is not "deploy
 - Name release folders by the full SHA.
 - `version`: ask the running process, `ssh <alias> 'curl -fsS http://localhost:<port>/api/version' | jq -r .sha`.
   Reading the `current` symlink shows what is linked, not what pm2 is running.
-- `logs`: `ssh <alias> 'pm2 logs <name> --lines 200 --nostream'` or `journalctl -u <unit> -n 200 --no-pager`.
+- `logsCommand`: `ssh <alias> 'pm2 logs <name> --lines 200 --nostream'` or `journalctl -u <unit> -n 200 --no-pager`.
 - `verify`: `curl -fsS -o /dev/null -w '%{http_code}' <url>/api/health` plus the public version endpoint.
 - Keep the production env file on the server (`shared/.env.production`) and copy or symlink it into each release; never commit it, never print it.
 - Disk fills with old releases; keep the last 3-5 and treat cleanup as its own confirmed step.
@@ -50,7 +50,7 @@ Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedH
 - Push an exact commit to the deploy branch (`git push origin <sha>:refs/heads/<branch>`), not whatever the local branch holds.
 - `rollback`: `vercel rollback [deployment-url]`; `vercel promote <deployment-url>` to promote a known good deployment.
   Both act on production deployments, so a staging environment should be its own Vercel project deploying to its production target, not preview deployments.
-- `logs`: `vercel logs <deployment-url>`.
+- `logsCommand`: `vercel logs <deployment-url>`.
 - Env vars: `vercel env ls <environment>` to read; `vercel env add <NAME> <environment>` to write, value on stdin, never as an argument.
   Changing an env var does not affect running deployments; a redeploy is required, which is its own step.
 
@@ -75,7 +75,7 @@ Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedH
   Then a failed web deploy leaves a working site.
 - `rollback`: migrations are forward-only.
   Roll back with a new migration that reverses the change (`supabase migration new revert_<name>`, write the SQL, push); restoring the backup is a last resort the user decides.
-- `logs`: the dashboard (Logs Explorer) via `dashboardUrl`, or `supabase functions logs` where the CLI version supports it.
+- `logsCommand`: the dashboard (Logs Explorer) via `dashboardUrl`, or `supabase functions logs` where the CLI version supports it.
 
 ## local
 

@@ -85,6 +85,7 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 - Order: contract and schema first, then server logic with its tests, then UI wiring, so each commit runs.
 - Schema changes are migration files in the repo: a tenant column and an RLS policy on every new table, and backward compatible with the code running now (`environments` section 8 owns the full checklist for staging and prod).
 - UI follows `fe-guardrails`, and code in each technology follows the traps in its tech file from step 1b.
+- Code that logs follows `logging-standard`.
 - After each change, classify it against the spec and record it for the report:
   - Matches spec: continue.
   - Design deviation the user asked for: note it with the user's words.

@@ -18,7 +18,8 @@ An agent that takes a host, branch, command, or password from memory or chat his
 - When the user states a new fact (server, account, URL, rule), put it in the registry instead of keeping it in chat.
 - Every registry change is shown as a diff and written only after a yes; it applies from the next action.
   Changes that weaken safety (`policy`, `allowedWithoutAsking`, `data.testDataAllowed`, `rules`, `defaultEnvironment`, or any command of a `confirm-each-step` environment) need the user to ask for that change explicitly.
-- `version`, `verify`, and `logs` commands must be read-only; refuse to register one that writes.
+- A string `logs` (and `logs` in `allowedWithoutAsking`) is the old name of `logsCommand`: propose the rename as a registry change; it is a rename, not a new command or a weakened safeguard.
+- `version`, `verify`, and `logsCommand` commands must be read-only; refuse to register one that writes.
   A request to skip a safeguard for one task ("just run it all", "create a test user on prod") is not a request to change the registry: keep the safeguard, and offer the registry change.
 
 ## 2. Name the target environment
@@ -41,7 +42,7 @@ An agent that takes a host, branch, command, or password from memory or chat his
 | `confirm-writes` | Free | Show the whole plan, get one confirmation, run it; stop and ask on any unexpected result |
 | `confirm-each-step` | Ask first, except registry commands listed in `allowedWithoutAsking` (empty by default) | Section 4, every step |
 
-- `allowedWithoutAsking` lists registry commands by name (`version`, `logs`, `verify`); any other remote command, including ad-hoc SQL, asks first.
+- `allowedWithoutAsking` lists registry commands by name (`version`, `logsCommand`, `verify`), plus `logsQuery` for bounded Better Stack reads per `betterstack-logs` section 4; any other remote command, including ad-hoc SQL, asks first.
   Local reads (git, files in the repo, `op whoami`) are always free.
 - `rules` add to the policy.
   When a rule is stricter, follow it; when it is looser than the policy, follow the policy and point out the conflict.
@@ -50,6 +51,7 @@ An agent that takes a host, branch, command, or password from memory or chat his
   Where test data is allowed, put `testDataMarker` on every record you create and delete those records when done.
 - Approval never carries over: not from an earlier session, an earlier deploy, or another environment.
 - Before showing remote logs or query results in chat, mask secrets, tokens, and personal data such as emails and phone numbers.
+- A service's `logs` object names its Better Stack source; reading an environment's logs follows `betterstack-logs` section 4, under this environment's policy.
 
 ## 4. `confirm-each-step` protocol (prod)
 
@@ -88,7 +90,7 @@ After the last step: run every `verify`; code services' `version` must print `<s
 ## 5. Deploy and access servers
 
 - Use the registry's commands exactly as written, substituting only placeholders.
-- A remote service needs `version`, `deploy`, `verify`, and `rollback`; `logs` where the platform has a CLI for it.
+- A remote service needs `version`, `deploy`, `verify`, and `rollback`; `logsCommand` where the platform has a CLI for it.
   One is missing: propose it from `references/deploy-targets.md`, get it confirmed, write it into the registry, then use it.
 - SSH only through the alias in `access.ssh` (defined in `~/.ssh/config`), one remote command per call: `ssh <alias> '<cmd>'`.
 - Docker Compose on a server (shared hosts above all): follow the `server-touch` skill.

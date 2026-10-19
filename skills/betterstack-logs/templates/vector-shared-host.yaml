@@ -1,0 +1,90 @@
+# Project-scoped Vector config for a Docker host shared with other teams.
+# Ships only the containers of ONE compose project to ONE Better Stack source.
+# Every service of the project shares that source (<project>-<env>); lines are told apart by `service`.
+# On a shared host, run it only with the host owner's approval recorded in the registry (betterstack-logs section 2).
+# Owner: the betterstack-logs skill (references/shipping.md shows the compose service that runs it).
+#
+# Vector 0.58 does not substitute environment variables unless VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true is set;
+# without it the sink fails with "invalid uri character". The values below are ours, so the flag is safe here.
+#
+# Required environment variables (startup fails if one is missing):
+#   COMPOSE_PROJECT              the `docker compose -p` value of this project and environment (registry `composeProject`)
+#   BETTER_STACK_INGESTING_HOST  the source's ingesting host, copied from the source page, without https://
+#   BETTER_STACK_SOURCE_TOKEN    the source token; from the environment's secret store, never committed
+#
+# Output shape matches what @logtail/pino sends: app JSON fields at the top level,
+# `level` as a lowercase label, `dt` from the app's `time`, plus a small `docker` object.
+# Validated with Vector 0.58.0: `vector validate --no-environment` and `vector test`.
+
+data_dir: /var/lib/vector
+
+sources:
+  project_containers:
+    type: docker_logs
+    # The only line that keeps other teams' logs out. Never remove or widen it.
+    include_labels:
+      - "com.docker.compose.project=${COMPOSE_PROJECT:?COMPOSE_PROJECT must be set}"
+    # Optional: skip noisy services of this project by container name prefix.
+    # exclude_containers:
+    #   - "<project>-db-"
+
+transforms:
+  app_json:
+    type: remap
+    inputs: [project_containers]
+    source: |
+      docker_meta = {
+        "container_name": .container_name,
+        "compose_service": .label."com.docker.compose.service",
+        "stream": .stream
+      }
+      received_at = .timestamp
+      line = to_string(.message) ?? ""
+      parsed, err = parse_json(line)
+      if err == null && is_object(parsed) {
+        . = object!(parsed)
+      } else {
+        . = { "message": line }
+      }
+      .docker = docker_meta
+
+      # pino numeric levels -> the same labels @logtail/pino produces.
+      if is_integer(.level) {
+        n = int!(.level)
+        .level = if n <= 10 { "trace" } else if n <= 20 { "debug" } else if n <= 30 { "info" } else if n <= 40 { "warn" } else if n <= 50 { "error" } else { "fatal" }
+      } else if is_string(.level) {
+        .level = downcase!(.level)
+      }
+
+      # Message key: the contract uses `message`; accept pino's default `msg` too.
+      if !exists(.message) && exists(.msg) {
+        .message = del(.msg)
+      }
+
+      # Event time: the app's `time` (ISO or epoch ms both parse), else `timestamp`, else when Docker read the line.
+      if exists(.time) {
+        .dt = del(.time)
+      } else if exists(.timestamp) {
+        .dt = .timestamp
+      } else {
+        .dt = received_at
+      }
+      del(.v)
+
+      # Fallback only; the app is expected to log `service` itself.
+      if !exists(.service) {
+        .service = docker_meta.compose_service
+      }
+
+sinks:
+  better_stack:
+    type: http
+    inputs: [app_json]
+    method: post
+    uri: "https://${BETTER_STACK_INGESTING_HOST:?BETTER_STACK_INGESTING_HOST must be set}/"
+    encoding:
+      codec: json
+    compression: gzip
+    auth:
+      strategy: bearer
+      token: "${BETTER_STACK_SOURCE_TOKEN:?BETTER_STACK_SOURCE_TOKEN must be set}"

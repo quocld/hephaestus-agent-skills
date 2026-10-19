@@ -33,6 +33,7 @@ Read the places in this table, not the whole tree, and draft every answer from e
 | E2E setup | `playwright.config.*`, existing personas, storage state files, seed scripts, report folders |
 | Frontend conventions | Shared UI folder, error-parsing helper, form library |
 | Deploy targets | Facts listed in the `environments` skill's create section |
+| Logger and log shipping (`logging-standard`, `betterstack-logs` section 2) | Logger package and its tenant field (`pino`, `@logtail/*` in `package.json`, a shared `logger` package), Vector or collector configs, Vercel or Supabase log drains |
 | Existing agent files | `AGENTS.md`, `CLAUDE.md`, `.claude/skills/`, `.agents/` |
 
 ## 2. Ask only the gaps, in one batch
@@ -63,6 +64,7 @@ Never rewrite text outside the markers.
 - Flow traces: `docs/flow-traces/`.
 - Frontend: shared UI in `packages/ui/`; errors parsed only by `lib/api-error.ts`.
 - Environments: `.agents/environments.json` (see the `environments` skill).
+- Logging: logger `packages/logger/` (`logging-standard`); tenant field is organization_id (logging-standard alias); log sources in the registry (`betterstack-logs`).
 <!-- project-init:end -->
 ```
 
@@ -103,6 +105,9 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 | Platform CLIs used by the registry | `vercel whoami`, `supabase --version`, `docker compose version` |
 | Version endpoints | Each environment's `version` prints a 40-character SHA (asks first on `confirm-each-step` environments) |
 | Browser tool for E2E | The first tool in the `e2e-verify` order is available: Playwright MCP, otherwise `npx -y --prefer-offline chrome-devtools-axi --help` runs |
+| Better Stack MCP connected | `claude mcp list 2>/dev/null \| grep -E '^(plugin:betterstack:)?betterstack(-ro)?: .*Connected'` prints a line; a `Needs authentication` line means run `/mcp` and sign in (`betterstack-logs` section 1) |
+| Log sources registered | `jq -r '.environments \| to_entries[] \| select(.value.url // "" \| test("//localhost") \| not) \| .key as $e \| .value.services[]? \| select(.type != "local") \| if (.logs \| type) == "string" then "\($e)/\(.name): old string logs, rename to logsCommand" elif (.logs.source // "") == "" then "\($e)/\(.name)" else empty end' .agents/environments.json` prints nothing; each printed service lacks `logs.source` or needs the `environments` section 1 rename |
+| Logger contract | The project's logger test passes; no such test: log one line with the project's logger, Better Stack env unset so nothing ships, and check the keys, e.g. `out=$(env -u BETTER_STACK_SOURCE_TOKEN -u BETTER_STACK_INGESTING_HOST NODE_ENV=production node -e "import('<built logger entry>').then((m) => m.createLogger({ service: 'doctor' }).info('probe'))" \| head -1); [ -n "$out" ] && printf '%s\n' "$out" \| jq -r 'keys as $k \| $ARGS.positional - $k \| if . == [] then "OK" else "MISSING \(join(" "))" end' --args <every key logging-standard section 1 requires on every line> \|\| echo FAILING` prints `OK`; a crash, no output, or a non-JSON line prints `FAILING` |
 | Markers intact | `AGENTS.md` has exactly one `project-init:start` and one `project-init:end` |
 | Block paths exist | Every repo path the block names exists (`test -e <path>`); a gitignored path such as a storage state folder counts as `OK` when `git check-ignore -q <path>` succeeds, with a trailing slash on folders (`e2e/.auth/`) so dir-only patterns match |
 | Block commands resolve | Each listed command, checked with the cheap probe below, never by running it |
@@ -115,7 +120,7 @@ Cheap probes for block commands:
 - Package manager built-in (`pnpm install --frozen-lockfile`): `command -v <manager>` and the lockfile exists.
 - Make target: `make -n <target>`.
 - Any other binary: `command -v <bin>`, then `<bin> --version` or `<bin> --help`.
-- Never run a command that builds, tests, installs, migrates, starts a server, or writes, unless the user asks for that run.
+- Never run a command that builds, tests, installs, migrates, starts a server, or writes, unless the user asks for that run; the logger contract row is the one exception, and runs only the logger's own test file or its one-line probe with the Better Stack variables unset.
 
 The doctor itself never writes.
 Fix cheap drift in this skill's own block and files through the normal flow of section 0 (worktree, PR/MR into `<int>`):

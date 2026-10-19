@@ -14,6 +14,7 @@ For the ticket loop around a bug (reading the ticket, depth by risk, hand-back),
 
 - Reproduce first (`AGENTS.md`); not reproduced means not understood.
 - Check what changed besides code: lockfile and dependency diffs, config and env changes, and which version each environment runs (`environments` version status).
+- On a deployed environment, read its logs by `trace_id` or request id (`betterstack-logs` section 4) before adding any instrumentation.
 - In a system with several components (CI -> build -> deploy, UI -> API -> service -> DB, webhook -> queue -> worker), log what enters and leaves each boundary in one run, then read where the value first goes wrong.
   Log presence, never secret values: `[ -n "${TOKEN:-}" ] && echo TOKEN set || echo TOKEN unset`.
 - Find a similar path in the same codebase that works, and list every difference between the two, however small.

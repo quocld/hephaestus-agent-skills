@@ -55,7 +55,7 @@ Any hit is an immediate FAIL, whether or not the AC mentions isolation.
 
 ## 4. On FAIL, trace the backend
 
-Get the `trace_id`/request id from the failing response (or the timestamp) and look up the structured backend logs (log platform, `docker compose logs`, dev server stdout).
+Get the `trace_id`/request id from the failing response (or the timestamp) and look up the structured backend logs: on a deployed environment with `betterstack-logs` section 4, locally in `docker compose logs` or the dev server stdout.
 Report the UI symptom together with the backend error and stack.
 
 ## Output: PASS and FAIL both leave evidence
