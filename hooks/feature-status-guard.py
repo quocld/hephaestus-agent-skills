@@ -23,6 +23,8 @@ Rules, each a "deny" whose reason names the command to run instead:
    Creating a branch (-b/-c, not checking one out) is also denied when claim/<ID> exists but its status file (read
    from the local ref refs/remotes/origin/claim/<ID>) names a different branch: one ID, one branch.
    Branch names without a recognizable <type>/<ID> are out of scope.
+   Rules 2 and 3 judge a branch only when its ID is a ticket id (TICKET_RE, WEST-12) or a claim/<ID> exists for it:
+   a slug-only branch with no claim (fix/csv-export) is a small no-ticket change and passes.
 3. Bash `gh pr create|new` / `glab mr create|new` from such a branch when docs/status/<ID>.md is missing on the
    branch, or (non-draft only) its state is not in-review or merged, `status.py check <ID> --ref <branch>` fails,
    or the local branch is ahead of its local upstream tracking ref (unpushed commits; fix: git push).
@@ -137,6 +139,14 @@ def id_candidates(rest):
 def suggested_id(rest):
     ticket = TICKET_RE.match(rest)
     return ticket.group(0) if ticket else "<ID>"
+
+
+def in_scope(top, rest):
+    """Rules 2 and 3 judge a branch only when its ID is a ticket id or a claim/<ID> exists for it."""
+    if TICKET_RE.match(rest):
+        return True
+    claims = local_claims(top)
+    return any(c in claims for c in id_candidates(rest))
 
 
 def status_file(top, ref, ident):
@@ -362,6 +372,8 @@ def claim_reason(top, btype, rest, start, verb, creating=False):
         return (f"{verb} {name}, but claim/{ident} belongs to branch {other}, so this would be a second branch for "
                 f"{ident}. Work on {other} instead ({STATUS_CMD} pick {ident} --resume prints its worktree when the "
                 f"claim is yours), or ask the user; never pick a second branch for the same ID.")
+    if not TICKET_RE.match(rest):
+        return None  # a slug-only branch with no claim is a small no-ticket change: plain worktree-flow
     refs = [r for r in dict.fromkeys((start, f"refs/heads/{name}", f"refs/remotes/origin/{name}")) if r]
     for ref in refs:
         own = branch_ref_name(ref) == name
@@ -520,6 +532,8 @@ def pr_reason(args, repo, cli):
         return None
     btype, rest = m.groups()
     name = f"{btype}/{rest}"
+    if not in_scope(top, rest):
+        return None
     if head:
         ref = next((r for r in (f"refs/heads/{name}", f"refs/remotes/origin/{name}")
                     if git(top, "rev-parse", "--verify", "--quiet", r) is not None), None)
