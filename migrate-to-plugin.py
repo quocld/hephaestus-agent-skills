@@ -1,61 +1,49 @@
 #!/usr/bin/env python3
 """Move a machine from the old install.sh links to the agent-skills plugin.
 
-The plugin now delivers the skills, the hooks and the global rules, so the links install.sh made would load
-everything twice. This removes only symlinks that point into a checkout of this repo; real files are never
-touched. ~/.claude/agent-skills-hooks stays while a settings file still calls it, because a hook command whose
-script is gone exits 2, which Claude Code treats as "block this tool call".
+The plugin now delivers the skills and the global rules, so the links install.sh made would load them twice.
+This removes only symlinks whose target is a file of an agent-skills checkout (any clone or worktree, found by
+what the target folder holds, never by where this script runs); real files are never touched.
+~/.claude/agent-skills-hooks is never removed here: any user or project settings file may still call it, and a
+hook command whose script is gone exits 2, which Claude Code treats as "block this tool call".
 
 Usage: python3 migrate-to-plugin.py [--dry-run]
 """
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent
 HOME = Path.home()
 CLAUDE = Path(os.environ.get("CLAUDE_DIR", HOME / ".claude"))
 DRY = "--dry-run" in sys.argv
 
 
-def common_dir(path):
-    """The git common dir of the checkout holding path, so any worktree of this repo counts as this repo."""
-    p = subprocess.run(["git", "-C", str(path if path.is_dir() else path.parent), "rev-parse",
-                        "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True)
-    return p.stdout.strip() if p.returncode == 0 else None
-
-
-OURS = common_dir(REPO)
+def is_agent_skills_dir(d):
+    """An agent-skills checkout or plugin folder: its manifest says so, or it has the repo's shape."""
+    try:
+        if json.loads((d / ".claude-plugin" / "plugin.json").read_text()).get("name") == "agent-skills":
+            return True
+    except (OSError, ValueError, AttributeError):
+        pass
+    return (d / "AGENTS.md").is_file() and (d / "skills" / "worktree-flow" / "SKILL.md").is_file()
 
 
 def ours(link, rel):
-    """True when link is a symlink to <a checkout of this repo>/<rel>."""
+    """True when link is a symlink to <an agent-skills checkout>/<rel>, comparing path parts, not text."""
     if not link.is_symlink():
         return False
     target = Path(os.path.realpath(link))
-    root = target.parents[len(Path(rel).parts) - 1] if len(Path(rel).parts) > 1 else target.parent
-    return target.as_posix().endswith(rel) and (root == REPO or common_dir(root) == OURS)
+    parts = Path(rel).parts
+    if not target.exists() or target.parts[-len(parts):] != parts:
+        return False
+    return is_agent_skills_dir(target.parents[len(parts) - 1])
 
 
 def remove(link, why):
     print(f"{'would remove' if DRY else 'removed'} {link} ({why})")
     if not DRY:
         link.unlink()
-
-
-def settings_call_legacy_hooks():
-    for name in ("settings.json", "settings.local.json"):
-        try:
-            data = json.loads((CLAUDE / name).read_text())
-        except (OSError, ValueError):
-            continue
-        for entries in (data.get("hooks") or {}).values():
-            for e in entries or []:
-                if any("agent-skills-hooks/" in (h.get("command") or "") for h in e.get("hooks") or []):
-                    return CLAUDE / name
-    return None
 
 
 def main():
@@ -68,13 +56,10 @@ def main():
         remove(CLAUDE / "CLAUDE.md", "the plugin loads AGENTS.md at session start")
     if ours(HOME / "OPINIONS.md", "OPINIONS.md"):
         remove(HOME / "OPINIONS.md", "the session start note names the plugin's OPINIONS.md")
-    hooks = CLAUDE / "agent-skills-hooks"
-    caller = settings_call_legacy_hooks()
-    if caller:
-        print(f"kept {hooks}: {caller} still calls agent-skills-hooks. Remove those PreToolUse entries "
-              "(the plugin registers the same hooks), then run this again.")
-    elif ours(hooks, "hooks"):
-        remove(hooks, "the plugin registers the hooks")
+    if ours(CLAUDE / "agent-skills-hooks", "hooks"):
+        print(f"kept {CLAUDE / 'agent-skills-hooks'}: the plugin registers the same hooks, so delete every "
+              "agent-skills-hooks entry from ~/.claude/settings*.json and from each project's .claude/settings*.json "
+              "(grep -rl agent-skills-hooks), then remove this link by hand.")
     print()
     print("Install the plugin in Claude Code, if you have not yet:")
     print("  /plugin marketplace add quocld/agent-skills")

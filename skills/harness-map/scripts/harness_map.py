@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
-from page import (_dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (links_into_agent_skills, _dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -73,29 +73,38 @@ def same_repo(a, b):
 # ---------------------------------------------------------------- collectors
 
 INSTALL_FIX = "/plugin marketplace add quocld/agent-skills, then /plugin install agent-skills@quocld"
-MIGRATE_FIX = "python3 migrate-to-plugin.py (in the agent-skills repo or plugin folder)"
-LEGACY = [("~/.claude/CLAUDE.md -> AGENTS.md", CLAUDE / "CLAUDE.md", REPO / "AGENTS.md"),
-          ("~/OPINIONS.md -> OPINIONS.md", HOME / "OPINIONS.md", REPO / "OPINIONS.md"),
-          ("~/.claude/agent-skills-hooks -> hooks/", CLAUDE / "agent-skills-hooks", REPO / "hooks")]
+MIGRATE_FIX = "python3 migrate-to-plugin.py (from the agent-skills plugin folder or any clone)"
+LEGACY = [("~/.claude/CLAUDE.md -> AGENTS.md", CLAUDE / "CLAUDE.md", "AGENTS.md"),
+          ("~/OPINIONS.md -> OPINIONS.md", HOME / "OPINIONS.md", "OPINIONS.md"),
+          ("~/.claude/agent-skills-hooks -> hooks/", CLAUDE / "agent-skills-hooks", "hooks")]
 
 
-def agent_skills_plugin():
-    """(plugin id, install folder) when the agent-skills plugin is enabled, else (None, None)."""
-    settings = load_obj(CLAUDE / "settings.json")
+def agent_skills_plugin(project=None):
+    """(plugin id, install folder) when the agent-skills plugin is enabled for this project, else (None, None).
+    Enablement merges user, project and project-local settings (later wins); the install record follows its scope."""
+    sources = [CLAUDE / "settings.json"]
+    if project:
+        sources += [Path(project) / ".claude" / "settings.json", Path(project) / ".claude" / "settings.local.json"]
+    enabled = {}
+    for f in sources:
+        enabled.update(_dict(load_obj(f).get("enabledPlugins")))
     installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
-    for pid, on in _dict(settings.get("enabledPlugins")).items():
-        if on and pid.split("@")[0] == "agent-skills":
-            path = Path(_str(plugin_entry(installed, pid).get("installPath")))
-            return pid, (path if path.is_dir() else None)
+    for pid, on in enabled.items():
+        if on is True and pid.split("@")[0] == "agent-skills":
+            records = _dicts(installed.get(pid)) or [plugin_entry(installed, pid)]
+            here = [r for r in records if r.get("scope") in ("project", "local") and _str(r.get("projectPath")) == str(project)]
+            rec = (here or [r for r in records if r.get("scope", "user") == "user"] or records)[-1]
+            path = Path(_str(rec.get("installPath"))) if rec.get("installPath") else None
+            return pid, (path if path and path.is_dir() else None)
     return None, None
 
 
-PLUGIN_ID, PLUGIN_DIR = agent_skills_plugin()
+PLUGIN_ID, PLUGIN_DIR = None, None   # set in main() once the project is known
 
 
-def is_ours(link, src):
-    """A symlink into this repo (any checkout of it)."""
-    return link_check("", "", link, src, "")["status"] == "ok" and link.is_symlink()
+def is_ours(link, rel):
+    """A symlink to <rel> in any agent-skills checkout (the old install.sh links)."""
+    return links_into_agent_skills(link, rel)
 
 
 def collect_global():
@@ -143,7 +152,7 @@ def collect_skills():
 
         dst = CLAUDE / "skills" / name
         in_plugin = bool(PLUGIN_DIR and (PLUGIN_DIR / "skills" / name / "SKILL.md").exists())
-        linked = is_ours(dst, d)
+        linked = is_ours(dst, f"skills/{name}")
         if in_plugin and linked:
             lc = check("Skills", name, "warn", f"loaded twice: from {PLUGIN_ID} and from the legacy link {short(dst)}", MIGRATE_FIX)
         elif in_plugin:
@@ -944,6 +953,8 @@ def main():
     project = git_root(a.project or os.getcwd())
     if a.project and not project:
         sys.exit(f"--project {a.project} is not inside a git repo")
+    global PLUGIN_ID, PLUGIN_DIR
+    PLUGIN_ID, PLUGIN_DIR = agent_skills_plugin(project)
     probe = not a.no_probe
 
     checks = collect_global()

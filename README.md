@@ -67,4 +67,5 @@ Working on the skills themselves: edits reach your sessions after you commit, pu
 
 ## Adding a skill
 
-Follow `skills/knowledge-placement` first, then create `skills/<name>/SKILL.md` with `name` and `description` frontmatter, place it in `skills/harness-map/assets/lifecycle.json`, and bump `version` in `.claude-plugin/plugin.json`.
+Follow `skills/knowledge-placement` first, then create `skills/<name>/SKILL.md` with `name` and `description` frontmatter, and place it in `skills/harness-map/assets/lifecycle.json`.
+`.claude-plugin/plugin.json` has no `version` on purpose: the commit SHA is the version, so every pushed commit reaches users through `claude plugin update`.
