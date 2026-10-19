@@ -9,7 +9,7 @@ user-invocable: true
 
 Stories go wrong in the gaps: an edge case nobody decided, a screen rebuilt that already existed, a contract drifted from the spec, an agent swarm that read the same files five times.
 This skill runs inside `worktree-flow` (its worktree, commits, and PR/MR rules apply unchanged) and covers what happens between opening the branch and opening the PR/MR.
-A change with no open gap and one obvious edit (a copy fix, a one-line tweak) skips steps 2-4: list its AC, make the edit, and run step 6.
+A change with no open gap and one obvious edit (a copy fix, a one-line tweak) skips steps 1b-4: list its AC, make the edit, and run step 6.
 
 ## 1. Read the story and its sources of truth
 
@@ -19,6 +19,23 @@ A change with no open gap and one obvious edit (a copy fix, a one-line tweak) sk
 - Reconcile the story with the API contract: every field, status, and error the story needs either exists in the contract or is a contract change you list in step 2.
 - Search for existing screens, routes, and mock-data pages before planning new UI (`fe-guardrails`, "Before building a screen").
 - Write down the acceptance criteria as a numbered list; every later step refers to them by number.
+
+## 1b. Load the tech files for the stack you will touch
+
+Training data lags the installed framework versions, so every technology the change touches gets its file from this skill's `tech/` folder before step 3.
+Pick them from the repo, not from memory, and only for technologies the change itself touches (a `supabase/` folder does not load `tech/supabase.md` for a copy-only UI change):
+
+| Signal | Read |
+| --- | --- |
+| `next` in `package.json` | `tech/nextjs.md` and `tech/react.md` |
+| `react` without `next` | `tech/react.md` |
+| `vercel.json`, `vercel.ts`, `.vercel/`, a Vercel environment in `.agents/environments.json`, or a README or CI step that deploys to Vercel | `tech/vercel.md` |
+| `@supabase/*` in `package.json`, or a `supabase/` folder | `tech/supabase.md` |
+| `@nestjs/core` in `package.json` | `tech/nestjs.md` |
+
+- Run each file's "Before writing code" steps now: check the installed versions it names and read the docs for those versions that it points to.
+- Step 5 follows each file's traps, and step 6 adds each file's Verify section.
+- A technology with no file here: read the docs of its installed version (its `llms.txt` or `.md` pages when it has them) before using an API you have not seen in this codebase, and name it in the report as a candidate for a new file (`tech/README.md`).
 
 ## 2. List what is underspecified
 
@@ -67,7 +84,7 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 
 - Order: contract and schema first, then server logic with its tests, then UI wiring, so each commit runs.
 - Schema changes are migration files in the repo: a tenant column and an RLS policy on every new table, and backward compatible with the code running now (`environments` section 8 owns the full checklist for staging and prod).
-- UI follows `fe-guardrails`.
+- UI follows `fe-guardrails`, and code in each technology follows the traps in its tech file from step 1b.
 - After each change, classify it against the spec and record it for the report:
   - Matches spec: continue.
   - Design deviation the user asked for: note it with the user's words.
@@ -78,7 +95,7 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 In this order, so the evidence names the head that ships:
 
 1. Rebase on `origin/<int>` first (`worktree-flow` section 4 step 1), so nothing after this changes the head except fixes.
-2. Run the checks of `worktree-flow` section 4 step 2.
+2. Run the checks of `worktree-flow` section 4 step 2, plus the Verify section of each tech file loaded in step 1b.
    Tests for each AC sit at its contract boundary and follow `root-cause` section 5; for a change to existing behavior, prove the test with the revert-only-the-change commands there.
 3. A change that matters (anything beyond copy, docs, or config): run the `fresh-review` loop.
    It routes to `security-pass` and `flow-trace` itself when their triggers fire, so do not run either separately.
@@ -101,7 +118,7 @@ In this order, so the evidence names the head that ships:
 In this order, also used as the PR/MR body:
 
 1. The story and its AC list, each with status: matches spec, design deviation (who asked), or open.
-2. Decisions made in step 2 and step 4, each with its reason.
+2. Decisions made in step 2 and step 4, each with its reason, and the tech files loaded with each framework's installed version.
 3. What changed, by layer (schema, contract, server, UI).
 4. Verification: commands run, tests proven to fail without the change, `flow-trace` file, `security-pass` result if it ran, E2E evidence file and its commit.
 5. What is deliberately left out, open questions, and the PR/MR URL.

@@ -17,6 +17,7 @@ For the ticket loop around a bug (reading the ticket, depth by risk, hand-back),
 - In a system with several components (CI -> build -> deploy, UI -> API -> service -> DB, webhook -> queue -> worker), log what enters and leaves each boundary in one run, then read where the value first goes wrong.
   Log presence, never secret values: `[ -n "${TOKEN:-}" ] && echo TOKEN set || echo TOKEN unset`.
 - Find a similar path in the same codebase that works, and list every difference between the two, however small.
+- When the failing layer is a framework or platform (Next.js, React, Vercel, Supabase, NestJS), read its file in the `feature-build` skill's `tech/` folder and the installed version's docs it points to before assuming how the framework behaves.
 
 ## 2. Trace the bad value back to its origin
 

@@ -27,7 +27,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `flow-trace` | Trace one business lifecycle end-to-end to find one-way-door states, unhandled events, broken idempotency. | - |
 | `e2e-verify` | Strict "verified" definition for ACs in a real browser, with PASS/FAIL evidence files. | Playwright MCP or chrome-devtools-axi |
 | `root-cause` | Find the cause before fixing: failing layer, backward trace, 3-failed-fixes stop, flaky tests, polluter bisection, tests that can fail. | - |
-| `feature-build` | Implement a feature or user story end to end inside a worktree: gaps, small exploration, design options, verify, PR. | - |
+| `feature-build` | Implement a feature or user story end to end inside a worktree: gaps, small exploration, design options, verify, PR. Loads lean per-technology files from `tech/` (Next.js, React, Vercel, Supabase, NestJS) that point at the installed version's docs. | - |
 | `security-pass` | Per-PR security pass for Next.js/Supabase multi-tenant apps: RLS, service role, auth on routes, tenant-isolation proof. | - |
 | `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | Jira access (MCP or API) |
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
