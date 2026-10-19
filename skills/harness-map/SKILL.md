@@ -8,7 +8,7 @@ user-invocable: true
 # harness-map
 
 Setup gaps hide in many places at once: links install.sh never made, hooks not registered, CLIs a skill needs, plugins, secrets in settings, a project without its agent block.
-This skill renders one HTML page with two tabs: Dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel, the project facts and every environment from `.agents/environments.json`) and Docs (the Claude Code lifecycle with every skill and hook placed on it, the task path, skill and hook reference).
+This skill renders one HTML page with two tabs: Dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel, the project facts and every environment from `.agents/environments.json`) and Docs (the Claude Code lifecycle with every skill and hook placed on it, the task path, the verification loop, the skill reference, and every wired hook with what it does).
 
 ## 1. Generate
 
@@ -64,6 +64,8 @@ When this skill runs from a checkout before step 1, read any skill this flow nam
 | --- | --- |
 | A new skill in the repo | `assets/lifecycle.json`: its `tier` (core or optional), lifecycle `events`, task-path steps in `path` (setup, prompt, gather, act, verify, retry, response, remember), `when`; and the pillar(s) it serves in `assets/pillars.json` |
 | A skill that runs a whole workflow end to end and orchestrates other skills | `"ultimate": true` on it in `assets/lifecycle.json`; every page then draws its name in the animated gradient |
+| A new or changed hook | Registered in `hooks/hooks.json`; its one-line "Does" in the README hooks table, which the Hooks wired table reads; and the hooks line of the Quality Gates pillar in `assets/pillars.json` |
+| A new eval, CI check, or verify-loop rule | Evals and CI: `covered_by` of the Evaluation or Quality Gates pillar in `assets/pillars.json`; gates, rules, and the retry label: `verify_loop` in `assets/lifecycle.json` |
 | A gap closed or found in one of the eight components | `gaps` of that pillar in `assets/pillars.json` |
 | A new check | One collector per section in `scripts/harness_map.py`; a CLI goes in `TOOLS`; a new section also needs `DESCS` and an icon in `scripts/page.py`; a check of the project-init block or a registry probe goes in `project-init`'s `scripts/doctor.py` instead |
 | Look and feel | `assets/template.html` only; the page renders through `render_page` in `scripts/page.py`; the Docs tab body comes from `scripts/harness_docs.py` |
