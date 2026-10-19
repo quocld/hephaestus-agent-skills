@@ -49,9 +49,16 @@ def live_hooks():
             continue
         path = Path(_str(plugin_entry(installed, pid).get("installPath")))
         data = load_obj(path / "hooks" / "hooks.json")
+        ours = pid.split("@")[0] == "agent-skills"
         for event, entries in _dict(data.get("hooks", data)).items():
             for e in _dicts(entries):
-                rows.append((event, _str(e.get("matcher")) or "*", "plugin", pid.split("@")[0], "plugin " + pid.split("@")[0]))
+                if ours:
+                    # This repo's own gates, shipped in the plugin, keep their names and the gate colour.
+                    for h in _dicts(e.get("hooks")):
+                        m = re.search(r"hooks/([\w-]+)\.py", _str(h.get("command")))
+                        rows.append((event, _str(e.get("matcher")) or "*", "gate", m.group(1) if m else "agent-skills", "plugin agent-skills"))
+                else:
+                    rows.append((event, _str(e.get("matcher")) or "*", "plugin", pid.split("@")[0], "plugin " + pid.split("@")[0]))
     # Settings entries that only launch a plugin's own runner duplicate the plugin row; keep one per (event, name).
     seen, out = set(), []
     for r in rows:

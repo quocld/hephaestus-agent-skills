@@ -183,6 +183,60 @@ def main():
         code, out, page = run(home, project)
         check(code == 0 and bool(page), "hooks null and a dict plugin index of an enabled plugin: no crash")
 
+    # The agent-skills plugin, as Claude Code installs it: a copy with no .git. Legacy links point into another clone.
+    repo = HERE.parents[2]
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        home, project, plug, clone = tmp / "home", tmp / "project", tmp / "plug", tmp / "old-clone"
+        (home / ".claude" / "plugins").mkdir(parents=True)
+        (home / ".claude" / "skills").mkdir()
+        for d in (project, plug, clone):
+            d.mkdir()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        for d in (plug, clone):
+            tar = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"], capture_output=True, check=True).stdout
+            subprocess.run(["tar", "-x", "-C", str(d)], input=tar, check=True)
+        shutil.copy(repo / "migrate-to-plugin.py", plug / "migrate-to-plugin.py")   # the working tree's, not HEAD's
+        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps(
+            {"plugins": {"agent-skills@quocld": [{"scope": "user", "installPath": str(plug)}]}}))
+        (home / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
+        (home / ".claude" / "skills" / "root-cause").symlink_to(clone / "skills" / "root-cause")
+        (home / ".claude" / "CLAUDE.md").symlink_to(clone / "AGENTS.md")
+        code, out, page = run(home, project)
+        check(code == 0 and "registered by agent-skills@quocld" in page, "plugin: gates count as registered by the plugin")
+        check("from agent-skills@quocld as /agent-skills:worktree-flow" in page, "plugin: skills count as installed from the plugin")
+        check("skills not installed" not in out, "plugin: no skill reported missing")
+        check("loaded twice" in page, "plugin copy without git: a legacy skill link into another clone is a duplicate")
+        check("Legacy install.sh links" in page, "plugin copy without git: the legacy CLAUDE.md link is reported")
+
+        # Enabled only in the project's settings, installed at project scope.
+        (home / ".claude" / "settings.json").write_text(json.dumps({}))
+        (project / ".claude").mkdir()
+        (project / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
+        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps(
+            {"plugins": {"agent-skills@quocld": [{"scope": "project", "projectPath": str(project), "installPath": str(plug)}]}}))
+        code, out, page = run(home, project)
+        check("from agent-skills@quocld as /agent-skills:worktree-flow" in page, "plugin enabled at project scope is found")
+        (project / ".claude" / "settings.local.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": False}}))
+        code, out, page = run(home, project)
+        check("agent-skills@quocld enabled" not in page, "plugin turned off in the project's local settings is not counted")
+
+        # migrate-to-plugin.py run from the plugin copy (no git): only links into agent-skills checkouts go.
+        other = tmp / "other" / "skills" / "foo"
+        other.mkdir(parents=True)
+        (other / "SKILL.md").write_text("x")
+        (home / ".claude" / "skills" / "foo").symlink_to(other)
+        (home / ".claude" / "agent-skills-hooks").symlink_to(clone / "hooks")
+        (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": {"PreToolUse": {"bad": "shape"}}}))
+        env = dict(os.environ, HOME=str(home))
+        env.pop("CLAUDE_DIR", None)
+        m = subprocess.run([sys.executable, str(plug / "migrate-to-plugin.py")], capture_output=True, text=True, env=env)
+        check(m.returncode == 0, "migrate: no crash on odd settings")
+        check((home / ".claude" / "skills" / "foo").is_symlink(), "migrate: keeps a link into a folder that is not agent-skills")
+        check(not (home / ".claude" / "skills" / "root-cause").exists(), "migrate: removes a skill link into another agent-skills clone")
+        check(not (home / ".claude" / "CLAUDE.md").exists(), "migrate: removes the CLAUDE.md link")
+        check((home / ".claude" / "agent-skills-hooks").is_symlink(), "migrate: never removes agent-skills-hooks")
+
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:
         with tempfile.TemporaryDirectory() as tmp:

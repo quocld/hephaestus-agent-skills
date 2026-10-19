@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
-from page import (_dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (links_into_agent_skills, _dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -72,19 +72,63 @@ def same_repo(a, b):
 
 # ---------------------------------------------------------------- collectors
 
+INSTALL_FIX = "/plugin marketplace add quocld/agent-skills, then /plugin install agent-skills@quocld"
+MIGRATE_FIX = "python3 migrate-to-plugin.py (from the agent-skills plugin folder or any clone)"
+LEGACY = [("~/.claude/CLAUDE.md -> AGENTS.md", CLAUDE / "CLAUDE.md", "AGENTS.md"),
+          ("~/OPINIONS.md -> OPINIONS.md", HOME / "OPINIONS.md", "OPINIONS.md"),
+          ("~/.claude/agent-skills-hooks -> hooks/", CLAUDE / "agent-skills-hooks", "hooks")]
+
+
+def agent_skills_plugin(project=None):
+    """(plugin id, install folder) when the agent-skills plugin is enabled for this project, else (None, None).
+    Enablement merges user, project and project-local settings (later wins); the install record follows its scope."""
+    sources = [CLAUDE / "settings.json"]
+    if project:
+        sources += [Path(project) / ".claude" / "settings.json", Path(project) / ".claude" / "settings.local.json"]
+    enabled = {}
+    for f in sources:
+        enabled.update(_dict(load_obj(f).get("enabledPlugins")))
+    installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
+    for pid, on in enabled.items():
+        if on is True and pid.split("@")[0] == "agent-skills":
+            records = _dicts(installed.get(pid)) or [plugin_entry(installed, pid)]
+            here = [r for r in records if r.get("scope") in ("project", "local") and _str(r.get("projectPath")) == str(project)]
+            rec = (here or [r for r in records if r.get("scope", "user") == "user"] or records)[-1]
+            path = Path(_str(rec.get("installPath"))) if rec.get("installPath") else None
+            return pid, (path if path and path.is_dir() else None)
+    return None, None
+
+
+PLUGIN_ID, PLUGIN_DIR = None, None   # set in main() once the project is known
+
+
+def is_ours(link, rel):
+    """A symlink to <rel> in any agent-skills checkout (the old install.sh links)."""
+    return links_into_agent_skills(link, rel)
+
+
 def collect_global():
-    install = f"{short(MAIN)}/install.sh"
-    return [
-        link_check("Global instructions", "~/.claude/CLAUDE.md -> AGENTS.md", CLAUDE / "CLAUDE.md", REPO / "AGENTS.md", install),
-        link_check("Global instructions", "~/OPINIONS.md -> OPINIONS.md", HOME / "OPINIONS.md", REPO / "OPINIONS.md", install),
-        link_check("Global instructions", "~/.claude/agent-skills-hooks -> hooks/", CLAUDE / "agent-skills-hooks", REPO / "hooks", install),
-    ]
+    sec = "Global instructions"
+    if PLUGIN_ID:
+        out = [check(sec, "agent-skills plugin", "ok" if PLUGIN_DIR else "fail",
+                     f"{PLUGIN_ID} enabled; skills, gate hooks and the global rules (AGENTS.md at session start) come from it"
+                     if PLUGIN_DIR else f"{PLUGIN_ID} is enabled but its install folder is missing",
+                     "" if PLUGIN_DIR else f"claude plugin install {PLUGIN_ID}")]
+        legacy = [title for title, link, src in LEGACY if is_ours(link, src)]
+        if legacy:
+            out.append(check(sec, "Legacy install.sh links", "warn",
+                             "still linked next to the plugin, so the rules or skills load twice: " + ", ".join(legacy), MIGRATE_FIX))
+        return out
+    legacy_ok = all(is_ours(link, src) for _, link, src in LEGACY[:1])
+    return [check(sec, "agent-skills plugin", "warn" if legacy_ok else "missing",
+                  "not installed; running from the old install.sh links instead" if legacy_ok else
+                  "not installed: no skills, gate hooks or global rules from this repo reach Claude Code",
+                  INSTALL_FIX)]
 
 
 def collect_skills():
     checks, cards = [], []
     readme = (REPO / "README.md").read_text() if (REPO / "README.md").exists() else ""
-    install = f"{short(MAIN)}/install.sh"
     for d in sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()):
         name = d.name
         fm = frontmatter(d / "SKILL.md")
@@ -107,7 +151,19 @@ def collect_skills():
             issues.append("not placed in harness-map assets/lifecycle.json (docs and wheel skip it)")
 
         dst = CLAUDE / "skills" / name
-        lc = link_check("Skills", name, dst, d, install)
+        in_plugin = bool(PLUGIN_DIR and (PLUGIN_DIR / "skills" / name / "SKILL.md").exists())
+        linked = is_ours(dst, f"skills/{name}")
+        if in_plugin and linked:
+            lc = check("Skills", name, "warn", f"loaded twice: from {PLUGIN_ID} and from the legacy link {short(dst)}", MIGRATE_FIX)
+        elif in_plugin:
+            lc = check("Skills", name, "ok", f"from {PLUGIN_ID} as /agent-skills:{name}")
+        elif linked:
+            lc = check("Skills", name, "ok", f"legacy link {short(dst)}")
+        elif PLUGIN_DIR:
+            lc = check("Skills", name, "missing", f"not in the installed {PLUGIN_ID}; it is newer than the plugin",
+                       "claude plugin marketplace update quocld && claude plugin update " + PLUGIN_ID)
+        else:
+            lc = check("Skills", name, "missing", "not installed", INSTALL_FIX)
         status = lc["status"]
         detail = lc["detail"]
         if issues and status == "ok":
@@ -118,7 +174,7 @@ def collect_skills():
         cards.append({
             "name": name,
             "status": status,
-            "installed": lc["status"] == "ok",
+            "installed": in_plugin or linked,
             "invocable": fm.get("user-invocable", "").lower() == "true",
             "desc": desc,
             "issues": issues,
@@ -148,21 +204,28 @@ def collect_hooks(probe):
     if not isinstance(settings, dict):
         return [check("Hooks", "settings.json", "missing",
                       f"{short(CLAUDE / 'settings.json')} missing or not valid JSON, so no hook is registered and no rule is enforced",
-                      "create it with the hooks.PreToolUse entries from hooks/README.md, then run hooks/test.sh")]
+                      INSTALL_FIX)]
     local = load_obj(CLAUDE / "settings.local.json") or {}
     cmds = [_str(h.get("command")) for src in (settings, local)
             for e in _dicts(_dict(src.get("hooks")).get("PreToolUse")) for h in _dicts(e.get("hooks"))]
+    plugin_hooks = (PLUGIN_DIR / "hooks" / "hooks.json").read_text() if PLUGIN_DIR and (PLUGIN_DIR / "hooks" / "hooks.json").exists() else ""
     for script in ("no-em-dash.py", "guard-protected-branches.py"):
         src = REPO / "hooks" / script
         if not src.exists():
             out.append(check("Hooks", script, "info", "not in this checkout of the repo"))
             continue
-        if any(script in c for c in cmds):
+        in_settings = any(script in c for c in cmds)
+        if script in plugin_hooks and in_settings:
+            out.append(check("Hooks", f"{script} registered", "warn", f"runs twice: from {PLUGIN_ID} and from settings.json",
+                             "delete its agent-skills-hooks entry from hooks.PreToolUse in ~/.claude/settings.json, then run " + MIGRATE_FIX))
+        elif script in plugin_hooks:
+            out.append(check("Hooks", f"{script} registered", "ok", f"registered by {PLUGIN_ID} (hooks/hooks.json)"))
+        elif in_settings:
             out.append(check("Hooks", f"{script} registered", "ok", "listed under hooks.PreToolUse in settings.json or settings.local.json"))
         else:
             out.append(check("Hooks", f"{script} registered", "missing",
-                             "not in hooks.PreToolUse; the rule it enforces is advisory only",
-                             "merge the entry from hooks/README.md into hooks.PreToolUse in ~/.claude/settings.json"))
+                             "not registered; the rule it enforces is advisory only",
+                             INSTALL_FIX))
     test = REPO / "hooks" / "test.sh"
     if not probe:
         out.append(check("Hooks", "hooks/test.sh probes", "skip", "skipped (--no-probe)"))
@@ -594,7 +657,7 @@ def env_panel(project, registry):
 # ---------------------------------------------------------------- render
 
 DESCS = {
-    "Global instructions": "Files install.sh links so every session reads them",
+    "Global instructions": "The agent-skills plugin, which brings the skills, the gate hooks and the global rules",
     "Skills": "This repo's skills, their install link and frontmatter health",
     "Hooks": "Gates that turn AGENTS.md rules into enforcement",
     "Tools": "CLIs the skills shell out to",
@@ -609,7 +672,7 @@ CMD = re.compile(r"^(~|/|!|\$|(brew|npm|npx|bash|echo|rm|claude|corepack|git|gh|
 
 
 # Core = every session depends on it; optional = only some skills, stacks or habits need it.
-OPTIONAL_TITLES = {"~/OPINIONS.md -> OPINIONS.md", "Other user skills", "settings.json backups",
+OPTIONAL_TITLES = {"Legacy install.sh links", "~/OPINIONS.md -> OPINIONS.md", "Other user skills", "settings.json backups",
                    "Bypass-permissions prompt skipped", "Playwright config", "Open TODO(owner)", "Repository",
                    "Project checks (verify-loop)"}
 CORE_PLUGIN_TITLES = {"Browser tool for e2e-verify"}
@@ -708,7 +771,7 @@ def pillar_status(checks):
         status[pl["id"]] = "warn" if pl.get("gaps") else "ok"
         alerts[pl["id"]] = bool(bad or missing_plugins)
         skills = [c["title"] for c in bad if c["section"] == "Skills"]
-        names = ": " + ", ".join(skills) if len(skills) <= 6 else " (run install.sh)"
+        names = ": " + ", ".join(skills) if len(skills) <= 6 else " (install the agent-skills plugin)"
         notes = [f"{len(skills)} skill{'s' if len(skills) > 1 else ''} not installed{names}"] if skills else []
         notes += [f'{c["title"]}: {c["detail"]}' for c in bad + warn if c["section"] != "Skills"]
         notes += [f"plugin {x} not enabled" for x in missing_plugins]
@@ -717,7 +780,7 @@ def pillar_status(checks):
 
 
 SETUP_PROMPT = """Check my agent harness and finish setting it up, one step at a time, with the harness-map skill's setup flow (section 3 of its SKILL.md).
-If the harness-map skill is not available, tell me how to install the agent-skills set first (github.com/quocld/agent-skills) and stop.
+If the harness-map skill is not available, tell me to install the agent-skills plugin first (/plugin marketplace add quocld/agent-skills, then /plugin install agent-skills@quocld) and stop.
 
 1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
 2. Go through the gaps in order: this machine first (install, hooks, secrets, tools and logins), then this project (project-init, then environments), core before optional.
@@ -725,7 +788,7 @@ If the harness-map skill is not available, tell me how to install the agent-skil
 4. After each step, regenerate the page and open it again so I can see the progress.
 5. Repeat until no core gap is left, then show me the optional gaps and ask which ones I want.
 
-Ask before running install.sh or adding hooks to ~/.claude/settings.json. Never read, print, move or delete a secret value or its backups; tell me what to do and I do it. Give me the `! <command>` for any login, and carry on with the next step while I do it."""
+Ask before installing a plugin or editing ~/.claude/settings.json. Never read, print, move or delete a secret value or its backups; tell me what to do and I do it. Give me the `! <command>` for any login, and carry on with the next step while I do it."""
 
 
 SETUP_PILL = '<span class="pill fail">Setup</span>'
@@ -890,6 +953,8 @@ def main():
     project = git_root(a.project or os.getcwd())
     if a.project and not project:
         sys.exit(f"--project {a.project} is not inside a git repo")
+    global PLUGIN_ID, PLUGIN_DIR
+    PLUGIN_ID, PLUGIN_DIR = agent_skills_plugin(project)
     probe = not a.no_probe
 
     checks = collect_global()
