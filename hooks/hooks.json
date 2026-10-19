@@ -1,0 +1,27 @@
+{
+  "description": "agent-skills: load the global rules (AGENTS.md) at session start, deny em dashes in writes, and gate pushes and merges to protected branches",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py\"", "timeout": 10}
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/no-em-dash.py\"", "timeout": 10}
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-protected-branches.py\"", "timeout": 10}
+        ]
+      }
+    ]
+  }
+}

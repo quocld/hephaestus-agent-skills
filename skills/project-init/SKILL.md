@@ -94,8 +94,8 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 
 | Check | Command |
 | --- | --- |
-| Global skills installed | Each skill folder of the agent-skills repo exists in `~/.claude/skills/` |
-| Hooks registered and working | `jq -r '.hooks.PreToolUse[]?.hooks[]?.command' ~/.claude/settings.json` names both `no-em-dash.py` and `guard-protected-branches.py`, and `bash ~/.claude/agent-skills-hooks/test.sh` passes its deny and allow probes |
+| agent-skills plugin installed | `claude plugin list` shows `agent-skills@agent-skills` enabled; the skills, hooks and global rules all come with it |
+| Hooks registered and working | `bash <agent-skills plugin or checkout>/hooks/test.sh` passes: it checks the plugin's `hooks.json` mounts every gate and runs the deny and allow probes |
 | Git platform CLI logged in | `gh auth status` or `glab auth status` |
 | Integration branch exists | `git ls-remote --exit-code --heads origin refs/heads/<int>`, with `<int>` from `worktree-flow` section 0 |
 | Node and package manager | `node --version`, `pnpm --version` (or the repo's manager) |
@@ -112,7 +112,7 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 | Markers intact | `AGENTS.md` has exactly one `project-init:start` and one `project-init:end` |
 | Block paths exist | Every repo path the block names exists (`test -e <path>`); a gitignored path such as a storage state folder counts as `OK` when `git check-ignore -q <path>` succeeds, with a trailing slash on folders (`e2e/.auth/`) so dir-only patterns match |
 | Block commands resolve | Each listed command, checked with the cheap probe below, never by running it |
-| Project checks valid | `python3 ~/.claude/skills/verify-loop/scripts/checks.py list` exits 0; `SKIP` when `.agents/checks/` does not exist |
+| Project checks valid | `python3 <verify-loop skill>/scripts/checks.py list` exits 0; `SKIP` when `.agents/checks/` does not exist |
 | Open `TODO(<owner>)` | `grep -n 'TODO(' AGENTS.md .agents/environments.json`, one row per hit |
 
 Print the block once with `sed -n '/project-init:start/,/project-init:end/p' AGENTS.md` and take its paths and commands from that output.

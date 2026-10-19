@@ -1,0 +1,12 @@
+{
+  "name": "agent-skills",
+  "displayName": "Agent Skills",
+  "version": "1.0.0",
+  "description": "My agent harness for Claude Code: global rules loaded at session start, dev skills for the whole task loop (worktree, feature and bug flows, root cause, verify loop, E2E, review, security, environments, logs), gate hooks for the em dash and protected branches, and harness-map to see and finish the setup.",
+  "author": {
+    "name": "quocld",
+    "url": "https://github.com/quocld"
+  },
+  "repository": "https://github.com/quocld/agent-skills",
+  "keywords": ["skills", "workflow", "worktree", "verification", "hooks", "harness"]
+}
