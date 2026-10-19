@@ -191,10 +191,152 @@ PILLARS = (load_json(SKILL / "assets" / "pillars.json") or {}).get("pillars", []
 ULTIMATE = {n for n, s_ in ((load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills") or {}).items() if s_.get("ultimate")}
 
 
+SKILL_NAMES = {d.name for d in SKILLS_DIR.iterdir() if (d / "SKILL.md").exists()} if SKILLS_DIR.is_dir() else set()
+
+
 def ult(name, text=None):
-    """The skill name (or text) as HTML, wrapped in the ultimate effect when the skill is ultimate."""
+    """A skill name (or text) as HTML: the ultimate effect for ultimate skills, and for every skill of this repo a
+    button that opens it in the skill reader (data-skill, handled in assets/template.html)."""
     t = esc(name if text is None else text)
-    return f'<span class="ult">{t}</span>' if name in ULTIMATE else t
+    if name in ULTIMATE:
+        t = f'<span class="ult">{t}</span>'
+    if name in SKILL_NAMES:
+        return f'<span class="skl" data-skill="{esc(name)}" role="button" tabindex="0" title="Read {esc(name)}">{t}</span>'
+    return t
+
+
+# ---------------------------------------------------------------- skill reader
+
+def _inline(s):
+    """Inline markdown on already-escaped text: code spans first (left as is), then bold, italics and http(s) links."""
+    parts = re.split(r"(`[^`]+`)", s)
+    out = []
+    for part in parts:
+        if part.startswith("`") and part.endswith("`") and len(part) > 1:
+            out.append(f"<code>{part[1:-1]}</code>")
+            continue
+        part = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", part)
+        part = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", part)
+        part = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2" target="_blank" rel="noopener">\1</a>', part)
+        out.append(part)
+    return "".join(out)
+
+
+def render_markdown(md):
+    """A small, safe markdown renderer for SKILL.md files: every byte is HTML-escaped before any markup is added.
+    Handles headings, paragraphs, fenced code, pipe tables, block quotes and nested lists."""
+    lines = esc(md).split("\n")
+    out, para, i = [], [], 0
+
+    def flush():
+        if para:
+            out.append("<p>" + _inline(" ".join(x.strip() for x in para)) + "</p>")
+            para.clear()
+
+    while i < len(lines):
+        line = lines[i]
+        if line.strip().startswith("```"):
+            flush()
+            code = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code.append(lines[i])
+                i += 1
+            out.append("<pre><code>" + "\n".join(code) + "</code></pre>")
+            i += 1
+            continue
+        m = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if m:
+            flush()
+            level = min(len(m.group(1)) + 1, 6)
+            out.append(f"<h{level}>{_inline(m.group(2))}</h{level}>")
+            i += 1
+            continue
+        if line.lstrip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|?\s*:?-{3,}", lines[i + 1]):
+            flush()
+            cells = lambda row: [c.strip() for c in row.strip().strip("|").split("|")]
+            head = "".join(f"<th>{_inline(c)}</th>" for c in cells(line))
+            i += 2
+            body = []
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                body.append("<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in cells(lines[i])) + "</tr>")
+                i += 1
+            out.append(f'<div class="rtable"><table><tr>{head}</tr>{"".join(body)}</table></div>')
+            continue
+        if re.match(r"^\s*([-*]|\d+\.)\s+", line):
+            flush()
+            # A list block: indentation decides nesting; continuation lines join the item above.
+            items = []
+            while i < len(lines) and (re.match(r"^\s*([-*]|\d+\.)\s+", lines[i]) or (lines[i].startswith("  ") and lines[i].strip() and items)):
+                lm = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", lines[i])
+                if lm:
+                    items.append([len(lm.group(1)) // 2, lm.group(2)[-1] == ".", lm.group(3)])
+                else:
+                    items[-1][2] += " " + lines[i].strip()
+                i += 1
+            html_, stack = [], []
+            for depth, ordered, text in items:
+                tag = "ol" if ordered else "ul"
+                while len(stack) > depth + 1:
+                    html_.append(f"</li></{stack.pop()}>")
+                if len(stack) == depth + 1 and stack[-1] != tag:   # bullets then numbers at one level: two lists
+                    html_.append(f"</li></{stack.pop()}>")
+                if len(stack) < depth + 1:
+                    while len(stack) < depth + 1:
+                        html_.append(f"<{tag}>")
+                        stack.append(tag)
+                else:
+                    html_.append("</li>")
+                html_.append(f"<li>{_inline(text)}")
+            while stack:
+                html_.append(f"</li></{stack.pop()}>")
+            out.append("".join(html_))
+            continue
+        if line.startswith("&gt;"):
+            flush()
+            quote = []
+            while i < len(lines) and lines[i].startswith("&gt;"):
+                quote.append(lines[i][4:].strip())
+                i += 1
+            out.append("<blockquote>" + _inline(" ".join(quote)) + "</blockquote>")
+            continue
+        if not line.strip():
+            flush()
+        else:
+            para.append(line)
+        i += 1
+    flush()
+    return "".join(out)
+
+
+def skill_sources():
+    """One hidden <template> per repo skill, holding its rendered SKILL.md for the skill reader."""
+    life = (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills") or {}
+    events = (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("events") or {}
+    out = []
+    for d, fm in repo_skills():
+        try:
+            text = (d / "SKILL.md").read_text(errors="replace")
+        except OSError:
+            continue
+        body = re.sub(r"^---\n.*?\n---\n?", "", text, count=1, flags=re.S)
+        meta = life.get(d.name) or {}
+        tier = meta.get("tier", "optional")
+        chips = [f'<span class="tier {esc(tier)}">{"Core" if tier == "core" else "Optional"}</span>']
+        if d.name in ULTIMATE:
+            chips.append('<span class="chip ultchip"><span class="ult">ultimate</span></span>')
+        inv = str(fm.get("user-invocable", "")).lower() == "true"
+        chips.append(f'<span class="chip acc">/{esc(d.name)}</span>' if inv else '<span class="chip agent">loads by description</span>')
+        chips += [f'<span class="chip">{esc((events.get(e) or {}).get("label", e))}</span>' for e in meta.get("events", [])]
+        files = sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file() and p.name != "SKILL.md" and "__pycache__" not in p.parts)
+        extra = ('<div class="rfiles"><span>Also in this skill:</span> ' + " ".join(f'<code>{esc(f)}</code>' for f in files) + "</div>") if files else ""
+        when = f'<p class="rwhen">{esc(meta["when"])}</p>' if meta.get("when") else ""
+        out.append(f'<template id="skill-src-{esc(d.name)}"><div class="rmeta">'
+                   f'<h2 class="rtitle">{ult(d.name) if d.name in ULTIMATE else esc(d.name)}</h2><div class="chips">{"".join(chips)}</div>'
+                   f'<p class="rdesc">{_inline(esc(fm.get("description", "")))}</p>{when}{extra}</div>'
+                   f'<article class="md">{render_markdown(body)}</article></template>')
+    return '<div hidden>' + "".join(out) + '</div>'
+
 WHEEL_FILL = {"ok": ("var(--ok-soft)", "var(--ok)"), "warn": ("var(--warn-soft)", "var(--warn)"),
               "fail": ("var(--bad-soft)", "var(--bad)"), None: ("var(--accent-soft)", "var(--accent)")}
 BAD_FILL = ' style="fill:var(--bad-text)"'

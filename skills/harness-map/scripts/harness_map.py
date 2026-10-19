@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
-from page import (links_into_agent_skills, _dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (skill_sources, links_into_agent_skills, _dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -903,7 +903,7 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
     h.append('</div></div>')
     # One page, two tabs: the live dashboard and the docs; a link to a docs section opens the Docs tab.
     body = (f'<div class="pane" data-pane="dash">{"".join(h)}</div>'
-            f'<div class="pane" data-pane="docs">{docs_body(live_hooks())}</div>')
+            f'<div class="pane" data-pane="docs">{docs_body(live_hooks())}</div>' + skill_sources())
     tools = ('<div class="seg tabs" role="tablist" aria-label="View"><button data-tab="dash" role="tab" aria-pressed="true">Dashboard</button>'
              '<button data-tab="docs" role="tab" aria-pressed="false">Docs</button></div>'
              '<div class="seg" role="group" aria-label="Filter"><button data-view="all" aria-pressed="true">All</button>'
