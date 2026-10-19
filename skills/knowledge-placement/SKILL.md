@@ -1,8 +1,7 @@
 ---
 name: knowledge-placement
 description: >
-  Decide where a new fact, rule, or lesson belongs (AGENTS.md, a skill, docs, a script's --help, or task notes) and keep AGENTS.md lean.
-  Use before editing AGENTS.md or CLAUDE.md, before creating a new skill, or when asked to "remember this for the project" or "add a rule".
+  Use before editing AGENTS.md or CLAUDE.md, before creating or editing a skill, or when asked to "remember this for the project", "add a rule", "thêm rule", "viết skill".
 user-invocable: false
 ---
 
@@ -39,11 +38,26 @@ Put each fact at the first tier that fits, not the most convenient one.
 - Keep behind only what must survive with no skill loaded: the trigger to load the skill and any safety-critical fact.
 - Move everything else out completely; no partial "just in case" copies.
 
-## New skills
+## Writing or editing a skill
 
-- A skill nothing loads is dead weight.
-- Write the description as a load condition ("Use before X", "Use when the user says Y"), including the phrases the user actually types.
-- Keep one workflow per skill.
+- A skill nothing loads is dead weight; keep one workflow per skill.
+- The description says only when to load the skill, never what it does or how: start with "Use when" or "Use before", list the situations, symptoms, and phrases the user types (in every language they use), in the third person, under about 500 characters.
+  A description that summarizes the workflow gets followed instead of the body.
+- The body opens with one or two lines on why the skill exists, then the steps.
+  Refer to other skills by name (`root-cause`), never by `@` path, which force-loads the file.
+- Pick the form from the failure you observed:
+  - A rule skipped under pressure: a plain prohibition plus the excuses it closes.
+  - Output in the wrong shape: a recipe saying what the output is, part by part, in order.
+  - A required part left out: a required slot in the template the agent fills in.
+  - Behavior that depends on a condition: a conditional on something observable.
+  Never add "unless it matters" clauses; state a real exception as its own conditional.
+- What a script or schema can check gets the script or schema, not prose.
+- Exact flags and long references go in a `references/` file or a script's `--help`; call bundled scripts through their interpreter (`bash scripts/x.sh`), since packagers can drop executable bits.
+- Test before shipping, red then green:
+  1. Red: give a fresh subagent realistic scenarios that tempt the failure, without the skill, and record what it does.
+     If it already behaves, there is nothing to write.
+  2. Green: run the same scenarios with the skill, plus a fresh reviewer hunting contradictions, unfollowable steps, and gaps; fix and rerun until clean.
+  Every edit to an existing skill gets at least the green run.
 
 ## Style for tracked Markdown
 

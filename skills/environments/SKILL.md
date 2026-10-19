@@ -1,8 +1,7 @@
 ---
 name: environments
 description: >
-  Work safely across a project's environments (dev, staging, prod, ...) from one registry file, `.agents/environments.json`: URLs, servers and SSH aliases, deploy targets (VPS, Vercel, Supabase, Docker), deploy/verify/rollback commands, test accounts, and per-environment rules, with step-by-step confirmation on prod.
-  Use before any action against a non-local environment: deploying, SSH into a server, running a migration, reading remote logs, logging in with a test account, creating test data; when the user says "deploy lên staging", "ssh vào server", "chạy trên prod", "account test", "môi trường nào"; and to create or update the registry ("init environments", "thêm môi trường", "thêm server").
+  Use before any action against a non-local environment (deploy, SSH, migration, remote logs or data, test accounts, test data), when asked what version runs where, and when the user says "deploy lên staging", "ssh vào server", "chạy trên prod", "account test", "môi trường nào", "thêm môi trường", "thêm server".
 user-invocable: true
 ---
 

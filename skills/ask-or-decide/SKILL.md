@@ -1,8 +1,7 @@
 ---
 name: ask-or-decide
 description: >
-  Decide whether to act autonomously or stop and ask the user, and how to phrase the question when asking.
-  Use before asking the user any question mid-task, when a review finding needs a decision, or when unsure whether a change is in scope.
+  Use before asking the user any question mid-task, when a review finding or a conflict between spec and plan needs a decision, or when unsure whether a change is in scope.
 user-invocable: false
 ---
 

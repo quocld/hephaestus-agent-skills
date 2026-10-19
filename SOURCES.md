@@ -15,5 +15,7 @@ License texts for each source are in `LICENSES/`.
 | `skills/fresh-review` | distilled from grok-ship `adversarial-review` | MIT |
 | `skills/ask-or-decide` | distilled from firstmate `ask-user-authority` and AGENTS.md escalation rules | MIT |
 | `skills/knowledge-placement` | distilled from firstmate `firstmate-coding-guidelines` | MIT |
+| `skills/root-cause` (incl. `scripts/find-polluter.sh`) | distilled from github.com/obra/superpowers `systematic-debugging` and `test-driven-development/writing-good-tests.md` | MIT |
+| `skills/knowledge-placement` (skill-writing rules), `skills/worktree-flow` (existing-worktree check), `AGENTS.md` (verification rule) | ideas from github.com/obra/superpowers `writing-skills`, `using-git-worktrees`, `verification-before-completion` | MIT |
 | `reference/opinions-example.md` | github.com/kunchenguid/kun `OPINIONS.md` (no upstream license; keep this repo private) | none |
 | `skills/flow-trace`, `skills/e2e-verify`, `skills/bug-triage`, `skills/fe-guardrails`, `skills/server-touch` | distilled from my westmont-erp project workflow | mine |

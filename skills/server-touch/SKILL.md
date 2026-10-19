@@ -1,9 +1,7 @@
 ---
 name: server-touch
 description: >
-  Safely operate a Docker Compose deployment on a remote server over SSH, especially a host shared with other projects: deploy through the project's script, recreate services, read logs, edit the server .env, run psql, seed accounts, roll back.
-  Use when asked to "ssh vào server", "xem log docker", "pull về và recreate", "deploy lên server", "set env trên server", "seed acc trên server", or any other live-server operation.
-  Load the `environments` skill first: it supplies the target, its policy, and its commands.
+  Use for any operation on a live server running Docker Compose: "ssh vào server", "xem log docker", "pull về và recreate", "deploy lên server", "set env trên server", "seed acc trên server".
 user-invocable: true
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: chrome-devtools-axi
-description: "Control a Chrome browser session through the chrome-devtools-axi CLI - navigate, snapshot, click, fill forms, run JavaScript, inspect console and network, take screenshots, audit performance. Use whenever a task needs a real browser: opening or testing a web page, clicking through a flow, extracting page content, or debugging a website."
+description: >
+  Use when a task needs a real Chrome browser and plain fetch or curl is not enough: opening or testing a page, clicking through a flow, extracting page content, inspecting console or network, screenshots, performance audits.
 user-invocable: false
 ---
 

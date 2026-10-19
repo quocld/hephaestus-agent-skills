@@ -1,8 +1,7 @@
 ---
 name: flow-trace
 description: >
-  Trace ONE business lifecycle end-to-end (external event -> webhook/job -> state machine -> guard -> API -> screen) and hunt the bugs that typecheck, unit/integration tests and a happy-path E2E all miss: one-way-door states, unhandled external events, idempotency guards that block a legitimate transition, absolute URLs on the wrong host, dead-end screens.
-  Use before declaring done on any change that touches a status column or state machine, a webhook or external event, a scheduled job, money, or an access gate; or when asked to "trace luồng", "rà luồng", "check this flow end to end".
+  Use before calling done any change that touches a status column or state machine, a webhook or external event, a scheduled job, money, or an access gate, or when asked to "trace luồng", "rà luồng", "check this flow end to end".
 user-invocable: true
 ---
 

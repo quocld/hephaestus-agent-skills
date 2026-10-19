@@ -1,8 +1,7 @@
 ---
 name: project-init
 description: >
-  Set up or re-check a project so the whole skill set works in it: fill the project's agent setup block in AGENTS.md (integration branch, tracker, commands, sources of truth, E2E personas), create the environment registry, add a version endpoint to every deployed service, and check that every tool the skills call is installed and logged in.
-  Use when starting work in a new repo, when skills keep asking for the same project facts, or when asked "init dự án", "setup agent cho repo", "khởi tạo config cho skills", "kiểm tra setup", "doctor".
+  Use when starting work in a repo whose AGENTS.md has no project-init block, when skills keep asking for the same project facts, or when asked "init dự án", "setup agent cho repo", "khởi tạo config cho skills", "kiểm tra setup", "doctor".
 user-invocable: true
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: gnhf
 description: Use when the user asks to run GNHF, says they are going to sleep or leaving and wants an agent-managed coding run, asks to supervise, steer, or review an active GNHF run, or gives feedback on GNHF results.
+user-invocable: true
 ---
 
 # GNHF

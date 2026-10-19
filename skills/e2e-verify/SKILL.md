@@ -1,8 +1,7 @@
 ---
 name: e2e-verify
 description: >
-  Verify acceptance criteria end-to-end in a real browser like a real user, with a strict definition of "verified" and an evidence file for PASS as well as FAIL.
-  Use after implementing a feature or fix and before marking it done, when asked to "verify", "test E2E", "kiểm tra lại trên browser", or when closing a ticket/story that needs E2E evidence.
+  Use after implementing a user-facing feature or fix and before calling it done, when asked to "verify", "test E2E", "kiểm tra lại trên browser", or when closing a ticket or story that needs E2E evidence.
 user-invocable: true
 ---
 

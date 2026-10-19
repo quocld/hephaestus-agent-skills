@@ -1,8 +1,7 @@
 ---
 name: fe-guardrails
 description: >
-  React/Next.js guardrails for data loading, error display, forms, and copy that green tests do not catch.
-  Use before writing or reviewing frontend code that fetches data, renders pickers/selects/tables, submits forms, or shows errors; and when building a screen ("build màn", "wire API vào màn", "nối API").
+  Use before writing or reviewing React or Next.js code that fetches data, renders pickers, selects, or tables, submits forms, or shows errors, and when building or wiring a screen ("build màn", "wire API vào màn", "nối API").
 user-invocable: false
 ---
 

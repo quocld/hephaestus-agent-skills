@@ -25,6 +25,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `knowledge-placement` | Where a new rule or fact belongs; keeps AGENTS.md lean. | - |
 | `flow-trace` | Trace one business lifecycle end-to-end to find one-way-door states, unhandled events, broken idempotency. | - |
 | `e2e-verify` | Strict "verified" definition for ACs in a real browser, with PASS/FAIL evidence files. | Playwright MCP or chrome-devtools-axi |
+| `root-cause` | Find the cause before fixing: failing layer, backward trace, 3-failed-fixes stop, flaky tests, polluter bisection, tests that can fail. | - |
 | `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | Jira access (MCP or API) |
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
 | `environments` | Per-project registry of dev/staging/prod: servers, deploy commands (VPS, Vercel, Supabase), test accounts, rules, version status; prod confirmed step by step. | `.agents/environments.json` in the project |

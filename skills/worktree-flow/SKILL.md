@@ -1,8 +1,7 @@
 ---
 name: worktree-flow
 description: >
-  How every coding task runs when several agents work on the same repo at once: one git worktree and branch per task off the integration branch (`dev`), no shared state with other agents, work pushed as it goes, and finished work opened as a PR/MR into `dev`; staging and prod only on the user's explicit word.
-  Use at the start of any task that will change files in a git repo, when answering questions about the code, before committing, before opening a PR/MR, when resuming, finishing, or abandoning a task, and when asked "tạo worktree", "mở PR", "mở MR", "xong thì commit", "dọn worktree", "lên staging".
+  Use at the start of any task that will change files in a git repo, when answering questions about the code, before committing or opening a PR/MR, when resuming, finishing, or abandoning a task, and when asked "tạo worktree", "mở PR", "mở MR", "xong thì commit", "dọn worktree", "lên staging".
 user-invocable: true
 ---
 
@@ -27,6 +26,14 @@ Say which ref you read.
 
 ## 1. Start or resume: one task = one worktree = one branch
 
+0. Check whether you already stand in a linked worktree (a harness may have started you in one):
+   ```bash
+   git rev-parse --path-format=absolute --git-dir --git-common-dir   # two different paths = linked worktree
+   git rev-parse --show-superproject-working-tree                    # prints a path = submodule, not a worktree
+   ```
+   - Linked worktree on this task's branch: use it and go to section 2.
+   - Linked worktree on a detached HEAD with a clean tree (made for you by the harness): continue with steps 1 and 2, then in step 3 create the branch in place with `git switch --no-track -c <branch> origin/<int>` instead of adding a worktree.
+   - Linked worktree on another task's branch: do not work there; continue with step 1 to create your own.
 1. Look for existing work on the ticket:
    ```bash
    git worktree list
@@ -40,7 +47,7 @@ Say which ref you read.
    Types follow Conventional Commits: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
 3. Create it as a sibling of the main checkout, so watchers, linters, and test runners there never scan it, and without tracking `<int>`:
    ```bash
-   MAIN="$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+   MAIN="$(git worktree list --porcelain | sed -n 's/^worktree //p' | head -n 1)"
    WT="$(dirname "$MAIN")/$(basename "$MAIN").worktrees/<branch-with-slashes-as-dashes>"
    git worktree add --no-track -b <branch> "$WT" origin/<int>
    ```
@@ -61,7 +68,7 @@ Say which ref you read.
   When the task changes the schema or runs destructive tests, use your own database or schema.
   If the app cannot run isolated, say so instead of fighting over shared resources.
 - Record the baseline of already-failing tests before changing anything.
-  A test that fails only while other agents share the test database is not yours to "fix" until it also fails in isolation.
+  A test that fails only while other agents share the test database is a shared-state flake: confirm it in isolation, then fix the isolation in its own branch per `root-cause`, not inside this task.
 
 ## 3. Commit and push as you go
 
@@ -107,7 +114,7 @@ A task is finished only when all of these hold:
 
 ## 6. Clean up
 
-- At the start of a session, sweep the worktrees under `<repo>.worktrees/`: when its PR/MR is merged or closed (check `gh pr view <branch>` or `glab mr view <branch>`), the tree is clean, and nothing is unpushed, remove it with `git worktree remove "$WT"` and `git branch -D <branch>`.
+- At the start of a session, sweep the worktrees under `<repo>.worktrees/`: when its PR/MR is merged or closed (check `gh pr view <branch>` or `glab mr view <branch>`), the tree is clean, and the branch head equals the PR/MR's head commit (`gh pr view <branch> --json headRefOid -q .headRefOid`, or `glab mr view <branch>`), remove it with `git worktree remove "$WT"` and `git branch -D <branch>`.
   `-D` is needed after squash merges; only use it once the PR/MR state confirms the merge.
 - Never remove a worktree with uncommitted or unpushed work, or one whose PR/MR is still open.
 - Stop the dev servers and containers you started.

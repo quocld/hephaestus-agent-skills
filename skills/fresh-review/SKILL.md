@@ -1,8 +1,7 @@
 ---
 name: fresh-review
 description: >
-  Independent adversarial review of a branch or diff by a fresh subagent that did not write the code, looped until clean.
-  Use before opening a PR for a change that matters, after an agent finishes an implementation, or when asked to "review", "check before PR", "review lại branch".
+  Use before opening a PR/MR for a change that matters, after an agent finishes an implementation, or when asked to "review", "check before PR", "review lại branch".
 user-invocable: true
 ---
 

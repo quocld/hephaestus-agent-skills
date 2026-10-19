@@ -1,9 +1,7 @@
 ---
 name: vision
 description: >
-  Draft and stress-test a VISION.md for a repository, then iterate with the
-  author on an interactive review board until approved. Use on /vision or when
-  asked to create or refine a project vision.
+  Use on /vision or when asked to create, refine, or stress-test a project VISION.md.
 user-invocable: true
 metadata:
   short-description: "Evidence-mined, stress-tested VISION.md for any repo"

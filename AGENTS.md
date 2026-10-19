@@ -18,6 +18,8 @@
   If you see one, even if it is not caused by what you are working on right now, still get it fixed.
 - A test only counts if it fails without the fix: break the fix once to prove it.
   Guards and gates also need a structural test proving they are actually mounted, not just behavior tests.
+- Never say something passes, works, or is done without running the check that proves it in the same turn and reading its output.
+  A subagent's "done" is a claim until you have read its diff and rerun its checks.
 - Before any action against a non-local environment (deploy, SSH, migration, remote data, test accounts), load the `environments` skill; prod writes are confirmed one step at a time.
 - Changes touching a state machine, webhook or external event, scheduled job, money, or an access gate need the `flow-trace` skill before being called done.
 - Never modify existing records to test something; create your own test data and delete it afterwards.
