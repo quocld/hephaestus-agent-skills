@@ -1,15 +1,19 @@
 ---
 name: jira-bug-hunter
 description: >
-  Use when asked to work through all the bugs assigned to me in Jira, one bug per agent, until each is fixed, merged, verified on dev, and demoed in the report: "hunt bugs", "bug hunter", "săn bug", "quét bug đang assign", "fix hết bug Jira của tôi", "làm lần lượt các bug được giao". Not for one named ticket (`bug-triage`), and not for implementing stories.
+  Use when asked to work through all the bugs assigned to me in Jira, one bug at a time in the main session, until each is fixed, merged, verified on dev, and demoed in the report: "hunt bugs", "bug hunter", "săn bug", "quét bug đang assign", "fix hết bug Jira của tôi", "làm lần lượt các bug được giao". Not for one named ticket (`bug-triage`), and not for implementing stories.
 user-invocable: true
 ---
 
 # jira-bug-hunter
 
-A loop over assigned bugs fails where one bug does not: two agents on the same ticket, a browser shared by all of them, merges piling up on dev before anyone tested them, and results nobody can find a week later.
-This skill runs the loop; `bug-triage` owns what happens to each bug, and this skill only adds the merge, the dev verification, and the demo report.
-Starting it is the user's explicit word to merge each bug's PR/MR into the integration branch once section 4 allows it, and nothing more: never staging or prod.
+A loop over assigned bugs fails where one bug does not: tickets started and left half done, merges piling up on dev before anyone tested them, and results nobody can find a week later.
+This skill runs the loop; `bug-triage` owns what happens to each bug, and this skill only adds the pick, the merge, the dev verification, and the demo report.
+Starting it is the user's explicit word to move each picked ticket to in progress and to merge each bug's PR/MR into the integration branch once section 4 allows it, and nothing more: never staging or prod.
+
+The whole loop runs in the main session, one bug at a time, never in worker subagents.
+A bug often needs the user mid-way (a business decision, a confirmation, a credential, a merge prompt), and only the main session can ask and wait for the answer.
+`fresh-review` still spawns its own reviewer; that is a review, not a worker.
 
 ## 0. Setup, once per run
 
@@ -27,18 +31,20 @@ Starting it is the user's explicit word to merge each bug's PR/MR into the integ
   ```markdown
   ## VOCOTMA-30
   state: review https://github.com/org/repo/pull/41
-  worker: <agent name or "none">
+  status-before: To Do
   worktree: <path>
   prs: <every PR/MR url for this ticket, oldest first>
-  result: <report dir>/inbox/VOCOTMA-30/worker.json
+  cause: <one line>
+  proof: <test command> failed without the fix, passed with it
+  reporter-sequence: <the reporter's steps, one per line below>
+  dev-checks: <observable checks with their expected values, one per line below>
   dev-fails: 0
   fresh-review round 1: base <sha> head <sha>
   ```
-  `state` is one of `queued`, `claimed`, `review`, `awaiting-merge`, `merged <sha>`, `verified`, `reported`, `parked <verdict>`, `skipped <reason>`.
-  `fresh-review` round lines for a ticket live here, not in the worker's progress file, and restart at round 1 with each new PR/MR.
+  `state` is one of `queued`, `in-progress`, `review`, `awaiting-merge`, `merged <sha>`, `verified`, `reported`, `parked <verdict>`, `skipped <reason>`.
+  `fresh-review` round lines for a ticket live here, not in the worktree's progress file, and restart at round 1 with each new PR/MR.
   Read it first on resume and after a context summary; trust it, Jira, and `gh pr list` over memory.
-- A ticket whose worker is gone (it finished, or this is a new session) gets a new worker when it needs one, whose prompt also names the ledger section and the earlier PRs/MRs to read first.
-- Resume: an `awaiting-merge` ticket whose PR/MR is now merged continues at section 5; a `parked needs-decision` ticket continues where it parked once the user answers, in chat or in a ticket comment newer than the park.
+- Resume: the ticket in `in-progress` or `review` is the current bug and continues where it stopped, before anything new is picked; an `awaiting-merge` ticket whose PR/MR is now merged continues at section 5; a `parked needs-decision` ticket continues where it parked once the user answers, in chat or in a ticket comment newer than the park.
 
 ## 1. Scan
 
@@ -49,55 +55,52 @@ project = <KEY> AND assignee = currentUser() AND issuetype in (<every issue type
 - A ticket that already has a ledger section continues from its `state` and is never re-judged by the skip rules below; a `reported` ticket comes back only when Jira shows activity newer than its report (reopened, a new comment).
 - Skip the others, with the reason in the ledger: a status owned by someone else in the project's workflow (in QA testing, waiting for customer, blocked); a ticket with an open PR/MR, or a branch with no PR/MR, from outside this run (`worktree-flow` section 1 step 1; a branch whose PR/MR is merged or closed is history, typical for a reopened ticket, and does not count); a ticket whose changelog shows it moved into the project's QA status twice already (`bug-triage` step 7 says ask the user first).
 - Order: priority, then reopened before new (the reporter is waiting a second time), then oldest update.
-- Show the queue to the user as one short table and start; do not wait for approval, the user steers while it runs.
+- Show the queue to the user as one short table and start on the top ticket; do not wait for approval, the user steers while it runs (reorder, skip, pick another).
 
-## 2. One bug per worker, at most 3 workers at a time
+## 2. Pick one bug and work it to the end
 
-- Claim a ticket only when a worker slot is free: re-read its assignee and status (someone may have moved it), write `claimed` in the ledger, and move it to the project's in-progress status if it sits in a to-do status.
-- Spawn one fresh subagent per ticket, at most 3 holding a ticket at once.
-  A worker holds its slot until its ticket is `reported`, `parked`, or `awaiting-merge`, because review findings and dev failures go back to it with SendMessage.
-  Never two workers on one ticket, never one worker on two.
-- Worker prompt, part by part:
-  1. The ticket key and URL, the repo path, `<int>`, the dev environment name, and the media inbox path.
-  2. Follow `bug-triage` steps 0 to 5 for this ticket only, in your own worktree per `worktree-flow`, and open the PR/MR as a draft.
-     Branches of this ticket whose PR/MR is merged or closed are history, not another agent: add a `-2`, `-3` suffix to yours instead of stopping.
-     Run `verify-loop` with gates 5 and 6 marked `DEFER orchestrator`: the orchestrator runs them, since a subagent cannot spawn the reviewer and the browser is shared.
-  3. Never use the Playwright MCP browser: it is one shared instance, and a second caller fails with "Browser is already in use".
-     Reproduce in a browser process of your own, a Playwright script that launches its own browser with `recordVideo` on (from the project's `@playwright/test` or `npx -y playwright`), and save the video or screenshots to the inbox as `before`.
-  4. Never merge, never comment on or transition the ticket, never deploy, and never edit the ledger.
-     Test data you create follows `environments`, and you list it in `dataChanges`.
-  5. Return only this JSON: `{"ticket", "outcome": "fix|correct-per-decision|cannot-reproduce|needs-decision|blocked", "tier": "light|heavy", "branch", "worktree", "pr", "cause", "proof": "<test command> failed without the fix, passed with it", "reporterSequence": ["step", "..."], "devChecks": ["observable check with its expected value", "..."], "beforeMedia": [{"src", "caption"}], "dataChanges": [], "questions": []}`.
-- Save every worker's returned JSON as its ledger `result` file, since sections 5 and 6 need it after a context summary or in the next session.
-- Any outcome other than `fix`: check the worker's claim first (replay the reporter's sequence yourself for `cannot-reproduce`, read the cited decision for `correct-per-decision`), then post the ticket action `bug-triage` step 2 names for it (the evidence comment, the decision citation, or the escalation), move the ticket back to the status it had before the claim unless that action set another one, write `parked <verdict>` in the ledger, and go to section 6 with that verdict.
-  A claim your check refutes goes back to the worker with your evidence.
+- Exactly one ticket is in progress at a time: pick the next one only when the current one is `reported`, `parked`, or `awaiting-merge`.
+- Pick:
+  1. Re-read its assignee and status, since someone may have moved it; a ticket no longer yours or now in a skip status goes back to the scan with the reason.
+  2. Write its `status-before` in the ledger, then transition it to the project's in-progress status right away (read the transition name from the ticket's available transitions, never guess it); a ticket already in that status stays.
+     No such transition available from its status: say so to the user and continue, the work does not wait on the board.
+  3. Write `in-progress` in the ledger and tell the user in one line which ticket you took and why it was next.
+- Work it yourself per `bug-triage` steps 0 to 5, in its own worktree per `worktree-flow`, and open the PR/MR as a draft.
+  Branches of this ticket whose PR/MR is merged or closed are history, not another agent: add a `-2`, `-3` suffix to yours instead of stopping.
+  Run `verify-loop` through gate 4 on the branch; gate 5 is section 3 here, and gate 6 is section 5, after the merge.
+- Reproduce `before` in a real browser and save the video or screenshots to the inbox; with the Playwright MCP use `browser_start_video` and `browser_stop_video`, and when another session holds it ("Browser is already in use"), launch your own browser from a Playwright script with `recordVideo` on (from the project's `@playwright/test` or `npx -y playwright`).
+- Write `cause`, `proof`, `reporter-sequence`, and `dev-checks` into the ledger as soon as you know them, since sections 5 and 6 need them after a context summary or in the next session.
+  Test data you create follows `environments` and is listed for the report's `dataChanges`.
+- Ask the user whenever `ask-or-decide` says it is their call, and wait for the answer in this session: a business decision `bug-triage` step 2 escalates, a fix that changes an existing rule, a reporter's claim you cannot reproduce but that you are not sure about, a test account or credential you lack.
+  Only when the user says to come back later, or does not answer before the run stops, does the ticket park: post the ticket action `bug-triage` step 2 names for it (the evidence comment, the decision citation, or the escalation), move the ticket back to `status-before` unless that action set another status, write `parked <verdict>` in the ledger, go to section 6 with that verdict, and pick the next ticket.
+- Any outcome other than a fix (`correct-per-decision`, `cannot-reproduce`, `blocked`): confirm it with the user in one line with the evidence before posting anything, then handle it the same way as a park.
 
 ## 3. Review before merge, since no human reads the diff
 
-- Rerun the worker's proof yourself in its worktree, with the revert-only-the-fix commands of `root-cause` section 5; a worker's "done" is a claim.
-- Run `verify-loop` gate 5 on the branch from your own context: `fresh-review` (it spawns the reviewer), plus `security-pass` and `flow-trace` when their triggers are in the diff.
-  Send `auto-fix` findings back to the same worker (SendMessage) and run the next round as `fresh-review` says.
-  Every `fresh-review` exit that needs the user (an `ask-user` finding, `risk_level` high in the last round, `auto-fix` findings still open after round 3) parks the ticket as `needs-decision` with that question, and the loop moves on; a parked PR/MR is never merged.
-- Mark the PR/MR ready only when gate 5 is clean and the project's CI checks pass (`gh pr checks <n> --watch`, or `glab ci status`); then replace the review DEFER rows of the worker's `verify-loop` table in the PR/MR body with your results and the head you reviewed.
-  The behavior row and the requirement rows that cite E2E stay `DEFER orchestrator, dev verification after merge`, and section 5 fills them in the merged PR/MR's body with the evidence file and the running SHA.
+- Rerun the proof once more with the revert-only-the-fix commands of `root-cause` section 5 on the final head.
+- Run `verify-loop` gate 5 on the branch: `fresh-review` (it spawns the reviewer), plus `security-pass` and `flow-trace` when their triggers are in the diff.
+  Fix `auto-fix` findings yourself and run the next round as `fresh-review` says.
+  Every `fresh-review` exit that needs the user (an `ask-user` finding, `risk_level` high in the last round, `auto-fix` findings still open after round 3) is a question to the user now, per section 2; a PR/MR with an open question is never merged.
+- Mark the PR/MR ready only when gate 5 is clean and the project's CI checks pass (`gh pr checks <n> --watch`, or `glab ci status`); then fill the review rows of the `verify-loop` table in the PR/MR body with your results and the head you reviewed.
+  The behavior row and the requirement rows that cite E2E stay `DEFER dev verification after merge`, and section 5 fills them in the merged PR/MR's body with the evidence file and the running SHA.
 
-## 4. Merge, one ticket at a time
+## 4. Merge
 
-- Merge, deploy, and verify one ticket at a time, so a failure on dev points at one PR/MR; workers keep fixing other tickets meanwhile.
-- Before merging: the PR/MR base is `<int>` (`gh pr view <n> --json baseRefName`), and the branch is rebased on the latest `origin/<int>` by its worker, with the touched tests rerun.
+- Before merging: the PR/MR base is `<int>` (`gh pr view <n> --json baseRefName`), and the branch is rebased on the latest `origin/<int>`, with the touched tests rerun.
   A rebase that moved the head gets the next `fresh-review` round (its after-a-rebase range) and green CI again before the merge.
 - Merge with the method the repo's recent merged PRs/MRs used.
 - The `guard-protected-branches` hook asks the user before every merge, and that prompt is their confirmation.
-  In a permission mode where it denies instead, write `awaiting-merge <url>` in the ledger, keep the merge command for the final report, and move on to the next ticket; never work around the hook.
+  In a permission mode where it denies instead, write `awaiting-merge <url>` in the ledger, keep the merge command for the final report, add the section 6 entry, and pick the next ticket; never work around the hook.
 
 ## 5. Deploy and verify on dev
 
 - Deploy: wait for CI when it deploys `<int>` on merge, otherwise run dev's deploy command per `environments`.
 - Confirm the running build contains the merge: dev's version command (`environments` section 6) prints a SHA, and `git merge-base --is-ancestor <merge sha> <running sha>` succeeds; with no version command, grep a marker string from the change in the served bundle (`bug-triage` step 6).
-- You alone drive the Playwright MCP browser, one ticket at a time: replay `reporterSequence` with a real persona per `e2e-verify` (checks a to e), measure every `devChecks` item, and record it as `after` with `browser_start_video` and `browser_stop_video`, at 1440x900 and, for anything visual, again at 390x844.
+- Replay `reporter-sequence` with a real persona per `e2e-verify` (checks a to e), measure every `dev-checks` item, and record it as `after` with `browser_start_video` and `browser_stop_video`, at 1440x900 and, for anything visual, again at 390x844.
   The branch is already merged, so the `e2e-verify` evidence file goes to `<report dir>/evidence/<TICKET>-<ISO>.json` instead of the repo.
-  When another session holds the MCP browser, use the next tool in the `e2e-verify` order, and record video with a Playwright script of your own as workers do.
-- FAIL: raise `dev-fails` in the ledger, leave the ticket in its status, and send the evidence to its worker for a follow-up fix on a new branch and PR/MR (the first one is merged), then repeat sections 3 to 5.
-  From the second FAIL the worker works per `root-cause`; at the third the verdict is `not-fixed`, and the report and the decision list say what is merged on dev and still broken.
+  When another session holds the MCP browser, use the next tool in the `e2e-verify` order, and record video with a Playwright script of your own.
+- FAIL: raise `dev-fails` in the ledger, leave the ticket in its status, and fix it on a new branch and PR/MR (the first one is merged), then repeat sections 3 to 5.
+  From the second FAIL work per `root-cause`; at the third the verdict is `not-fixed`, and the report and the decision list say what is merged on dev and still broken.
 - PASS: hand back per `bug-triage` step 7 (comment, transition, assign to the reporter).
 
 ## 6. Add the result to the report
@@ -121,7 +124,7 @@ Write for the client who reads the page, in the language the project's report re
 ## 7. Stop
 
 - The queue is empty: scan Jira once more for bugs assigned during the run, add them, and stop when that queue is empty too.
-- The user says stop, or three tickets in a row end `blocked` (the cause is probably shared: dev down, a credential, the test data): claim nothing new, let running workers finish their current step, push, and turn their PRs/MRs into drafts that list what remains, then report.
+- The user says stop, or three tickets in a row end `blocked` (the cause is probably shared: dev down, a credential, the test data): pick nothing new, push the current ticket's branch, turn its PR/MR into a draft that lists what remains, move the ticket back to `status-before` if no PR/MR was opened yet, then report.
 
 ## Report to the user
 
