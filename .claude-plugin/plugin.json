@@ -1,16 +1,24 @@
 {
   "name": "agent-skills",
-  "displayName": "Agent Skills",
-  "description": "My agent harness for Claude Code: global rules loaded at session start, dev skills for the whole task loop (worktree, feature and bug flows, root cause, verify loop, E2E, review, security, environments, logs), gate hooks for the em dash and protected branches, and harness-map to see and finish the setup.",
+  "displayName": "Hephaestus Skills",
+  "description": "Hephaestus Skills: a Claude Code plugin that forges a disciplined AI coding agent. Global AGENTS.md rules loaded at session start, agent skills for the whole dev loop (worktree per task, feature and bug flows, root cause, verify loop, E2E, code review, security, environments, logs), gate hooks for the em dash and protected branches, and harness-map to see and finish the setup.",
   "author": {
-    "name": "quocld",
+    "name": "Ryan Le",
     "url": "https://github.com/quocld"
   },
+  "homepage": "https://github.com/quocld/agent-skills",
   "repository": "https://github.com/quocld/agent-skills",
   "keywords": [
+    "hephaestus",
+    "claude-code",
+    "claude-code-plugin",
+    "agent-skills",
+    "agents-md",
+    "ai-coding-agent",
     "skills",
     "workflow",
-    "worktree",
+    "git-worktree",
+    "code-review",
     "verification",
     "hooks",
     "harness"

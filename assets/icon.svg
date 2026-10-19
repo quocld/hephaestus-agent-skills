@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t">
+  <title id="t">Hephaestus Skills</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1917"/>
+      <stop offset="1" stop-color="#0c0a09"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.72" r="0.55">
+      <stop offset="0" stop-color="#f97316" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#ea580c" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e7e5e4"/>
+      <stop offset="1" stop-color="#78716c"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde047"/>
+      <stop offset="0.5" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#dc2626"/>
+    </linearGradient>
+    <linearGradient id="handle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#92400e"/>
+      <stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <rect x="6" y="6" width="500" height="500" rx="106" fill="none" stroke="#f97316" stroke-opacity="0.35" stroke-width="4"/>
+
+  <!-- sparks -->
+  <g fill="url(#hot)">
+    <path d="M180 246 l5 -34 l5 34 l-5 5z" transform="rotate(-50 185 246)"/>
+    <path d="M196 238 l4 -24 l4 24 l-4 4z" transform="rotate(-22 200 238)"/>
+    <path d="M322 246 l5 -34 l5 34 l-5 5z" transform="rotate(50 327 246)"/>
+    <path d="M310 238 l4 -24 l4 24 l-4 4z" transform="rotate(22 314 238)"/>
+  </g>
+  <circle cx="160" cy="206" r="5" fill="#fde047"/>
+  <circle cx="352" cy="200" r="4.5" fill="#fb923c"/>
+  <circle cx="176" cy="178" r="3" fill="#fb923c"/>
+  <circle cx="338" cy="168" r="3.5" fill="#fde047"/>
+
+  <!-- hammer: head just above the billet, handle up to the right -->
+  <g transform="rotate(28 256 196)">
+    <rect x="246" y="40" width="20" height="150" rx="8" fill="url(#handle)"/>
+    <rect x="206" y="170" width="100" height="52" rx="10" fill="url(#metal)"/>
+    <rect x="206" y="170" width="100" height="12" rx="6" fill="#fafaf9" fill-opacity="0.55"/>
+  </g>
+
+  <!-- anvil -->
+  <g>
+    <path d="M110 262 H372 q34 0 58 -20 q-6 34 -48 46 H336 q-22 0 -22 22 v14 H198 v-14 q0 -22 -22 -22 H134 q-24 0 -24 -26z" fill="url(#metal)"/>
+    <path d="M110 262 H372 q34 0 58 -20 q-4 10 -12 16 H112z" fill="#fafaf9" fill-opacity="0.6"/>
+    <path d="M198 324 H314 l26 46 H172z" fill="#57534e"/>
+    <rect x="150" y="370" width="212" height="34" rx="10" fill="#44403c"/>
+    <!-- hot billet -->
+    <rect x="216" y="244" width="84" height="18" rx="6" fill="url(#hot)"/>
+  </g>
+</svg>
