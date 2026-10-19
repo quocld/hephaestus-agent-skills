@@ -379,7 +379,7 @@ def collect_project(project):
     else:
         out.append(check(sec, "Integration branch", "missing",
                          f"origin/{cand} not found in fetched refs; worktree-flow will stop and ask where PRs go",
-                         "create the branch or record it as the dev environment's branch in .agents/environments.json"))
+                         "project-init asks which branch PRs go into and records it (the dev environment's branch in .agents/environments.json)"))
 
     pc = sorted((p / ".agents" / "checks").glob("*.md"))
     out.append(check(sec, "Project checks (verify-loop)", "ok" if pc else "info",
@@ -667,41 +667,21 @@ def pillar_status(checks):
     return status, related, alerts
 
 
-def setup_prompt(actions, project, score, opt):
-    """A prompt the user pastes into Claude Code to finish the setup, built from this run's fix list.
-    It names keys and paths only; secret values never enter it."""
-    installed = CLAUDE / "skills" / "harness-map" / "scripts" / "harness_map.py"
-    rerun = short(installed) if installed.exists() else f"{short(MAIN)}/skills/harness-map/scripts/harness_map.py"
-    lines = [f"Finish my agent harness setup. harness-map reports core {score}% and optional {opt}% ready "
-             f"(agent-skills repo {short(MAIN)}" + (f", project {short(project)}" if project else "") + ").", ""]
-    first = {}   # fix -> where it first appeared, so one command that fixes several items runs once
-    for tier, head in (("core", "Core, do all of these in order"), ("optional", "Optional, ask me which of these I want first")):
-        mine = [c for c in actions if c["tier"] == tier]
-        if not mine:
-            continue
-        lines.append(head + ":")
-        for i, c in enumerate(mine, 1):
-            if c["fix"] and c["fix"] in first:
-                fix = f" Fix: the same command as {first[c['fix']]}; run it once."
-            else:
-                fix = f" Fix: {c['fix']}" if c["fix"] else ""
-                if c["fix"]:
-                    first[c["fix"]] = f"{tier} {i}"
-            lines.append(f"{i}. [{LABEL[c['status']]}] {c['section']} / {c['title']}: {c['detail']}.{fix}")
-        lines.append("")
-    if not actions:
-        lines += ["Nothing is missing. Verify it: run the hooks test and one skill end to end, then report.", ""]
-    lines += [
-        "Rules:",
-        "- Confirm with me before running install.sh: it moves existing real files into ~/.claude/backups/ and links this repo in their place.",
-        "- Hooks: merge the entries from hooks/README.md into hooks.PreToolUse of ~/.claude/settings.json, never replace the array, then run hooks/test.sh.",
-        "- Secrets: never print, copy, move or commit a secret value. For a plaintext secret, tell me where it is and what to do; I move and rotate it.",
-        "- Logins and MCP sign-ins are mine: give me the exact `! <command>` (or /mcp) to run and wait.",
-        "- Project setup goes through the project-init skill and environments through the environments skill, in a worktree, finished as a PR into the integration branch.",
-        "- Ask me for facts you cannot find (environment URLs, SSH aliases, test accounts) in one batch; write TODO(<owner>) for what I do not know.",
-        f"- When done, rerun `python3 {rerun} --no-probe" + (f" --project {short(project)}" if project else "") + "` and show me the new core and optional readiness and anything still open.",
-    ]
-    return "\n".join(lines)
+SETUP_PROMPT = """Check my agent harness and finish setting it up, one step at a time, with the harness-map skill's setup flow (section 3 of its SKILL.md).
+If the skill is not installed yet, read {checkout}/skills/harness-map/SKILL.md and run {checkout}/skills/harness-map/scripts/harness_map.py.
+
+1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
+2. Go through the gaps in order: this machine first (install, hooks, secrets, tools and logins), then this project (project-init, then environments), core before optional.
+3. Check everything you can yourself. When a step needs something only I know or a decision from me, ask me once for that step, with your best guess shown, then apply it. project-init and environments ask their own questions.
+4. After each step, regenerate the page and open it again so I can see the progress.
+5. Repeat until no core gap is left, then show me the optional gaps and ask which ones I want.
+
+Ask before running install.sh or adding hooks to ~/.claude/settings.json. Never read, print, move or delete a secret value or its backups; tell me what to do and I do it. Give me the `! <command>` for any login, and carry on with the next step while I do it."""
+
+
+def setup_prompt():
+    """The prompt the user pastes to start the setup flow (SKILL.md section 3); the agent finds the gaps itself."""
+    return SETUP_PROMPT.format(checkout=short(MAIN))
 
 
 def render(checks, cards, plugins, project, probe, registry=None, opt=0):
@@ -728,11 +708,11 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
                  f'<span class="pill {pst[pl["id"]]}">{WHEEL_WORD[pst[pl["id"]]]}</span></span></a>' for pl in PILLARS)
     covered = sum(1 for v in pst.values() if v == "ok")
     need = sum(1 for v in palert.values() if v)
-    prompt = setup_prompt(actions, project, score, opt)
+    prompt = setup_prompt()
     ncore = sum(1 for c in actions if c["tier"] == "core")
     nopt = len(actions) - ncore
     h.append(f'<section class="card prompt" id="prompt"><div class="hd">{icon("Tools")}<h2>Setup prompt</h2>'
-             f'<span class="desc">Paste into Claude Code to finish the setup: {ncore} core and {nopt} optional steps, with the safety rules</span>'
+             f'<span class="desc">Paste into Claude Code in your project: the agent checks what is missing, asks you for what it needs, and reopens this page after each step. Now: {ncore} core and {nopt} optional gaps</span>'
              f'<div class="bar"><button class="btn ghost" type="button" data-expand="prompt-text">Expand</button>'
              f'<button class="btn primary" type="button" data-copy="prompt-text">Copy prompt</button></div></div>'
              f'<pre id="prompt-text" class="ptext">{esc(prompt)}</pre></section>')
@@ -879,7 +859,7 @@ def main():
     out.write_text(page)
 
     if a.prompt:
-        print(setup_prompt(actions, project, score, opt))
+        print(setup_prompt())
         return
     print(f"Harness map: {out}  (tabs: Dashboard, Docs)")
     print(f"Core ready {score}%  optional ready {opt}%  ok {count['ok']}  attention {count['warn']}  missing/failing {count['missing'] + count['fail']}")

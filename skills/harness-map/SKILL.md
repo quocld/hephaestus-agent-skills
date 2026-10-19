@@ -1,7 +1,7 @@
 ---
 name: harness-map
 description: >
-  Use when asked to see, visualize, document, or audit the whole agent harness at once: "harness đang thiếu gì", "setup harness tới đâu rồi", "xem tổng quan setup", "visualize setup", "báo cáo setup ra HTML", "check bộ skill đã cài chưa", "harness map", "vòng tròn harness", "docs harness", "skill nào chạy ở đâu", "what is missing in my setup". Not for fixing one project's AGENTS.md block (project-init doctor) or a single environment (environments).
+  Use when asked to see or audit the whole agent harness, or to finish setting it up step by step: "harness đang thiếu gì", "setup harness", "hoàn thành setup harness", "kiểm tra còn thiếu và hỏi tôi", "check bộ skill đã cài chưa", "harness map", "docs harness", "skill nào chạy ở đâu", "finish my harness setup". Not for one project's AGENTS.md block alone (project-init) or one environment (environments).
 user-invocable: true
 ---
 
@@ -16,6 +16,7 @@ This skill renders one HTML page with two tabs: Dashboard (what is set up, what 
 python3 ~/.claude/skills/harness-map/scripts/harness_map.py --open    # -> ~/.claude/harness-map.html
 ```
 
+Before `install.sh` has run, use the agent-skills checkout's copy: `python3 <agent-skills checkout>/skills/harness-map/scripts/harness_map.py --open` (the setup prompt names that path).
 The page opens on Dashboard; `#docs` (or any docs section, such as `#lifecycle`) opens the Docs tab.
 
 - It checks the git repo of the current directory as the project; pass `--project <dir>` for another one. Outside a git repo the Project section is skipped.
@@ -27,27 +28,39 @@ The script is read-only, never prints a secret value (only the key name, and for
 
 ## 2. Report
 
-When the user wants an agent to finish the setup, `--prompt` prints the same setup prompt the top of the Dashboard offers to copy; run it in a new session or act on it here.
 Print the path of the HTML file, the core and optional readiness, and the numbered "Fix first" list from the script's stdout, in that order; core items first.
 Also print any skill the script says is not placed in `assets/lifecycle.json`; the Skills section flags it too.
 Do not retype the whole report; the page holds the detail.
+When the user only asked to see the harness, stop here; finishing it is section 3 and needs the user's word.
 
-## 3. Fixing
+## 3. Setup flow
 
-Fixing is a separate step the user asks for; this skill only maps.
-When asked, take the list from the top and route each item to its owner:
+The Dashboard's setup prompt (`--prompt` prints it) starts this flow; the user may also ask for it in their own words.
+Run it from the project the user wants set up, one step at a time, never as one batch of changes.
+Never use `--no-probe` here: the hooks test is how step 2 knows it is done.
+Until step 1 has run, read any skill this flow names from the checkout (`<agent-skills checkout>/skills/<name>/SKILL.md`); if the user declines the install, keep reading them there.
 
-| Item | Owner |
-| --- | --- |
-| Links, skills not installed | `install.sh` in the agent-skills main checkout; confirm first, since it moves existing real files to `~/.claude/backups/` |
-| Hook not registered | `hooks/README.md` entries, merged into `hooks.PreToolUse`, never replacing the array |
-| Project block, registry, integration branch, `TODO(owner)`, CLAUDE.md import, `secrets.env` not gitignored | `project-init`, then `environments` |
-| Plaintext secret in settings | Tell the user: move it out, rotate it, delete the backup copies the row names; never echo the value or edit the file yourself |
-| settings.json backups | The user decides which to delete; never delete them yourself |
-| CLI missing, no browser tool for `e2e-verify` | The install command in the row; logins as `! <command>` for the user to run |
-| Plugin install path missing | `claude plugin install <id>` from the row |
+1. **Check**: run the script with `--open` and read its fix list; the order below decides what comes first, not the list's order.
+2. **Take the steps in this order**, skipping a step with no gap:
 
-Re-run the script (with `--open` only if the user wants the page again) and show the new score.
+   | Step | Gaps it closes | How |
+   | --- | --- | --- |
+   | 1. Install | Global links, skills not installed, OPINIONS.md | `install.sh` in the agent-skills main checkout; confirm first, since it moves existing real files to `~/.claude/backups/` |
+   | 2. Hooks | settings.json missing, hook not registered | Ask first, then merge the entries from the checkout's `hooks/README.md` into `hooks.PreToolUse` of `~/.claude/settings.json` (create `{"hooks": {"PreToolUse": []}}` when the file is missing; never replace an existing array), then run the checkout's `hooks/test.sh` |
+   | 3. Secrets | Plaintext secret in settings, backups that hold it | Tell the user where it is, to move it out and rotate it, and which backups hold it; never read, echo, move or delete it yourself |
+   | 4. Tools and logins | CLI missing, `gh` not logged in, Jira access, browser tool, Better Stack MCP | The install command from the row; logins and MCP sign-ins as `! <command>` or `/mcp` for the user, marked waiting on you |
+   | 5. Project | No AGENTS.md or project-init block, CLAUDE.md import, integration branch, `TODO(owner)` | `project-init`, which discovers first and asks the user only the gaps, in one batch; that batch includes which branch PRs go into, which this step's own PR then targets |
+   | 6. Environments | No registry, prod policy, version command, unresolved secrets, `logs` rename, `secrets.env` not gitignored | `environments` (its create section), which asks for URLs, SSH aliases and test accounts |
+   | 7. Optional | Everything in the optional list | Show the list and ask which ones the user wants; do only those |
+
+3. **Ask before you change**: in steps 1 to 4 and 7, when a step needs a fact or a decision only the user has, ask once per step with your drafted answer shown (`ask-or-decide`); never invent one, and write `TODO(<owner>)` for what the user does not know yet.
+   In steps 5 and 6 the owner skill asks; do not ask the same things again.
+   A step only the user can finish (a login, moving a secret) is marked "waiting on you" and the flow goes on to the next step; check it again in the final run.
+   Steps 5 and 6 run in a worktree and end as a PR/MR into the integration branch (`worktree-flow`); steps 1 to 4 change only the user's machine.
+4. **Show progress**: after each step, rerun the script with `--open` so the user sees the page change, and say in one line what moved.
+5. **Repeat** until no core gap is left, then run step 7.
+   A gap that stays after its step was done is a finding: say why (`root-cause`), do not loop on it.
+6. **Finish**: rerun the script with `--open` one last time and report the core and optional readiness, what changed, the PR/MR links, and every item still waiting on the user; then stop.
 
 ## 4. Changing the page
 
