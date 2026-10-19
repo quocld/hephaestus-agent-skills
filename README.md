@@ -30,7 +30,7 @@ The `AGENTS.md` and skills also work in any harness that reads them (Codex, Curs
 In Claude Code:
 
 ```text
-/plugin marketplace add quocld/agent-skills
+/plugin marketplace add quocld/hephaestus-agent-skills
 /plugin install agent-skills@quocld
 ```
 
