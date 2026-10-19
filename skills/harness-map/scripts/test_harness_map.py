@@ -327,6 +327,9 @@ def main():
         check(vj.get("trailingSlash") is True and any(h["source"] == "/install.md" for h in vj["headers"])
               and (seo / "404.html").exists() and 'noindex' in (seo / "404.html").read_text() and (seo / "llms.txt").exists() and "https://docs.example/install.md" in (seo / "llms.txt").read_text(),
               "seo: one URL per page, raw guide kept out of the index, a noindex 404, llms.txt")
+        gsc = [p for p in seo.glob("google*.html")]
+        check(len(gsc) == 1 and gsc[0].read_text() == f"google-site-verification: {gsc[0].name}",
+              "seo: the Search Console verification file is at the site root, byte for byte")
         check('data-open="onboard-src"' in site and 'id="onboard-src"' in site and _html.escape(prompt, quote=True) in site
               and 'data-open="onboard-src"' in skill_page, "onboard prompt: a header button on every docs page opens it")
 

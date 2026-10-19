@@ -969,6 +969,8 @@ SITE_NAME = "Hephaestus Skills"
 # Google Search Console's HTML-tag token for the docs site. It is public by design (every page carries it), so it
 # lives here and every build, local or CI, keeps the site verified. --gsc-token or GOOGLE_SITE_VERIFICATION override it.
 GSC_TOKEN = ""
+# Search Console's HTML-file verification for the same property: served at the site root with exactly this content.
+GSC_FILE = "googled7ce509a824ea4fc.html"
 SITE_DESC = ("Hephaestus Skills, a Claude Code plugin: 25 agent skills, safety hooks and global rules, "
              "with the lifecycle map, task path and every skill in full.")
 
@@ -1091,6 +1093,8 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
                        '<a href="/install/">install Hephaestus Skills</a>.</p></div></section>' + onboard_source(), footer, ONBOARD_BUTTON,
                        head='<meta name="robots" content="noindex">')
     (out_dir / "404.html").write_text(page)
+    if GSC_FILE:
+        (out_dir / GSC_FILE).write_text(f"google-site-verification: {GSC_FILE}")
     # One URL per page: /install redirects to /install/; the raw guide and llms.txt are for agents, not the index.
     raw_hdr = [{"key": "X-Robots-Tag", "value": "noindex"}]
     (out_dir / "vercel.json").write_text(json.dumps({
