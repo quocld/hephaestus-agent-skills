@@ -82,7 +82,12 @@ Create or update `.agents/environments.json` by following the `environments` ski
 Every deployed HTTP service needs the version endpoint from the `environments` skill's `references/version-endpoint.md`.
 Implement it in the project's own stack, prove it locally (build with a known SHA, the endpoint returns it, it works logged out), and point each environment's `version` command at it.
 
-### 3d. Test personas
+### 3d. Feature status
+
+Offer to opt the repo in to `feature-status` when several agents or people work it in parallel.
+On yes: commit an empty `docs/status/.gitkeep` and add `- Feature status: one file per feature in docs/status/, edited only through the feature-status skill.` to the block.
+
+### 3e. Test personas
 
 For each persona the E2E skills need: an account per environment in the registry (secret references only), a seed script or documented way to create it on dev, and a saved-session setup so tests do not log in through the UI every run.
 
@@ -95,7 +100,7 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 | Check | Command |
 | --- | --- |
 | agent-skills plugin installed | `claude plugin list` shows `agent-skills@quocld` enabled; the skills, hooks and global rules all come with it |
-| Hooks registered and working | `bash <agent-skills plugin or checkout>/hooks/test.sh` passes: it checks the plugin's `hooks.json` mounts every gate and runs the deny and allow probes |
+| Hooks registered and working | `bash <agent-skills plugin or checkout>/hooks/test.sh` passes: it checks the plugin's `hooks.json` mounts every gate (feature-status-guard included) and runs the deny and allow probes |
 | Git platform CLI logged in | `gh auth status` or `glab auth status` |
 | Integration branch exists | `git ls-remote --exit-code --heads origin refs/heads/<int>`, with `<int>` from `worktree-flow` section 0 |
 | Node and package manager | `node --version`, `pnpm --version` (or the repo's manager) |
@@ -109,6 +114,8 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 | Better Stack MCP connected | `claude mcp list 2>/dev/null \| grep -E '^(plugin:betterstack:)?betterstack(-ro)?: .*Connected'` prints a line; a `Needs authentication` line means run `/mcp` and sign in (`betterstack-logs` section 1) |
 | Log sources registered | `jq -r '.environments \| to_entries[] \| select(.value.url // "" \| test("//localhost") \| not) \| .key as $e \| .value.services[]? \| select(.type != "local") \| if (.logs \| type) == "string" then "\($e)/\(.name): old string logs, rename to logsCommand" elif (.logs.source // "") == "" then "\($e)/\(.name)" else empty end' .agents/environments.json` prints nothing; each printed service lacks `logs.source` or needs the `environments` section 1 rename |
 | Logger contract | The project's logger test passes; no such test: log one line with the project's logger, Better Stack env unset so nothing ships, and check the keys, e.g. `out=$(env -u BETTER_STACK_SOURCE_TOKEN -u BETTER_STACK_INGESTING_HOST NODE_ENV=production node -e "import('<built logger entry>').then((m) => m.createLogger({ service: 'doctor' }).info('probe'))" \| head -1); [ -n "$out" ] && printf '%s\n' "$out" \| jq -r 'keys as $k \| $ARGS.positional - $k \| if . == [] then "OK" else "MISSING \(join(" "))" end' --args <every key logging-standard section 1 requires on every line> \|\| echo FAILING` prints `OK`; a crash, no output, or a non-JSON line prints `FAILING` |
+| Feature status files valid (only when `git ls-tree -d origin/<int> docs/status` prints a line) | After `git fetch origin --prune`, `python3 <feature-status skill>/scripts/status.py check --ref origin/<int>` exits 0 (it reads `origin/<int>`, not this checkout's possibly stale working tree) |
+| No leftover feature claims (same precondition) | For each `claim/<ID>` in `git ls-remote --heads origin 'refs/heads/claim/*'`, `python3 <feature-status skill>/scripts/status.py release <ID> --dry-run` exits 1 (it exits 0 only when that claim's own pick is merged on `<int>`, or dropped or deferred, so a re-pick's live claim is not flagged); an exit 0 is `DRIFT`, fixed by the same command without `--dry-run` |
 | Markers intact | `AGENTS.md` has exactly one `project-init:start` and one `project-init:end` |
 | Block paths exist | Every repo path the block names exists (`test -e <path>`); a gitignored path such as a storage state folder counts as `OK` when `git check-ignore -q <path>` succeeds, with a trailing slash on folders (`e2e/.auth/`) so dir-only patterns match |
 | Block commands resolve | Each listed command, checked with the cheap probe below, never by running it |

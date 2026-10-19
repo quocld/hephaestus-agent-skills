@@ -23,6 +23,10 @@ git fetch origin --prune
 
 ## 1. Start or resume: one task = one worktree = one branch
 
+Repo opted in to `feature-status` (its section 0: `docs/status/` exists on `origin/<int>`, or its `AGENTS.md` names `feature-status`): steps 1-3 are replaced by its `pick`, run from the checkout you stand in before any worktree exists; it claims the ticket, names the branch, and creates the worktree.
+`pick` performs step 1's checks itself (existing claims, branches for the ID, and an active status file on `<int>`), so the only part of step 1 that remains is reading the existing worktree's progress file (section 3) when you resume with `pick --resume`.
+In a harness's detached worktree (step 0), run `pick ... --no-worktree`, then `git switch -c <branch> --track origin/<branch>` in place of step 3's switch, so the branch starts from the pushed pick commit.
+
 0. Check whether you already stand in a linked worktree (a harness may have started you in one):
    ```bash
    git rev-parse --path-format=absolute --git-dir --git-common-dir   # two different paths = linked worktree
@@ -121,6 +125,7 @@ If the repo uses the no-mistakes gate, run `verify-loop` first, then its pipelin
 5. The body says: the ticket or request, what changed and why, how it was verified (the `verify-loop` table, evidence files), risks, and what is deliberately left out.
 
 - Do not merge your own PR/MR unless the user asks.
+- Repo opted in to `feature-status`: the PR/MR opens in `in-review`, `merged` is set by the last push before the merge, and the claim is released after it (its section 3); a PR/MR the user merged while the file said `in-review` needs that section's recovery before `release`.
 - Blocked or partly done work becomes a draft (`gh pr create --draft`, `glab mr create --draft`) whose body lists what remains.
   Do this as soon as you know you will stop, not at the very end.
 - The progress file is local and dies with the worktree: carry its Decisions and Next into the PR/MR body, the only record another machine or agent sees.
@@ -158,6 +163,7 @@ Then `git worktree remove "$WT"` (skip it when the branch has no worktree) and `
 - Never pass `--force` to `git worktree remove`; a refusal means there is work to keep, so leave it and report it.
 - Never remove anything whose PR/MR is open, or a branch with no PR/MR; report those instead.
 - Stop the dev servers and containers you started.
+- Repo opted in to `feature-status`: before removing a merged feature's worktree, run `status.py release <ID>`; when it names the recovery, do that in this worktree first.
 
 ## Report
 

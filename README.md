@@ -51,6 +51,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 
 | Skill | Use it for | Needs |
 | --- | --- | --- |
+| `feature-status` | One status file per feature in `docs/status/`, claimed on the remote before the worktree exists and edited only by its script: states, per-AC test tiers with E2E evidence, board. | `python3`; `gh` or `glab` for `board --live` |
 | `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |
 | `feature-build` | Implement a feature or user story end to end: gaps, exploration, design options, verify, PR. Lean per-technology notes for Next.js, React, Vercel, Supabase, NestJS. | - |
 | `root-cause` | Find the cause before fixing: failing layer, backward trace, 3-failed-fixes stop, flaky tests, polluter bisection. | - |
@@ -83,6 +84,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | --- | --- |
 | `session-start.py` | Loads `AGENTS.md` into every session and points to `OPINIONS.md`. |
 | `no-em-dash.py` | Blocks writes that contain an em dash. |
+| `feature-status-guard.py` | In repos that use `feature-status`: denies hand edits of `docs/status/*.md`, a feature branch or worktree with no claim (or a second branch for a claimed ticket), and a PR/MR whose status file is not `in-review`. |
 | `guard-protected-branches.py` | Asks before (or denies, in no-prompt modes) pushes and merges to `main`, `staging`, `prod` and PR/MR merges. |
 
 Details and tests: [`hooks/README.md`](hooks/README.md).

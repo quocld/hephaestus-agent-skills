@@ -69,6 +69,7 @@ Write `e2e/reports/<id>-<ISO>.json` (or the project's equivalent), tracked in gi
 ```
 
 - PASS: the evidence file is what allows closing the story/ticket. No file, no close.
+- Repo opted in to `feature-status`: record each AC the run covered with its `ac` command, `--tier e2e --result pass --evidence <this file>` on PASS and `--result fail` on FAIL; the file's `id` must be the status file's ID.
 - FAIL: add a screenshot and failure details, go back to fixing; do not close.
 - After a fix, re-run only the failed ACs plus the ACs with any file on their path the fix touched (route, component, handler, service, query, migration; `git diff --name-only <evidence commit>..HEAD`), not the whole suite; when unsure whether a file is on an AC's path, re-run it.
 - After 3 FAIL cycles on the same AC, stop patching and switch to the `root-cause` skill.
