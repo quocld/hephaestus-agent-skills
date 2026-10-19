@@ -1,0 +1,255 @@
+{
+  "title": "Tám thành phần cốt lõi của Agent Harness",
+  "pillars": [
+    {
+      "id": "context",
+      "no": 1,
+      "name": "Context Engineering",
+      "short": "Context",
+      "badge": "Nền tảng",
+      "lead": "Quản lý những thông tin agent cần biết, thay vì đưa toàn bộ tài liệu vào context window.",
+      "points": [
+        "Project architecture, conventions, domain knowledge.",
+        "Task-specific context và dependency liên quan.",
+        "Context loading theo nhu cầu, tránh đọc tràn lan.",
+        "Phân biệt nguồn sự thật, thông tin tạm thời và giả định."
+      ],
+      "covered_by": {
+        "files": [
+          "AGENTS.md",
+          "OPINIONS.md",
+          "project-init block",
+          ".agents/environments.json",
+          "feature-build tech/ files (docs per installed framework version)"
+        ],
+        "skills": [
+          "project-init",
+          "knowledge-placement",
+          "environments"
+        ],
+        "sections": [
+          "Global instructions",
+          "Project"
+        ]
+      },
+      "gaps": []
+    },
+    {
+      "id": "workflow",
+      "no": 2,
+      "name": "Workflow & Orchestration",
+      "short": "Workflow",
+      "lead": "Quy định agent cần làm gì, theo thứ tự nào và khi nào được chuyển bước.",
+      "points": [
+        "Task lifecycle: Analyze → Plan → Execute → Verify.",
+        "State machine hoặc task status rõ ràng.",
+        "Checkpoint, retry, timeout và xử lý lỗi.",
+        "Điều phối subagents khi có lợi, không mặc định multi-agent."
+      ],
+      "covered_by": {
+        "files": [
+          "Agent and Workflow tools (ask first)"
+        ],
+        "skills": [
+          "worktree-flow",
+          "verify-loop",
+          "feature-build",
+          "bug-triage",
+          "ask-or-decide",
+          "gnhf",
+          "jira-bug-hunter"
+        ],
+        "sections": []
+      },
+      "gaps": [
+        "No shared timeout or retry budget across skills; verify-loop owns the gate order, each skill still states its own stop rule."
+      ]
+    },
+    {
+      "id": "rules",
+      "no": 3,
+      "name": "Instructions, Rules & Skills",
+      "short": "Rules & Skills",
+      "lead": "Định nghĩa cách agent hành xử và cách thực hiện từng loại công việc.",
+      "points": [
+        "Global rules: các nguyên tắc không được vi phạm.",
+        "Project rules: convention và architecture của repository.",
+        "Skills: workflow chuyên biệt như implement feature, review code, QC.",
+        "Quy định rõ điều kiện áp dụng và đầu ra của mỗi skill."
+      ],
+      "principle": "Rules quyết định phải tuân thủ điều gì; skills hướng dẫn thực hiện công việc như thế nào.",
+      "covered_by": {
+        "files": [
+          "AGENTS.md",
+          "skills/*/SKILL.md"
+        ],
+        "skills": [
+          "knowledge-placement",
+          "fe-guardrails",
+          "axi"
+        ],
+        "sections": [
+          "Skills"
+        ]
+      },
+      "gaps": []
+    },
+    {
+      "id": "tools",
+      "no": 4,
+      "name": "Tools & Execution Environment",
+      "short": "Tools",
+      "lead": "Cung cấp khả năng thực thi thật, không chỉ sinh ra câu trả lời.",
+      "points": [
+        "File system, terminal, Git và test runner.",
+        "MCP/API cho Jira, database, documentation hoặc CI.",
+        "Phân quyền tool theo nhiệm vụ.",
+        "Sandbox, giới hạn phạm vi chỉnh sửa và kiểm soát side effects."
+      ],
+      "covered_by": {
+        "files": [
+          "git worktrees",
+          "MCP plugins",
+          "Better Stack MCP"
+        ],
+        "skills": [
+          "chrome-devtools-axi",
+          "server-touch",
+          "environments",
+          "worktree-flow"
+        ],
+        "sections": [
+          "Tools",
+          "Plugins & MCP"
+        ]
+      },
+      "gaps": [
+        "No per-task tool permission profile; settings allow the same tools for every task."
+      ]
+    },
+    {
+      "id": "gates",
+      "no": 5,
+      "name": "Quality Gates & Verification",
+      "short": "Quality Gates",
+      "lead": "Không tin rằng agent làm đúng chỉ vì agent nói đã hoàn thành.",
+      "points": [
+        "Typecheck, lint, unit test, integration/E2E test.",
+        "Spec compliance và acceptance criteria.",
+        "Independent code review hoặc verifier khi cần.",
+        "Chặn chuyển trạng thái nếu các điều kiện bắt buộc chưa đạt."
+      ],
+      "covered_by": {
+        "files": [
+          "hooks: no-em-dash, guard-protected-branches",
+          ".agents/checks/ project checks"
+        ],
+        "skills": [
+          "verify-loop",
+          "e2e-verify",
+          "fresh-review",
+          "security-pass",
+          "flow-trace",
+          "root-cause",
+          "no-mistakes"
+        ],
+        "sections": [
+          "Hooks"
+        ]
+      },
+      "gaps": []
+    },
+    {
+      "id": "memory",
+      "no": 6,
+      "name": "State & Memory Management",
+      "short": "State & Memory",
+      "lead": "Giúp agent tiếp tục công việc mà không phải suy luận lại từ đầu sau mỗi session.",
+      "points": [
+        "Task status, completed steps và blockers.",
+        "Decision log, assumptions và unresolved questions.",
+        "Artifact lưu trên file hoặc hệ thống bên ngoài.",
+        "Cơ chế đồng bộ khi nhiều agent cùng làm việc."
+      ],
+      "principle": "Không đồng nhất memory với context window: context là những gì agent đang nhìn thấy; memory/state là thông tin có thể lưu lại và truy xuất ở các lần chạy sau.",
+      "covered_by": {
+        "files": [
+          "worktree resume file",
+          "~/.claude memory",
+          "PR/MR as the shared record"
+        ],
+        "skills": [
+          "stow",
+          "worktree-flow"
+        ],
+        "sections": []
+      },
+      "gaps": [
+        "No standard decision log file; project-init only points at one when the repo has it."
+      ]
+    },
+    {
+      "id": "observability",
+      "no": 7,
+      "name": "Observability & Cost Control",
+      "short": "Observability",
+      "lead": "Theo dõi agent thực sự làm gì, thất bại ở đâu và tiêu tốn bao nhiêu.",
+      "points": [
+        "Tool calls, logs, traces và lỗi.",
+        "Token usage, latency, chi phí theo task.",
+        "Giới hạn vòng lặp, ngân sách và số lần retry.",
+        "Model routing: dùng model phù hợp với độ khó của từng bước."
+      ],
+      "covered_by": {
+        "files": [
+          "claude-code-tracing plugin (Arize / Phoenix)",
+          "Better Stack log sources per environment",
+          "gnhf iteration caps"
+        ],
+        "skills": [
+          "logging-standard",
+          "betterstack-logs",
+          "harness-map",
+          "gnhf"
+        ],
+        "plugins": [
+          "claude-code-tracing"
+        ],
+        "sections": []
+      },
+      "gaps": [
+        "No token or cost budget per task and no model routing rule in AGENTS.md."
+      ]
+    },
+    {
+      "id": "evaluation",
+      "no": 8,
+      "name": "Evaluation & Continuous Improvement",
+      "short": "Evaluation",
+      "lead": "Đo lường xem harness có thực sự cải thiện chất lượng hay không.",
+      "points": [
+        "Bộ task benchmark có kết quả mong đợi.",
+        "Regression tests cho workflow và skills.",
+        "Đánh giá correctness, completeness và reliability.",
+        "Phân tích lỗi thực tế để cải tiến rules, tools và quy trình."
+      ],
+      "principle": "Không chỉ đánh giá câu trả lời đẹp hay code chạy được, mà đánh giá task có đạt mục tiêu ban đầu hay không.",
+      "covered_by": {
+        "files": [
+          ".agents/checks/ (rules learned from repeated bugs)",
+          "hooks/test.sh",
+          "red/green skill tests"
+        ],
+        "skills": [
+          "verify-loop",
+          "knowledge-placement",
+          "harness-map"
+        ],
+        "sections": []
+      },
+      "gaps": [
+        "No benchmark task set with expected outcomes; skill red/green tests are run by hand, not kept as a suite."
+      ]
+    }
+  ]
+}
