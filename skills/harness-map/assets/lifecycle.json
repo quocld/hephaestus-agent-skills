@@ -85,6 +85,7 @@
     "logging-standard": {"tier": "optional", "events": ["pre_tool"], "path": ["act"], "when": "Before writing code that logs or changing a logger: one field contract, redaction, correlation"},
     "betterstack-logs": {"tier": "optional", "events": ["tool"], "path": ["retry"], "when": "Reading a deployed environment's log history while debugging, or setting up shipping to Better Stack"},
     "jira-bug-hunter": {"ultimate": true, "tier": "optional", "events": ["prompt", "subagent", "task_completed"], "path": ["prompt"], "when": "/jira-bug-hunter: one agent per assigned Jira bug until fixed, merged, verified on dev and demoed"},
+    "feature-status": {"tier": "core", "events": ["prompt", "pre_tool", "stop"], "path": ["prompt", "verify", "response"], "when": "In a repo with docs/status/: claim the ticket on the remote before the worktree, record each AC tier as it passes, set in-review before the PR; the guard hook keeps status files script-only"},
     "stow": {"tier": "optional", "events": ["pre_compact", "session_end"], "path": ["remember"], "when": "Before a context reset or a break: save what was learned"},
     "knowledge-placement": {"tier": "core", "events": ["pre_tool", "subagent"], "path": ["remember"], "when": "Before editing AGENTS.md or a skill; red/green skill tests use fresh subagents"}
   },

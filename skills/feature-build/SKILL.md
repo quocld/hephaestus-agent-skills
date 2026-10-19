@@ -9,7 +9,8 @@ user-invocable: true
 
 Stories go wrong in the gaps: an edge case nobody decided, a screen rebuilt that already existed, a contract drifted from the spec, an agent swarm that read the same files five times.
 This skill runs inside `worktree-flow` (its worktree, commits, and PR/MR rules apply unchanged) and covers what happens between opening the branch and opening the PR/MR.
-A change with no open gap and one obvious edit (a copy fix, a one-line tweak) skips steps 1b-4: list its AC, make the edit, and run step 6.
+In a repo opted in to `feature-status`, the worktree comes from its `pick`, and the status file is updated at the points marked "Status" below.
+A change with no open gap and one obvious edit (a copy fix, a one-line tweak) skips steps 1b-4: list its AC, set the feature `in-progress` in an opted-in repo (step 3 is skipped, and `pick` leaves it `picked`), make the edit, and run step 6.
 
 ## 1. Read the story and its sources of truth
 
@@ -19,6 +20,7 @@ A change with no open gap and one obvious edit (a copy fix, a one-line tweak) sk
 - Reconcile the story with the API contract: every field, status, and error the story needs either exists in the contract or is a contract change you list in step 2.
 - Search for existing screens, routes, and mock-data pages before planning new UI (`fe-guardrails`, "Before building a screen").
 - Write down the acceptance criteria as a numbered list; every later step refers to them by number.
+- Status: record each AC with its tiers (`feature-status` section 2).
 
 ## 1b. Load the tech files for the stack you will touch
 
@@ -65,6 +67,7 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 - Then read yourself the files you will edit or copy a pattern from.
   Trust the explorers' summary for the rest; open another file only when the edit needs it.
 - Answer whatever gaps from step 2 the code settles (existing validation, existing error shape, an existing role check).
+- Status: exploration done, set the feature `in-progress`.
 
 ## 4. Choose the design, then ask once
 
@@ -96,7 +99,8 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 1. Run `verify-loop` on the final head; it owns the order of the gates and the loop back after a red one.
    Its requirements gate uses the numbered AC list from step 1, and its toolchain gate includes the Verify section of each tech file loaded in step 1b.
    Tests for each AC sit at their contract boundary and follow `root-cause` section 5.
-2. Open the PR/MR per `worktree-flow`, with the `verify-loop` table in its body.
+2. Status: record each AC tier as it passes, then set `in-review` with a passing `check` (`feature-status` section 3).
+3. Open the PR/MR per `worktree-flow`, with the `verify-loop` table in its body.
 
 ## Token discipline
 
@@ -111,7 +115,7 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 
 In this order, also used as the PR/MR body:
 
-1. The story and its AC list, each with status: matches spec, design deviation (who asked), or open.
+1. The story and its AC list, each with status: matches spec, design deviation (who asked), or open; in an opted-in repo, read the AC list and its tier results from the status file instead of retyping them.
 2. Decisions made in step 2 and step 4, each with its reason, and the tech files loaded with each framework's installed version.
 3. What changed, by layer (schema, contract, server, UI).
 4. Verification: the `verify-loop` table, the `flow-trace` file and `security-pass` result if they ran, and the E2E evidence file and its commit.

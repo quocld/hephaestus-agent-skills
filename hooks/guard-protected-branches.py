@@ -8,6 +8,9 @@ A permission prompt is that explicit word, so this hook returns "ask" for:
 - gh pr merge and glab mr merge, whatever the target (-R/--repo included);
 - a push or merge whose repo directory cannot be resolved (a `cd` or `git -C` target with variables, or one that does not exist).
 The current branch is read from the repo the command acts on: payload cwd, then any earlier `cd <dir>` in the command, then `git -C <dir>`.
+`$PWD`, `${PWD}`, `$(pwd)` and `$(git rev-parse --show-toplevel)` (also in backticks, optionally followed by /<path>)
+resolve to the directory they name; any other variable leaves the directory unresolved.
+`git`, `gh` and `glab` are matched by basename, so /usr/bin/git counts.
 Commands inside `bash -c`, `sh -c`, `zsh -c` and `eval` strings are scanned too.
 Protected branches: main, master, staging, stage, prod, production.
 """
@@ -25,6 +28,8 @@ SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 GIT_VALUE_FLAGS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"}
 REPO_FLAGS = {"-R", "--repo"}
 UNRESOLVED = None
+CURRENT_DIR_IDIOMS = ("$PWD", "${PWD}", "$(pwd)", "`pwd`")
+TOPLEVEL_IDIOMS = ("$(git rev-parse --show-toplevel)", "`git rev-parse --show-toplevel`")
 
 
 def current_branch(directory):
@@ -36,9 +41,28 @@ def current_branch(directory):
         return ""
 
 
+def toplevel(directory):
+    try:
+        out = subprocess.run(["git", "-C", directory, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
 def resolve_dir(base, target):
     """Return the absolute directory `target` names relative to `base`, or UNRESOLVED."""
-    if base is UNRESOLVED or not target or any(c in target for c in "$`*?") or target == "-":
+    if base is UNRESOLVED or not target or target == "-":
+        return UNRESOLVED
+    for idioms, value in ((TOPLEVEL_IDIOMS, lambda: toplevel(base)), (CURRENT_DIR_IDIOMS, lambda: base)):
+        idiom = next((i for i in idioms if target == i or target.startswith(i + "/")), None)
+        if idiom:
+            root = value()
+            if not root:
+                return UNRESOLVED
+            target = root + target[len(idiom):]
+            break
+    if any(c in target for c in "$`*?"):
         return UNRESOLVED
     path = os.path.normpath(os.path.join(base, os.path.expanduser(target)))
     return path if os.path.isdir(path) else UNRESOLVED
@@ -78,7 +102,7 @@ def segments(command):
 def git_args(tokens, subcommand, directory):
     """Return (args after `git <subcommand>`, repo dir) or None, honouring -C and treating --git-dir/--work-tree as unresolved."""
     for i, token in enumerate(tokens):
-        if token != "git":
+        if os.path.basename(token) != "git":
             continue
         j = i + 1
         repo = directory
@@ -102,7 +126,7 @@ def git_args(tokens, subcommand, directory):
 def forge_merge(tokens, cli, noun):
     """True when tokens hold `<cli> ... <noun> ... merge`, skipping flags and -R/--repo values."""
     for i, token in enumerate(tokens):
-        if token != cli:
+        if os.path.basename(token) != cli:
             continue
         words = []
         j = i + 1
@@ -214,8 +238,12 @@ def main():
         return 0
     if not isinstance(payload, dict):
         return 0
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    cwd = os.path.abspath(payload.get("cwd") or ".")
+    tool_input = payload.get("tool_input") or {}
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    cwd = payload.get("cwd")
+    if not isinstance(command, str) or (cwd is not None and not isinstance(cwd, str)):
+        return 0   # malformed input fails open; a missing cwd falls back to the hook's own directory
+    cwd = os.path.abspath(cwd or ".")
     found = list(dict.fromkeys(reasons(command, cwd)))
     allow = allowed_branches(cwd)
     found = [r for r in found if not any(f"'{b}'" in r for b in allow)]
