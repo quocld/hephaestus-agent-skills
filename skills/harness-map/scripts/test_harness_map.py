@@ -302,8 +302,8 @@ def main():
     prompt = (HERE.parent / "assets" / "onboard-prompt.md").read_text().strip()
     readme = (HERE.parents[2] / "README.md").read_text()
     check(prompt in readme and "## Onboard your agent" not in readme
-          and readme.index("## Install") < readme.index("### Option 1") < readme.index(prompt) < readme.index("### Option 2"),
-          "onboard prompt: the README carries it verbatim as Option 1 of one Install section")
+          and readme.index("## Install") < readme.index(prompt) < readme.index("<summary><b>Or install by hand</b>") < readme.index("### Update"),
+          "onboard prompt: the README leads Install with it, the manual install is a folded alternative")
     with tempfile.TemporaryDirectory() as tmp:
         p_ = subprocess.run([sys.executable, str(SCRIPT), "--docs-only", tmp], capture_output=True, text=True)
         site = (Path(tmp) / "index.html").read_text() if (Path(tmp) / "index.html").exists() else ""
