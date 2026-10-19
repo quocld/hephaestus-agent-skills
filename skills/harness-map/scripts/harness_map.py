@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
-from page import (ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -151,7 +151,7 @@ def collect_hooks(probe):
                       "create it with the hooks.PreToolUse entries from hooks/README.md, then run hooks/test.sh")]
     local = load_json(CLAUDE / "settings.local.json") or {}
     cmds = [h.get("command", "") for src in (settings, local)
-            for e in src.get("hooks", {}).get("PreToolUse", []) for h in e.get("hooks", [])]
+            for e in ((src.get("hooks") or {}).get("PreToolUse") or []) if isinstance(e, dict) for h in (e.get("hooks") or [])]
     for script in ("no-em-dash.py", "guard-protected-branches.py"):
         src = REPO / "hooks" / script
         if not src.exists():
@@ -176,8 +176,9 @@ def collect_hooks(probe):
             out.append(check("Hooks", "hooks/test.sh probes", "fail",
                              "; ".join(fails[:4]) or (se.strip().splitlines() or ["exit " + str(code)])[-1],
                              f"bash {short(test)}"))
-    other = {e.get("matcher", "") or "*" for ev in settings.get("hooks", {}).values() for e in ev}
-    events = sorted(settings.get("hooks", {}).keys())
+    wired = settings.get("hooks") or {}
+    other = {e.get("matcher", "") or "*" for ev in wired.values() for e in (ev or []) if isinstance(e, dict)}
+    events = sorted(wired.keys())
     out.append(check("Hooks", "Hook events wired", "info",
                      f"{len(events)} events ({', '.join(events)}); matchers: {', '.join(sorted(other))}"))
     return out
@@ -230,7 +231,7 @@ def collect_plugins(project=None, registry=None):
     installed = (load_json(CLAUDE / "plugins" / "installed_plugins.json") or {}).get("plugins", {})
     mcp_names = []
     for pid, on in sorted(enabled.items()):
-        inst = (installed.get(pid) or [{}])[-1]
+        inst = plugin_entry(installed, pid)
         path = Path(inst.get("installPath", ""))
         mcp = load_json(path / ".mcp.json") or {}
         servers = sorted((mcp.get("mcpServers", mcp) or {}).keys()) if isinstance(mcp, dict) else []
@@ -311,6 +312,15 @@ def collect_hygiene():
     if backups and len(backups) > len(leaky):
         out.append(check("Settings hygiene", "settings.json backups", "info",
                          f"{len(backups)} backup files next to settings.json", "review and delete the ones you no longer need"))
+    leaky = []
+    for name, m in sorted(((load_json(CLAUDE / "plugins" / "known_marketplaces.json") or {}) or {}).items()):
+        src = _dict(m).get("source") if isinstance(m, dict) else None
+        if strip_userinfo(_dict(src).get("url", ""))[1]:
+            leaky.append(name)
+    if leaky:
+        out.append(check("Settings hygiene", "Credentials in plugin marketplace URLs", "fail",
+                         "a token is written into the URL of: " + ", ".join(leaky) + " (values not shown)",
+                         "re-add the marketplace without the token (a credential helper or SSH key), then rotate it"))
     if settings.get("skipDangerousModePermissionPrompt"):
         out.append(check("Settings hygiene", "Bypass-permissions prompt skipped", "info",
                          "bypass mode starts without a warning; guard-protected-branches denies protected pushes there"))
@@ -349,9 +359,12 @@ def collect_project(project):
         if registry is None:
             out.append(check(sec, "Environment registry", "fail", ".agents/environments.json is not valid JSON", "fix the JSON, then validate per the environments skill"))
         else:
-            envs = registry.get("environments", registry) if isinstance(registry, dict) else {}
-            names = list(envs.keys()) if isinstance(envs, dict) else [e.get("name", "?") for e in envs]
-            out.append(check(sec, "Environment registry", "ok", "environments: " + (", ".join(names) or "none")))
+            names = list(env_map(registry))
+            if names:
+                out.append(check(sec, "Environment registry", "ok", "environments: " + ", ".join(names)))
+            else:
+                out.append(check(sec, "Environment registry", "fail", "no environment object found under `environments`; the registry shape is invalid",
+                                 "fix it per the environments skill's schema (templates/environments.schema.json)"))
             out += env_checks(registry, p)
         gi = (p / ".gitignore").read_text() if (p / ".gitignore").exists() else ""
         if "secrets.env" not in gi:
@@ -368,9 +381,7 @@ def collect_project(project):
 
     int_branch = None
     if isinstance(registry, dict):
-        envs = registry.get("environments", {})
-        dev = envs.get("dev") if isinstance(envs, dict) else next((e for e in envs if e.get("name") == "dev"), None)
-        int_branch = (dev or {}).get("branch")
+        int_branch = env_map(registry).get("dev", {}).get("branch") or None
     code, so, _ = run(["git", "-C", str(p), "branch", "-r", "--format=%(refname:short)"])
     remote = set(so.split())
     cand = int_branch or "dev"
@@ -381,6 +392,10 @@ def collect_project(project):
                          f"origin/{cand} not found in fetched refs; worktree-flow will stop and ask where PRs go",
                          "project-init asks which branch PRs go into and records it (the dev environment's branch in .agents/environments.json)"))
 
+    _, url, _ = run(["git", "-C", str(p), "remote", "get-url", "origin"])
+    if strip_userinfo(url.strip())[1]:
+        out.append(check(sec, "Remote URL credentials", "fail", "the origin URL holds a user:token part (not shown)",
+                         "git remote set-url origin <the same URL without user:token@>, use gh auth or a credential helper, and rotate the token"))
     pc = sorted((p / ".agents" / "checks").glob("*.md"))
     out.append(check(sec, "Project checks (verify-loop)", "ok" if pc else "info",
                      f"{len(pc)} in .agents/checks/: " + ", ".join(x.stem for x in pc[:8]) if pc else
@@ -399,9 +414,38 @@ POLICY = {"autonomous": ("ok", "Autonomous"), "confirm-writes": ("warn", "Confir
 PROD_NAMES = {"prod", "production", "live"}
 
 
+def _dict(x):
+    return x if isinstance(x, dict) else {}
+
+
+def _dicts(x):
+    return [i for i in x if isinstance(i, dict)] if isinstance(x, list) else []
+
+
+def _strs(x):
+    return [str(i) for i in x if isinstance(i, (str, int, float))] if isinstance(x, list) else []
+
+
+def normalize_env(e):
+    """One environment with every field the page reads in a safe shape, so a hand-edited registry cannot crash it."""
+    out = dict(e)
+    out.update({k: str(e.get(k) or "") for k in ("url", "branch", "policy", "description")})
+    out.update({k: _dict(e.get(k)) for k in ("data", "testing")})
+    out["testing"] = dict(out["testing"], rules=_strs(out["testing"].get("rules")))
+    out.update({k: _strs(e.get(k)) for k in ("rules", "deployOrder")})
+    out["accounts"] = _dicts(e.get("accounts"))
+    out["services"] = [dict(s_, access=_dict(s_.get("access"))) for s_ in _dicts(e.get("services"))]
+    return out
+
+
 def env_map(registry):
-    envs = (registry or {}).get("environments", {}) if isinstance(registry, dict) else {}
-    return envs if isinstance(envs, dict) else {e.get("name", f"env{i}"): e for i, e in enumerate(envs)}
+    """Environment name -> normalised environment; entries that are not objects are dropped."""
+    envs = registry.get("environments") if isinstance(registry, dict) else None
+    if isinstance(envs, dict):
+        return {str(k): normalize_env(v) for k, v in envs.items() if isinstance(v, dict)}
+    if isinstance(envs, list):
+        return {str(v.get("name") or f"env{i}"): normalize_env(v) for i, v in enumerate(envs) if isinstance(v, dict)}
+    return {}
 
 
 def secret_names(project):
@@ -421,7 +465,8 @@ def secret_state(ref, known):
         return f"env:{name}", "ok" if name in os.environ or name in known else "missing"
     if ref.startswith("op://"):
         return "1Password", "info"
-    return (ref or "no secret"), ("info" if ref else "missing")
+    # Anything else is a value written into the registry itself: say so, never show it.
+    return ("literal value (not shown)", "fail") if ref else ("no secret", "missing")
 
 
 def env_checks(registry, project):
@@ -444,7 +489,13 @@ def env_checks(registry, project):
                              "rename logs to logsCommand in .agents/environments.json (environments skill)"))
         refs = [a.get("password") for a in e.get("accounts", [])] + \
                [s_.get("access", {}).get("dbUrl") for s_ in e.get("services", []) if s_.get("access", {}).get("dbUrl")]
-        unresolved = [lab for lab, st in (secret_state(r, known) for r in refs if r) if st == "missing"]
+        states = [secret_state(r, known) for r in refs if r]
+        literal = sum(1 for _, st in states if st == "fail")
+        if literal:
+            out.append(check("Project", f"{name}: literal secrets", "fail",
+                             f"{literal} secret value(s) written into .agents/environments.json (values not shown)",
+                             "replace each with an env:NAME or op:// reference, rotate the value, and keep it in .agents/secrets.env"))
+        unresolved = [lab for lab, st in states if st == "missing"]
         if unresolved:
             out.append(check("Project", f"{name}: secrets", "warn", "not set in the shell or .agents/secrets.env: " + ", ".join(unresolved),
                              "add them to .agents/secrets.env (gitignored); never commit values"))
@@ -473,6 +524,7 @@ def env_panel(project, registry):
         return ""
     known = secret_names(project)
     _, remote, _ = run(["git", "-C", str(project), "remote", "get-url", "origin"])
+    remote, _ = strip_userinfo(remote.strip())
     _, branch, _ = run(["git", "-C", str(project), "branch", "--show-current"])
     platform = "GitHub" if "github" in remote else "GitLab" if "gitlab" in remote else "no remote"
     checks_ = sorted((Path(project) / ".agents" / "checks").glob("*.md"))
@@ -679,6 +731,9 @@ If the harness-map skill is not available, tell me how to install the agent-skil
 Ask before running install.sh or adding hooks to ~/.claude/settings.json. Never read, print, move or delete a secret value or its backups; tell me what to do and I do it. Give me the `! <command>` for any login, and carry on with the next step while I do it."""
 
 
+SETUP_PILL = '<span class="pill fail">Setup</span>'
+
+
 def setup_prompt():
     """The prompt the user pastes to start the setup flow (SKILL.md section 3); the agent finds the gaps itself."""
     return SETUP_PROMPT
@@ -704,7 +759,7 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
              f'{"" if probe else "<span><b>Probes skipped</b></span>"}</div></div>{ring(score, "core ready")}</div>')
     pst, prel, palert = pillar_status(checks)
     wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
-                 f'<span class="chips">{"<span class=\"pill fail\">Setup</span>" if palert[pl["id"]] else ""}'
+                 f'<span class="chips">{SETUP_PILL if palert[pl["id"]] else ""}'
                  f'<span class="pill {pst[pl["id"]]}">{WHEEL_WORD[pst[pl["id"]]]}</span></span></a>' for pl in PILLARS)
     covered = sum(1 for v in pst.values() if v == "ok")
     need = sum(1 for v in palert.values() if v)

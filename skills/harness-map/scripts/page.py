@@ -82,6 +82,20 @@ def repo_skills():
     return [(d, frontmatter(d / "SKILL.md") or {}) for d in sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir())]
 
 
+def strip_userinfo(url):
+    """A URL without its user:password@ part; (clean url, True when a credential was there)."""
+    clean = re.sub(r"(?<=://)[^/@\s]+@", "", url or "")
+    return clean, clean != (url or "") and ":" in (url or "").split("://", 1)[-1].split("@", 1)[0]
+
+
+def plugin_entry(installed, pid):
+    """The newest install record for a plugin id, whether the index stores a list of records or one record."""
+    v = installed.get(pid)
+    if isinstance(v, list):
+        return v[-1] if v and isinstance(v[-1], dict) else {}
+    return v if isinstance(v, dict) else {}
+
+
 def short(p):
     s = str(p)
     return "~" + s[len(str(HOME)):] if s.startswith(str(HOME)) else s
@@ -127,6 +141,7 @@ def ult(name, text=None):
     return f'<span class="ult">{t}</span>' if name in ULTIMATE else t
 WHEEL_FILL = {"ok": ("var(--ok-soft)", "var(--ok)"), "warn": ("var(--warn-soft)", "var(--warn)"),
               "fail": ("var(--bad-soft)", "var(--bad)"), None: ("var(--accent-soft)", "var(--accent)")}
+BAD_FILL = ' style="fill:var(--bad-text)"'
 WHEEL_WORD = {"ok": "Covered", "warn": "Partial", "fail": "Gaps"}  # designed coverage; setup problems are a separate alert
 
 
@@ -158,7 +173,7 @@ def wheel_svg(status=None, center=("Agent Harness", "8 components"), alerts=None
         lines = "".join(f'<tspan x="{tx:.1f}" dy="{0 if k == 0 else 15}">{esc(w)}</tspan>' for k, w in enumerate(words))
         word = WHEEL_WORD[st] + (" · setup" if alerts.get(pl["id"]) else "") if st else ""
         sub = (f'<text x="{tx:.1f}" y="{ty + 16 + 15 * (len(words) - 1):.1f}" class="wsub" text-anchor="middle"'
-               f'{" style=\"fill:var(--bad-text)\"" if alerts.get(pl["id"]) else ""}>{esc(word)}</text>') if st else ""
+               f'{BAD_FILL if alerts.get(pl["id"]) else ""}>{esc(word)}</text>') if st else ""
         p.append(f'<g class="slice" data-pillar="{pl["id"]}" tabindex="0" role="button" aria-label="{pl["no"]}. {esc(pl["name"])}">'
                  f'<path d="M{x0:.1f} {y0:.1f} A{R} {R} 0 0 1 {x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f} A{r} {r} 0 0 0 {x3:.1f} {y3:.1f}Z" '
                  f'fill="{fill}" stroke="{stroke}" stroke-width="1.4"/>'

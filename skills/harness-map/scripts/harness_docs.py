@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from page import ULTIMATE, ult, CLAUDE, SKILL, esc, icon, load_json, repo_skills
+from page import ULTIMATE, ult, CLAUDE, SKILL, esc, icon, load_json, plugin_entry, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -23,7 +23,9 @@ def hook_source(cmd):
     m = re.search(r"plugins/cache/[^/]+/([^/]+)/", cmd)
     if m:
         return "plugin", m.group(1)
-    return "custom", (cmd.split()[0] if cmd.split() else "command")[-28:]
+    # Name a custom hook by its program, skipping leading NAME=value assignments, which can hold secrets.
+    words = [w for w in cmd.split() if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
+    return "custom", (Path(words[0].strip("\"'")).name if words else "command")[:28]
 
 
 def live_hooks():
@@ -31,8 +33,8 @@ def live_hooks():
     rows = []
     for fname in ("settings.json", "settings.local.json"):
         for event, entries in ((load_json(CLAUDE / fname) or {}).get("hooks") or {}).items():
-            for e in entries:
-                for h in e.get("hooks", []):
+            for e in entries if isinstance(entries, list) else []:
+                for h in (e.get("hooks") or []) if isinstance(e, dict) else []:
                     kind, name = hook_source(h.get("command", ""))
                     rows.append((event, e.get("matcher") or "*", kind, name, fname))
     settings = load_json(CLAUDE / "settings.json") or {}
@@ -40,7 +42,7 @@ def live_hooks():
     for pid, on in (settings.get("enabledPlugins") or {}).items():
         if not on:
             continue
-        path = Path((installed.get(pid) or [{}])[-1].get("installPath", ""))
+        path = Path(plugin_entry(installed, pid).get("installPath", ""))
         data = load_json(path / "hooks" / "hooks.json") or {}
         for event, entries in (data.get("hooks", data) or {}).items():
             if isinstance(entries, list):
@@ -260,7 +262,7 @@ def task_path_svg():
         x, w = nodes[k]
         fill, stroke, dash = look[k]
         p.append(f'<rect x="{x}" y="{NY}" width="{w}" height="{NH}" rx="7" fill="{fill}" stroke="{stroke}"'
-                 f'{f" stroke-dasharray=\"{dash}\"" if dash else ""}/>')
+                 + (f' stroke-dasharray="{dash}"' if dash else "") + '/>')
         p.append(text(x + w / 2, NY + 28, path[k]["label"], "tn", "middle"))
         p.append(text(x + w / 2, NY + 47, path[k]["sub"], "tsub", "middle"))
         chips_above(k)
