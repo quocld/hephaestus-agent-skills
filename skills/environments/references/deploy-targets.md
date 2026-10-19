@@ -13,8 +13,7 @@ Rollbacks that redeploy code run from a checkout of `<previous-sha>`.
 
 ## Any target: expose the running commit
 
-The most reliable `version` is an endpoint the app serves itself, e.g. `GET /api/version` returning the commit SHA baked in at build time.
-On Vercel the SHA is `VERCEL_GIT_COMMIT_SHA`; on a VPS, write `git rev-parse HEAD` into an env var or file during the build.
+The most reliable `version` is an endpoint the app serves itself; the contract and recipes are in `version-endpoint.md`.
 If the project has no such endpoint, propose adding one; "pushed" is not "deployed" until the running SHA matches.
 
 ## vps (Next.js or any Node app over SSH)
@@ -27,7 +26,7 @@ If the project has no such endpoint, propose adding one; "pushed" is not "deploy
   Rollback then becomes "repoint the symlink and reload", which takes seconds.
 - Process manager: `pm2 reload <name> --update-env` (zero-downtime for cluster mode), `systemctl restart <unit>`, or `docker compose up -d` for the Docker variant.
 - Name release folders by the full SHA.
-- `version`: ask the running process, `ssh <alias> 'curl -fsS http://localhost:<port>/api/version'`.
+- `version`: ask the running process, `ssh <alias> 'curl -fsS http://localhost:<port>/api/version' | jq -r .sha`.
   Reading the `current` symlink shows what is linked, not what pm2 is running.
 - `logs`: `ssh <alias> 'pm2 logs <name> --lines 200 --nostream'` or `journalctl -u <unit> -n 200 --no-pager`.
 - `verify`: `curl -fsS -o /dev/null -w '%{http_code}' <url>/api/health` plus the public version endpoint.
@@ -87,4 +86,4 @@ Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedH
 ## custom
 
 Anything else (Netlify, Cloudflare, Fly, Railway, Kubernetes, FTP).
-Write the five commands from the project's own scripts and CI workflow, not from memory, and get them confirmed before the first use.
+Write the commands from the project's own scripts and CI workflow, not from memory, and get them confirmed before the first use.

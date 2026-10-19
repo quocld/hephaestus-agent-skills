@@ -14,7 +14,7 @@ An agent that takes a host, branch, command, or password from memory or chat his
 ## 1. Load and maintain the registry
 
 - Read `.agents/environments.json` at the repo root, in full, before the first environment action of the session.
-- Missing, and the task needs a non-local environment: run section 9 first.
+- Missing, and the task needs a non-local environment: run section 10 first.
   Do not improvise hosts or commands in the meantime.
 - When the user states a new fact (server, account, URL, rule), put it in the registry instead of keeping it in chat.
 - Every registry change is shown as a diff and written only after a yes; it applies from the next action.
@@ -65,7 +65,7 @@ Placeholders in registry commands:
 Before the first step:
 
 1. Pre-flight, read-only: capture every service's `version`, resolve `<sha>`, list pending migrations, check every rule (deploy windows, events), and create the clean deploy checkout (`git worktree add .agents/deploy/<sha> <sha>`); commands that read the local tree run from there.
-2. Database or data changes in the deploy: complete the section 7 checklist first.
+2. Database or data changes in the deploy: complete the section 8 checklist first.
 3. Prove what was tested is what ships: the tree at `<sha>` must equal the tree that passed on staging (`git diff --stat <staging-sha> <sha>` is empty).
    Proof that staging passed is an E2E evidence file or the user's explicit word.
 4. Present a numbered plan: services in `deployOrder` (default db before web), then each service's `deploy` items in order, one item per step.
@@ -96,7 +96,20 @@ After the last step: run every `verify`; code services' `version` must print `<s
 - "Pushed" is not "deployed": a deploy is done when `version` matches the target and `verify` passes.
 - Read the section of `references/deploy-targets.md` for each service type you touch; it holds the platform traps (Supabase link state, Vercel git vs. CLI deploys, VPS release folders).
 
-## 6. Testing per environment
+## 6. Version status across environments
+
+When asked what runs where ("môi trường nào đang chạy bản nào", "prod đang ở commit nào"), or before planning a promotion:
+
+1. `git fetch origin --prune`, then run every service's `version`, environment by environment.
+   On a `confirm-each-step` environment this asks first unless `version` is in `allowedWithoutAsking`.
+2. Report one table: environment, service, short SHA, commit subject and date (`git log -1 --format='%h %s (%cr)' <sha>`), and how far behind the integration branch it is (`git rev-list --count <sha>..origin/<int>`).
+3. For each promotion path, list what would ship: `git log --oneline <prod-sha>..<staging-sha>`.
+4. Flag problems instead of smoothing them over:
+   - `unknown` or an error: the service has no working version endpoint (`references/version-endpoint.md`).
+   - A SHA that no remote branch contains (`git branch -r --contains <sha>` is empty): someone deployed unpushed code.
+   - Services of one environment on different SHAs, when they deploy together.
+
+## 7. Testing per environment
 
 `testing.scope` says what tests may run there:
 
@@ -116,7 +129,7 @@ After the last step: run every `verify`; code services' `version` must print `<s
 - Changing shared settings (feature flags, admin config) counts as a data change: record the old value first and restore it when done.
 - Evidence follows the `e2e-verify` skill.
 
-## 7. Database and data changes
+## 8. Database and data changes
 
 Applies to every migration, backfill, data fix, import, bulk admin action, or manual SQL against a `confirm-writes` or `confirm-each-step` environment.
 
@@ -148,7 +161,7 @@ On `confirm-each-step`, any line answered "no" or "unknown" stops the deploy unt
 Manual data fixes belong in a reviewed migration or script in the repo, not typed into a SQL console.
 Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, after the user confirms the count, the same statements with `COMMIT`.
 
-## 8. Secrets and test accounts
+## 9. Secrets and test accounts
 
 - The registry is committed and holds no secret values; the schema rejects literals in fields named like password, token, secret, key, DB URL, or connection string.
 - A secret is a reference:
@@ -164,7 +177,7 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
 - Pick accounts by `role` from the target environment only.
   Never log in as a real customer; on prod use only the accounts listed there.
 
-## 9. Create the registry
+## 10. Create the registry
 
 1. Draft from repo evidence first: `.env*.example` (variable names only), `.vercel/project.json`, `vercel.json`, `supabase/config.toml`, `Dockerfile`, compose files, `ecosystem.config.*`, CI workflows, deploy scripts, README.
 2. Ask the user only what the repo cannot tell, in one batch: the environment list and URLs, SSH aliases, test account roles and logins, rules such as deploy windows.
@@ -173,4 +186,5 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
    Writing a looser prod setting needs the user's explicit words.
 5. Add `.agents/secrets.env`, `.agents/backups/`, and `.agents/deploy/` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
 6. Validate: `npx -y ajv-cli@5.0.0 validate --spec=draft2020 -s .agents/environments.schema.json -d .agents/environments.json`.
-7. Run each remote service's `version` and `verify` once to prove the access works (on prod, ask first), and report anything that fails.
+7. A service without a version endpoint gets one per `references/version-endpoint.md`, shipped as a normal PR/MR.
+8. Run each remote service's `version` and `verify` once to prove the access works (on prod, ask first), and report anything that fails.

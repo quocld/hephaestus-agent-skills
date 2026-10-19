@@ -86,7 +86,7 @@
             "vercelProjectId": "prj_staging123",
             "vercelOrgId": "team_acme123"
           },
-          "version": "curl -fsS https://staging.acme.com/api/version",
+          "version": "curl -fsS https://staging.acme.com/api/version | jq -r .sha",
           "deploy": [
             "git push origin <sha>:refs/heads/staging"
           ],
@@ -177,7 +177,7 @@
             "appDir": "/srv/acme",
             "processName": "acme-web"
           },
-          "version": "ssh acme-prod 'curl -fsS http://localhost:3000/api/version'",
+          "version": "ssh acme-prod 'curl -fsS http://localhost:3000/api/version' | jq -r .sha",
           "deploy": [
             "ssh acme-prod 'git -C /srv/acme/repo fetch origin && git -C /srv/acme/repo worktree add /srv/acme/releases/<sha> <sha>'",
             "ssh acme-prod 'cd /srv/acme/releases/<sha> && cp /srv/acme/shared/.env.production . && pnpm install --frozen-lockfile && pnpm build'",
