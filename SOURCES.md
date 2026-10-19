@@ -21,6 +21,7 @@ License texts for each source are in `LICENSES/`.
 | `skills/knowledge-placement` (trigger and reader tests), `skills/fe-guardrails` (copy rules) | adapted from github.com/anthropics/skills `skill-creator`, `doc-coauthoring`, `frontend-design` | Apache-2.0 |
 | `skills/security-pass`, `skills/root-cause` (fix self-check, variant hunt) | adapted from github.com/anthropics/defending-code-reference-harness; ideas only (no text) from claude-plugins-official `claude-security`, which is proprietary | Apache-2.0 |
 | `skills/worktree-flow` (resume file) | ideas from github.com/anthropics/cwc-long-running-agents | Apache-2.0 |
+| `skills/feature-build/tech/` | distilled from github.com/vercel-labs/agent-skills (`react-best-practices`, `composition-patterns`) and github.com/supabase/agent-skills (`supabase`, `supabase-postgres-best-practices`); facts and links only, no text, from nextjs.org/docs (`ai-agents` guide), vercel.com/docs, docs.nestjs.com, and github.com/vercel/vercel-plugin (no license asserted) | MIT |
 | `hooks/` | mine | mine |
 | local changes to vendored skills | `gnhf` (iteration and relaunch caps), `stow` (curate only touched files), `no-mistakes` (recovery rules moved to `references/custody-recovery.md`), `chrome-devtools-axi` (browser order defers to `e2e-verify`, `--prefer-offline`) | reapply after any upstream sync |
 | `reference/opinions-example.md` | github.com/kunchenguid/kun `OPINIONS.md` (no upstream license; keep this repo private) | none |

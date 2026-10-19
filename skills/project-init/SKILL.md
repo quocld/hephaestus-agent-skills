@@ -27,6 +27,7 @@ Read the places in this table, not the whole tree, and draft every answer from e
 | Ticket prefix and tracker | Branch names and commit subjects (`WEST-123`), PR templates, links in README |
 | PR/MR platform | `git remote get-url origin` (GitHub or GitLab) |
 | Package manager and monorepo | Lockfile, `pnpm-workspace.yaml`, `turbo.json`, `nx.json` |
+| Stack per app or package | `package.json` dependencies (`next`, `react`, `@nestjs/core`, `@supabase/*`), `vercel.json`/`vercel.ts`, `supabase/`; the signals table in `feature-build` step 1b |
 | Commands: install, dev, build, typecheck, lint, test, E2E | `package.json` scripts per package, `Makefile`, CI workflow steps |
 | Sources of truth | `openspec/`, `docs/`, spec or PRD files, decision log, API contracts (OpenAPI, shared schema packages), design links (Figma) |
 | E2E setup | `playwright.config.*`, existing personas, storage state files, seed scripts, report folders |
@@ -54,6 +55,7 @@ Never rewrite text outside the markers.
 
 - Branches: PRs/MRs go into the integration branch from `worktree-flow` section 0; staging and prod branches only on explicit request.
 - Tracker: Jira project `WEST`; branch and commit ids look like `WEST-123`. PR/MR platform: GitLab (`glab`).
+- Stack: Next.js App Router in `apps/web` (docs for the installed version in `apps/web/node_modules/next/dist/docs/`), NestJS in `apps/api`, Supabase; before using a framework API, read the docs of the installed version (`feature-build` tech files).
 - Commands (repo root): install `pnpm install --frozen-lockfile`; dev `pnpm dev`; typecheck `pnpm typecheck`; lint `pnpm lint`; test `pnpm test`; E2E `pnpm e2e`.
 - Sources of truth, in priority order: decision log `docs/decisions.md` > OpenSpec `openspec/specs/` > Figma (link) > existing code.
 - API contract: `packages/contracts/`.
@@ -65,6 +67,7 @@ Never rewrite text outside the markers.
 ```
 
 Keep it under 20 lines: facts only, each pointing at the file that owns the detail.
+The Stack line names no version numbers, which go stale; when `next dev` already wrote its own `nextjs-agent-rules` block, leave that block alone and drop the Next.js docs path from the Stack line.
 Leave out what the code shows on its own; if a fact is only needed in one rare situation, it belongs in a project skill instead (`knowledge-placement`).
 
 ### 3b. Environment registry
