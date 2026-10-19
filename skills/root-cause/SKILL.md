@@ -81,6 +81,7 @@ It must also catch the bug for the right reason:
 - Name the production change that would break it, and make it a bug, not a decision: a wrong branch, a missing side effect, a wrong argument, a missed boundary.
 - Write the expected value by hand (a literal or a hand-checked fixture), never with the code or helpers under test; `expect(f(x)).toBe(f(x))` passes forever.
 - Test behavior, not wording: no assertions on a constant's value, exact copy, private structure, or a file's text.
+  For a file a program consumes (workflow YAML, JSON config, policy, `.gitignore`), run that consumer, or parse the file and assert its meaning; a regex over the raw text is still wording.
 - Test your contract at its boundary (the route you register, the query you emit, the payload you send), not the framework's mechanics.
 - Mocks: replace only the slow or external level, keep the side effects the test depends on real, mirror the full real data shape, and never assert on the mock itself.
   When the mock setup grows bigger than the test, switch to an integration test with real components.

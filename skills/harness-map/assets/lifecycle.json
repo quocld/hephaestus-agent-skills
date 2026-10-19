@@ -80,7 +80,6 @@
     "flow-trace": {"tier": "core", "events": ["stop"], "path": ["verify"], "when": "Before done on state machines, webhooks, jobs, money, access gates"},
     "security-pass": {"tier": "core", "events": ["stop"], "path": ["verify"], "when": "Before done when the diff hits auth, tenant data, SQL, storage, env"},
     "fresh-review": {"tier": "core", "events": ["subagent", "stop"], "path": ["response"], "when": "Before a PR: a fresh subagent reviews the diff until clean"},
-    "no-mistakes": {"tier": "optional", "events": ["prompt", "stop"], "path": ["response"], "when": "/no-mistakes gate before the push target"},
     "gnhf": {"ultimate": true, "tier": "optional", "events": ["prompt", "task_created", "task_completed"], "path": ["prompt"], "when": "/gnhf overnight loop of small committed changes"},
     "logging-standard": {"tier": "optional", "events": ["pre_tool"], "path": ["act"], "when": "Before writing code that logs or changing a logger: one field contract, redaction, correlation"},
     "betterstack-logs": {"tier": "optional", "events": ["tool"], "path": ["retry"], "when": "Reading a deployed environment's log history while debugging, or setting up shipping to Better Stack"},

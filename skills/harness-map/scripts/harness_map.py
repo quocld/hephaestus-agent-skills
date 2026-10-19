@@ -33,7 +33,6 @@ TOOLS = [
     ("pnpm", "skill", ["project-init"], "corepack enable pnpm"),
     ("glab", "skill", ["worktree-flow (GitLab repos)"], "brew install glab && glab auth login"),
     ("docker", "skill", ["server-touch"], "brew install --cask docker"),
-    ("no-mistakes", "skill", ["no-mistakes"], "see github.com/kunchenguid/no-mistakes"),
     ("gnhf", "skill", ["gnhf"], "see github.com/kunchenguid/gnhf"),
     ("op", "skill", ["environments (op:// secrets)"], "brew install 1password-cli"),
     ("vercel", "skill", ["environments (Vercel targets)"], "npm i -g vercel"),
