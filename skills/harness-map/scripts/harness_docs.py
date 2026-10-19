@@ -489,7 +489,11 @@ def docs_body(hooks, standalone=False):
         how = f'<span class="chip acc">{ult(n, "/" + n)}</span>' if inv else '<span class="chip agent">by description</span>'
         tier = f'<span class="tier {s["tier"]}">{"Core" if s["tier"] == "core" else "Optional"}</span>'
         where = " ".join(f'<span class="chip">{esc(LIFE["events"][e]["label"])}</span>' for e in s["events"])
-        rows.append(f'<tr><td class="mono">{ult(n)}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
+        # On the docs site a skill name is also a real link to its own page, so search engines can crawl it;
+        # the reader still opens it in place on a click.
+        name_ = (f'<a class="skl" data-skill="{esc(n)}" href="skills/{esc(n)}/">{ult(n) if n in ULTIMATE else esc(n)}</a>'
+                 if standalone else ult(n))
+        rows.append(f'<tr><td class="mono">{name_}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
     for n in unmapped:
         rows.append(f'<tr><td class="mono">{esc(n)}</td><td colspan="4"><span class="chip warn">not placed in assets/lifecycle.json yet</span></td></tr>')
     h.append(card("skill-reference", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act; click a name to read it",

@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://hephaestus-skills-docs.vercel.app"><strong>Docs</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#skills">Skills</a> ·
   <a href="#hooks">Hooks</a> ·
@@ -21,6 +22,9 @@
 **Hephaestus Skills** is a [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin and [Agent Skills](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview) collection for teams that run several AI coding agents in parallel on the same repo.
 It gives every session the same rules (`AGENTS.md`), one git worktree per task, root-cause debugging, verification gates, E2E evidence, security and code review, environment and log access, and hooks that stop risky actions before they happen.
 The `AGENTS.md` and skills also work in any harness that reads them (Codex, Cursor, OpenCode).
+
+**Documentation:** [hephaestus-skills-docs.vercel.app](https://hephaestus-skills-docs.vercel.app) shows the eight components of an agent harness, where every skill and hook acts in the Claude Code lifecycle, the task path, the verification loop, and each skill in full.
+It is built from this repo with `python3 skills/harness-map/scripts/harness_map.py --docs-only <dir> --site-url <url>` and deployed per `.agents/environments.json` (environment `docs`).
 
 ## Install
 
