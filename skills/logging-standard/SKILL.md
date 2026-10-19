@@ -113,13 +113,14 @@ Every line is one JSON object with these fields, as nested objects, never dotted
 
 ## 7. Tests
 
-Every service that logs has these tests, built on the project's real logger factory and its real middleware registration, never a copy:
+Every service that logs has these tests, built on the project's real logger factory, http options, and exception filter classes, never copies of them; a structural test then pins that `main.ts` and the root module register those same pieces.
+A framework that shapes error handling (Nest's exception filter, its body parser) is tested through the framework itself, an app built with `NestFactory` and nestjs-pino, never a hand-written stand-in: stand-ins hid both a missing message and a doubled error line in a real migration.
 
 1. Contract and redaction: capture lines from a destination stream while a real request runs through the app's middleware and a handler logs an object holding a password and an authorization header.
    Assert the secret strings appear in no line, `[REDACTED]` appears, the health probe left no line, and the completion line has every always-required field, the right numeric level, the four `http` keys, and no `req` dump.
-2. Error once: a route that throws an error with a cause and an extra property produces exactly one line at `error` or above, with `error.cause` and no keys beyond the four.
+2. Error once: a route that throws an error with a cause and an extra property produces exactly one line at `error` or above, with a `message`, `error.cause`, and no keys beyond the four; an SDK error carrying a 4xx status keeps its error and stack.
 3. Malformed body: invalid JSON holding a card token and an email gives a 400 and one `warn` line that contains neither.
 4. Job correlation: a job enqueued inside a request logs that request's `request_id` and `tenant_id`.
-5. Proof the guards are mounted: remove the default redaction paths once and watch test 1 fail; make the error handler answer every error as a 500 with the error attached and watch test 3 fail; restore both.
+5. Proof the guards are mounted: break each guard once and watch its test fail, then restore; the list of breaks is in `references/pino-node.md` (Tests), including deleting the filter registration from `main.ts`, which the structural test must catch.
 
 Templates: the `Tests` section of each reference.

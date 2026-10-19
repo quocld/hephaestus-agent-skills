@@ -29,7 +29,7 @@ Before writing "passes", "fixed", "done", or any word that implies it, run the c
 - A caller skill can hand a gate to someone else (`jira-bug-hunter` workers hand gates 5 and 6 to the orchestrator): mark it DEFER with who runs it, and that runner runs the whole gate, `security-pass` and `flow-trace` included.
   No caller can rule a gate out; a user-facing change gets gate 6 whatever the bug's tier.
 - A repo that uses the `no-mistakes` gate: run every gate here first, then hand over to its pipeline for the push, the PR/MR, and CI; its own review is a second opinion.
-  When the pipeline adds commits, sync the branch the way `no-mistakes` says first, treat them as a fix commit (section 2), and update the table in the PR/MR body afterwards (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`); its head is the pipeline's final head.
+  When the pipeline adds commits, sync the branch the way `no-mistakes` says first, treat them as a fix commit (section 2), and update the table in the PR/MR body afterwards (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4); its head is the pipeline's final head.
 - Project checks: `python3 <this skill>/scripts/checks.py match origin/<int>` lists the checks in `.agents/checks/` whose paths the change touches.
 
 ## 2. Gates, in order

@@ -90,7 +90,8 @@ Then commit and push in small steps:
 
 - Small commits at each working step; check `git status` first and stage only files you meant to change.
   Never commit secrets, build output, or local config.
-- Conventional Commit with the ticket id: `fix(billing): [WEST-12] keep paid invoices unlocked`.
+- Conventional Commit with the ticket id: `fix(billing): [WEST-12] keep paid invoices unlocked`, body wrapped at 72 characters (commitlint's conventional config rejects body lines over 100).
+- Temporary helper files a tool needs inside the repo (a local test config, a probe script) are named in your notes and deleted before the commit; everything else goes in the scratchpad.
 - Push after the first commit and keep pushing, so nothing lives only on this machine:
   ```bash
   git push -u origin HEAD
@@ -112,7 +113,11 @@ If the repo uses the no-mistakes gate, run `verify-loop` first, then its pipelin
    gh pr create --base <int> --head <branch> --title "<conventional title>" --body-file <file>
    glab mr create --source-branch <branch> --target-branch <int> --title "<conventional title>" --description "$(cat <file>)" --yes
    ```
-   A missing or unauthenticated CLI is a blocker to report, not a reason to skip the PR/MR.
+   A missing or unauthenticated `gh` is a blocker to report, not a reason to skip the PR.
+   GitLab without `glab` (suggest `! glab auth login` once installed; until then, the existing-MR checks in sections 1 and 6 rely on `git branch -r` and the user, and say so): create the MR with push options on a push that carries commits (options are not sent when nothing is pushed), `git push -u origin HEAD -o merge_request.create -o merge_request.target=<int> -o merge_request.title="<title>"`; push options cannot hold newlines (`merge_request.description` takes one line), so for the full body open a prefilled form for the user, `https://<host>/<group path>/<repo>/-/merge_requests/new?merge_request[source_branch]=<branch>&merge_request[target_branch]=<int>&merge_request[title]=<title>&merge_request[description]=<body>`, every value URL-encoded; past about 8 KB, prefill a short body and paste the rest after creating.
+   The MR does not exist until the user submits the form: report it that way.
+   A draft MR adds `-o merge_request.draft`; updating the body of an existing MR (the `verify-loop` table) becomes a step for the user, handed the new text.
+   Never read a stored git password or credential to call a forge API.
 5. The body says: the ticket or request, what changed and why, how it was verified (the `verify-loop` table, evidence files), risks, and what is deliberately left out.
 
 - Do not merge your own PR/MR unless the user asks.

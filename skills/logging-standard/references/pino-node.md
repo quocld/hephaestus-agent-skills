@@ -66,6 +66,8 @@ export interface LogContext {
   job?: { name: string; id: string; attempt: number };
   /** Set by setRequestOutcome; only the request's completion line reads it. */
   outcome?: { event: string; fields?: Record<string, unknown> };
+  /** When the request entered the context (ms epoch), for a completion line pino-http never wrote; not logged. */
+  started_at?: number;
 }
 
 const storage = new AsyncLocalStorage<LogContext>();
@@ -163,7 +165,9 @@ export function createLogger(opts: CreateLoggerOptions): Logger {
   const options: LoggerOptions = {
     level,
     messageKey: 'message',
-    errorKey: 'error',
+    // `err`, not `error`: pino takes a missing message from obj[errorKey], and Nest (through nestjs-pino)
+    // logs errors as `{ err }` with no message; the formatter below stores it under `error`.
+    errorKey: 'err',
     base: { service: opts.service, env: process.env.APP_ENV ?? 'local', version: process.env.GIT_SHA ?? 'unknown' },
     // `timestamp` is the contract field; `time` (same value) is what @logtail/pino turns into Better Stack's `dt`.
     timestamp: () => {
@@ -173,7 +177,7 @@ export function createLogger(opts: CreateLoggerOptions): Logger {
     serializers: { error: serializeError },
     redact: { paths: [...DEFAULT_REDACT_PATHS, ...(opts.redact ?? [])], censor: '[REDACTED]' },
     formatters: {
-      // `log.error({ err }, ...)` is common muscle memory; store it under `error` like everything else.
+      // `log.error({ err }, ...)`, `log.error(new Error())` and Nest's `{ err }` all end up under `error`.
       log(object) {
         if (object.err !== undefined && object.error === undefined) {
           const { err, ...rest } = object;
@@ -185,7 +189,7 @@ export function createLogger(opts: CreateLoggerOptions): Logger {
     mixin: () => {
       const store = storage.getStore();
       if (!store) return {};
-      const { outcome, ...ctx } = store;
+      const { outcome, started_at, ...ctx } = store;
       return ctx;
     },
     hooks: { streamWrite: capLine },
@@ -251,7 +255,7 @@ export function correlationMiddleware(req: IncomingMessage & { id?: unknown }, r
   const request_id = requestIdFrom(req);
   req.id = request_id;
   res.setHeader('x-request-id', request_id);
-  runWithLogContext({ trace_id: traceIdFrom(req), request_id }, next);
+  runWithLogContext({ trace_id: traceIdFrom(req), request_id, started_at: Date.now() }, next);
 }
 
 /** Headers to send on calls to our own services, so their lines join the same trace. */
@@ -268,9 +272,12 @@ export function setRequestOutcome(event: string, fields?: Record<string, unknown
 
 type Req = IncomingMessage & { id?: unknown; originalUrl?: string; baseUrl?: string; route?: { path?: unknown } };
 
-function route(req: Req): string | undefined {
+function route(req: Req): string {
   // The route template (/invoices/:id), never the raw URL: low cardinality and no ids or tokens from the query string.
-  return typeof req.route?.path === 'string' ? `${req.baseUrl ?? ''}${req.route.path}` : undefined;
+  // Nest mounts middleware as wildcard routes, so a request that reached no controller (404, rejected body) still
+  // carries one; a wildcard counts as unmatched, like no route at all.
+  const path = req.route?.path;
+  return typeof path === 'string' && !path.includes('*') ? `${req.baseUrl ?? ''}${path}` || '/' : 'unmatched';
 }
 
 function http(req: Req, res: ServerResponse, durationMs: number) {
@@ -305,22 +312,45 @@ export function clientErrorStatus(err: unknown): number | undefined {
 }
 
 /**
+ * An expected client error: a 4xx that http-errors marks `expose: true` (`createError(404)`, body-parser's 400/413,
+ * whose message and `body` can quote the raw request). Its warn completion line is the whole story.
+ * An SDK error that carries a 4xx status without `expose` (a rotated Stripe key, a rate limit) is not one: it keeps
+ * its error and stack, so a broken integration does not look like client noise.
+ */
+export function isExpectedClientError(err: unknown): boolean {
+  return clientErrorStatus(err) !== undefined && (err as { expose?: unknown } | null)?.expose === true;
+}
+
+/**
  * Express error handler, registered last.
- * A 4xx error is the client's: answer it and let the completion line log it at warn, without the error object.
- * Anything else is a 500 whose error the completion line logs once.
+ * The completion line logs every error once; an expected client error is logged at warn without the error object.
  */
 export function errorHandler(err: Error, _req: unknown, res: ServerResponse & { err?: Error; headersSent: boolean }, next: (e: Error) => void): void {
   if (res.headersSent) return next(err);
   const status = clientErrorStatus(err);
-  if (status === undefined) res.err = err;
+  if (!isExpectedClientError(err)) res.err = err;
   res.statusCode = status ?? 500;
   res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify({ error: status === undefined ? 'internal_error' : 'invalid_request' }));
 }
+
+/**
+ * Write the completion line for a request pino-http never saw, and return whether it did.
+ * Frameworks that parse the body before pino-http is attached (Nest with its own parser) would otherwise leave a
+ * rejected body with no line at all; an exception filter calls this.
+ */
+export function logCompletionIfMissing(logger: Logger, req: IncomingMessage, res: ServerResponse & { log?: unknown }, error?: unknown): boolean {
+  if (res.log !== undefined) return false;
+  const startedAt = getLogContext()?.started_at;
+  const fields = { request_id: (req as Req).id, http: http(req as Req, res, startedAt === undefined ? 0 : Date.now() - startedAt) };
+  if (res.statusCode >= 500) logger.error({ ...fields, event: EVENT.HTTP_REQUEST_FAILED, err: error }, 'request failed');
+  else logger.warn({ ...fields, event: EVENT.HTTP_REQUEST_COMPLETED }, 'request completed');
+  return true;
+}
 ```
 
 - The completion line is the request's only automatic line: no `req`/`res` dump, so headers, cookies and query strings never reach the sink.
-- The route is the template (`/invoices/:id`), read after routing; unmatched requests have no `route`.
+- The route is the template (`/invoices/:id`), read after routing; a request that matched no route, or only a middleware wildcard, logs `unmatched`.
 - `setRequestOutcome` replaces the completion line's `event` and adds its fields, so an expected 4xx is one `warn` line; select all completion lines by the `http` field, not by event.
 - Health paths are silent; add the project's own probe paths to `HEALTH_PATHS`.
 
@@ -474,28 +504,35 @@ export class AppModule implements NestModule, OnApplicationShutdown {
 ```
 
 ```ts
-// src/log-once.filter.ts - turn exceptions into responses without logging; pino-http's completion line logs them once.
-import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException } from '@nestjs/common';
-import type { Response } from 'express';
-import { STATUS_CODES } from 'node:http';
-import { clientErrorStatus } from './logging/http.js';
+// src/log-once.filter.ts - answer exactly like Nest's default filter, but never log: pino-http's completion line logs each request once.
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { type ArgumentsHost, Catch, HttpException, HttpStatus } from '@nestjs/common';
+import { BaseExceptionFilter } from '@nestjs/core';
+import { PinoLogger } from 'nestjs-pino';
+import { isExpectedClientError, logCompletionIfMissing } from './logging/http.js';
 
 @Catch()
-export class LogOnceExceptionFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost): void {
-    const res = host.switchToHttp().getResponse<Response>();
+export class LogOnceExceptionFilter extends BaseExceptionFilter {
+  override catch(exception: unknown, host: ArgumentsHost): void {
+    const http = host.switchToHttp();
+    const req = http.getRequest<IncomingMessage>();
+    const res = http.getResponse<ServerResponse & { err?: Error; log?: unknown }>();
     if (exception instanceof HttpException) {
-      const body = exception.getResponse();
-      res.status(exception.getStatus()).json(typeof body === 'string' ? { message: body } : body);
+      super.catch(exception, host); // Nest's own response; Nest does not log HttpExceptions
+      logCompletionIfMissing(PinoLogger.root, req, res); // a body Nest's parser rejected, before pino-http was attached
       return;
     }
-    const status = clientErrorStatus(exception); // a parser error such as 413: the client's, not a 500
-    if (status !== undefined) {
-      res.status(status).json({ statusCode: status, message: STATUS_CODES[status] });
-      return;
-    }
-    res.err = exception instanceof Error ? exception : new Error(String(exception)); // pino-http puts it under `error` on the 5xx completion line
-    res.status(500).json({ statusCode: 500, message: 'Internal server error' });
+    const adapter = this.applicationRef ?? this.httpAdapterHost?.httpAdapter;
+    if (!adapter) throw exception;
+    // Same status and body as BaseExceptionFilter.handleUnknownError, without its logger.error call.
+    const body = this.isHttpError(exception)
+      ? { statusCode: exception.statusCode, message: exception.message }
+      : { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Internal server error' };
+    const keepError = !isExpectedClientError(exception); // an exposed 4xx (body-parser, http-errors) is the client's
+    if (keepError) res.err = exception instanceof Error ? exception : new Error(String(exception));
+    if (adapter.isHeadersSent(res)) adapter.end(res);
+    else adapter.reply(res, body, body.statusCode);
+    logCompletionIfMissing(PinoLogger.root, req, res, keepError ? exception : undefined);
   }
 }
 ```
@@ -503,7 +540,7 @@ export class LogOnceExceptionFilter implements ExceptionFilter {
 ```ts
 // src/main.ts
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { LogOnceExceptionFilter } from './log-once.filter.js';
@@ -513,7 +550,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false }); // AppModule mounts the parser
   app.useLogger(app.get(Logger));
   app.use(correlationMiddleware); // before nestjs-pino's middleware, which Nest mounts during init
-  app.useGlobalFilters(new LogOnceExceptionFilter());
+  app.useGlobalFilters(new LogOnceExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
   // process.exit after the hooks fires pino's exit flush; the default re-raises the signal and loses the last lines.
   app.enableShutdownHooks(undefined, { useProcessExit: true });
   await app.listen(Number(process.env.PORT ?? 3000));
@@ -522,10 +559,14 @@ void bootstrap();
 ```
 
 - `app.use(correlationMiddleware)` runs before nestjs-pino's middleware because Nest mounts module middleware during `listen()`.
-- Nest's default exception filter logs unknown exceptions itself, so with pino-http that is two lines per error; `LogOnceExceptionFilter` keeps it to the completion line.
-- A body the parser rejects gets its completion line with the middleware's wildcard (`{/*splat}`) as `route`.
+- Nest's default exception filter logs every exception that is not an `HttpException` (with no message, since it passes only `{ err }`), so with pino-http that is two error lines per 500; `LogOnceExceptionFilter` keeps it to the completion line and answers with exactly Nest's statuses and bodies.
+- An app that needs Nest's own body parser (for example `rawBody: true` to verify webhook signatures) keeps it: no `bodyParser: false` and no `consumer.apply(express.json())`; Nest then turns a rejected body into a `BadRequestException` before pino-http is attached, and the filter's `logCompletionIfMissing` call writes that request's one warn line.
+  Switching an app between the two parser setups touches webhook signature checks: prove a signed webhook still verifies, and run `flow-trace` if it does not.
+- With a global prefix, add the prefixed probe paths (`/api/health`) to `HEALTH_PATHS`.
+- A request that reached no controller logs `route: "unmatched"`.
 - Auth guards call `setLogContext({ tenant_id, user_id })` once the caller is known; a controller or guard names an expected 4xx with `setRequestOutcome` before throwing its `HttpException`.
 - Without `useProcessExit: true` (needs @nestjs/core 11.1.10 or newer), Nest re-raises the signal after its hooks and the last lines are lost from stdout and from Better Stack; this was reproduced, not assumed.
+  On an older Nest, upgrade, or handle SIGTERM yourself: `await app.close()`, then `process.exit(0)`.
 
 ## Workers and queues
 
@@ -708,18 +749,181 @@ test('an oversized line is replaced by a summary, not shipped whole', () => {
   assert.equal(lines[0].event, 'report.built');
   assert.equal(lines[0].blob, undefined);
 });
+
+test('an SDK 4xx keeps its error, an expected 4xx stays warn without it, an unknown path is unmatched', async () => {
+  const { lines, logger } = capture();
+  const app = express();
+  app.use(correlationMiddleware);
+  app.use(pinoHttp(httpLoggerOptions(logger)));
+  app.get('/sync', () => {
+    throw Object.assign(new Error('Invalid API Key provided'), { statusCode: 401, type: 'StripeAuthenticationError' });
+  });
+  app.get('/missing', () => {
+    throw Object.assign(new Error('Not Found'), { status: 404, statusCode: 404, expose: true }); // what http-errors' createError(404) builds
+  });
+  app.use(errorHandler);
+  await serve(app, async (base) => {
+    await fetch(`${base}/sync`);
+    await fetch(`${base}/missing`);
+    await fetch(`${base}/no-such-route`);
+  });
+  await new Promise((r) => setTimeout(r, 50));
+
+  const sync = lines.find((l) => l.http?.route === '/sync');
+  assert.equal(sync?.http.status_code, 401);
+  assert.equal(sync?.error?.message, 'Invalid API Key provided');
+  assert.match(sync?.error?.stack ?? '', /Invalid API Key/);
+  const missing = lines.find((l) => l.http?.route === '/missing');
+  assert.equal(missing?.level, 40, 'an expected 4xx is warn');
+  assert.equal(missing?.error, undefined, 'an expected 4xx carries no error');
+  const unknown = lines.find((l) => l.http?.status_code === 404 && l.http.route === 'unmatched');
+  assert.ok(unknown, 'unknown path not logged as unmatched');
+});
 ```
 
-Break it once before trusting it, as `logging-standard` section 7 test 5 says: empty `DEFAULT_REDACT_PATHS`, then make `errorHandler` answer every error as a 500 with `res.err = err`.
+```ts
+// test/nest-logging.test.ts - run with: node --import tsx --test test/nest-logging.test.ts
+// The tsconfig that covers test/ needs experimentalDecorators, or tsx rejects the parameter decorators.
+// Through the real Nest + nestjs-pino stack with Nest's own body parser (the rawBody case), not a stand-in.
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import { Body, Controller, ForbiddenException, Get, Logger as NestLogger, Module, Post } from '@nestjs/common';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { Logger, LoggerModule } from 'nestjs-pino';
+import { LogOnceExceptionFilter } from '../src/log-once.filter.js';
+import { correlationMiddleware, httpLoggerOptions } from '../src/logging/http.js';
+import { createLogger } from '../src/logging/logger.js';
+
+const lines: Record<string, any>[] = [];
+const logger = createLogger({ service: 'api', destination: { write: (s: string) => { lines.push(JSON.parse(s)); } } });
+
+@Controller()
+class ProbeController {
+  @Get('boom') boom() { throw Object.assign(new Error('charge failed', { cause: new Error('card_declined') }), { config: { headers: { 'x-api-key': 'sk_live_leak' } } }); }
+  @Get('forbidden') forbidden() { throw new ForbiddenException('Wrong workspace'); }
+  @Get('sync') sync() { throw Object.assign(new Error('Invalid API Key provided'), { statusCode: 401 }); }
+  @Post('pay') pay(@Body() _body: unknown) { return { ok: true }; }
+}
+
+@Module({ imports: [LoggerModule.forRoot({ pinoHttp: httpLoggerOptions(logger) })], controllers: [ProbeController] })
+class ProbeModule {}
+
+let base = '';
+let close = async () => {};
+before(async () => {
+  const app = await NestFactory.create(ProbeModule, { bufferLogs: true, rawBody: true }); // Nest's own parser stays
+  app.useLogger(app.get(Logger));
+  app.use(correlationMiddleware);
+  app.useGlobalFilters(new LogOnceExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
+  await app.listen(0, '127.0.0.1');
+  base = await app.getUrl();
+  close = () => app.close();
+});
+after(() => close());
+
+async function call(path: string, init?: RequestInit) {
+  const from = lines.length;
+  const res = await fetch(base + path, init);
+  const body = await res.json().catch(() => undefined);
+  await new Promise((r) => setTimeout(r, 50));
+  return { status: res.status, body, out: lines.slice(from) };
+}
+
+test('a 500 is one error line with a message and the real error, answered like Nest', async () => {
+  const { status, body, out } = await call('/boom');
+  assert.equal(status, 500);
+  assert.deepEqual(body, { statusCode: 500, message: 'Internal server error' });
+  const errors = out.filter((l) => l.level >= 50);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].message, 'request failed');
+  assert.equal(errors[0].error.cause.message, 'card_declined');
+  assert.deepEqual(Object.keys(errors[0].error).sort(), ['cause', 'message', 'stack', 'type']);
+  assert.ok(!JSON.stringify(out).includes('sk_live_leak'), 'extra error property leaked');
+});
+
+test('an HttpException is one warn line with Nest\'s response', async () => {
+  const { status, body, out } = await call('/forbidden');
+  assert.equal(status, 403);
+  assert.equal((body as { message: string }).message, 'Wrong workspace');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].level, 40);
+});
+
+test('an SDK 4xx keeps its error', async () => {
+  const { status, out } = await call('/sync');
+  assert.equal(status, 401);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].error?.message, 'Invalid API Key provided');
+  assert.match(out[0].error?.stack ?? '', /Invalid API Key/);
+});
+
+test('a body Nest\'s parser rejects still gets one warn line, without the body', async () => {
+  const body = '{"cardToken":"tok_live_4242","email":"jane@example.com",';
+  const { status, out } = await call('/pay', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+  assert.equal(status, 400);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].level, 40);
+  assert.equal(out[0].http.route, 'unmatched');
+  const raw = JSON.stringify(out);
+  assert.ok(!raw.includes('tok_live_4242') && !raw.includes('jane@example.com'), 'request body leaked');
+});
+
+test('a request that reached no controller logs as unmatched, not the middleware wildcard', async () => {
+  const { status, out } = await call('/no-such-route');
+  assert.equal(status, 404);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].http.route, 'unmatched');
+});
+
+test('an error logged through the Nest Logger gets a message', async () => {
+  const from = lines.length;
+  new NestLogger('Sync').error(new Error('sync failed'));
+  await new Promise((r) => setTimeout(r, 20));
+  const line = lines.slice(from).find((l) => l.level >= 50);
+  assert.equal(line?.message, 'sync failed');
+});
+```
+
+```ts
+// test/logging-wiring.test.ts - the tests above build their own app; this pins that the real one registers the same pieces.
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+test('main.ts and the root module mount the logging pieces', () => {
+  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  assert.match(main, /app\.use\(correlationMiddleware\)/);
+  assert.match(main, /app\.useGlobalFilters\(new LogOnceExceptionFilter\(/);
+  assert.match(main, /app\.useLogger\(app\.get\(Logger\)\)/);
+  const root = readFileSync(new URL('../src/app.module.ts', import.meta.url), 'utf8');
+  assert.match(root, /LoggerModule\.forRoot\(\{ pinoHttp: httpLoggerOptions\(/);
+});
+```
+
+Break it once before trusting it (`logging-standard` section 7 test 5), each break failing the test named, then restore:
+
+1. Empty `DEFAULT_REDACT_PATHS`: the contract and redaction test fails.
+2. Make `errorHandler` answer every error as a 500 with `res.err = err`: the malformed-body test fails.
+3. Make `isExpectedClientError` always return false: the expected-4xx assertion fails.
+4. Delete `app.useGlobalFilters(...)` from the Nest test's `before()`: the 500-once test fails; delete it from `main.ts`: the wiring test fails.
+5. Delete the `logCompletionIfMissing` call in the filter's `HttpException` branch: the rejected-body Nest test fails.
 
 ## Moving an existing pino logger onto the contract
 
-Projects such as Westmont already have `message`, `error`, ISO `timestamp` plus `time`, numeric `level`, AsyncLocalStorage correlation and a redaction test, so they change in place rather than switching to these files:
+Change in place when the project already has one shared logger factory with AsyncLocalStorage correlation and redaction (Westmont: `message`, `error`, ISO `timestamp` plus `time`, numeric `level`, a redaction test); otherwise adopt the four files above.
+In place means:
 
 1. Add `service`, `env`, `version` through `base`.
 2. Accept `traceparent` and `x-request-id`, validate every inbound id, and return `x-request-id`.
 3. Wrap job processors so worker lines carry the request's ids.
 4. Drop `req`/`res` dumps from request lines, extend the redaction defaults, and serialize errors to the four keys only.
 5. Keep an existing tenant field name only as a declared alias (`logging-standard` section 1).
+6. Set `errorKey: 'err'` and rename to `error` in the log formatter, so Nest's `{ err }` calls get a message.
+   If the logger and pino-http options are spread into one object (nestjs-pino's `pinoHttp: { ...loggerOptions, ...httpOptions }`), the later `serializers` replaces the earlier one, so the http options carry all three: `serializers: { req: () => undefined, res: () => undefined, error: (v) => v }`.
+7. Install `LogOnceExceptionFilter` (NestJS wiring above) and pin its registration with a structural test when the full app needs a database to boot.
+8. Before the PR, grep the repo for readers of the old fields (`req.url`, `responseTime`, `msg`, `name`, `svc`, `req.headers` in docs, project skills, scripts, saved queries) and update them; list Better Stack saved searches, dashboards, and alerts that use them in the PR body, since lines from before the deploy keep the old shape.
+9. Set `APP_ENV` per environment and pass `GIT_SHA` from the deploy's image tag (for example `GIT_SHA: ${IMAGE_TAG:-unknown}` in the compose file); a server `.env` change is the user's step (`environments`), named in the PR body.
+10. A shared logger package is shared infrastructure: follow the project's own rule for announcing such changes.
 
 Changing `level` to labels in such a project breaks scripts that grep numeric levels (Westmont's deploy check greps `"level":(50|60)`); keep it numeric.
