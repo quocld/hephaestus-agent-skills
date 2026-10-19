@@ -183,6 +183,24 @@ def main():
         code, out, page = run(home, project)
         check(code == 0 and bool(page), "hooks null and a dict plugin index of an enabled plugin: no crash")
 
+    # The agent-skills plugin: skills and gates count as installed from it; a legacy link next to it is a duplicate.
+    with tempfile.TemporaryDirectory() as tmp:
+        home, project = Path(tmp) / "home", Path(tmp) / "project"
+        (home / ".claude" / "plugins").mkdir(parents=True)
+        (home / ".claude" / "skills").mkdir()
+        project.mkdir()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        repo = HERE.parents[2]
+        (home / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
+        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps(
+            {"plugins": {"agent-skills@quocld": [{"installPath": str(repo)}]}}))
+        (home / ".claude" / "skills" / "root-cause").symlink_to(repo / "skills" / "root-cause")
+        code, out, page = run(home, project)
+        check(code == 0 and "registered by agent-skills@quocld" in page, "plugin: gates count as registered by the plugin")
+        check("from agent-skills@quocld as /agent-skills:worktree-flow" in page, "plugin: skills count as installed from the plugin")
+        check("skills not installed" not in out, "plugin: no skill reported missing")
+        check("loaded twice" in page, "plugin: a legacy skill link next to the plugin is reported as a duplicate")
+
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:
         with tempfile.TemporaryDirectory() as tmp:

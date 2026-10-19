@@ -52,11 +52,11 @@ In Claude Code (the repo is private, so your GitHub login needs read access to i
 
 ```text
 /plugin marketplace add quocld/agent-skills
-/plugin install agent-skills@agent-skills
+/plugin install agent-skills@quocld
 ```
 
 That brings every skill (namespaced, such as `/agent-skills:harness-map`), the gate hooks, and a `SessionStart` hook that loads `AGENTS.md` into every session and names the path of `OPINIONS.md`; no `~/.claude` file is written.
-Update with `claude plugin marketplace update agent-skills` and `claude plugin update agent-skills@agent-skills`, then restart the session.
+Update with `claude plugin marketplace update quocld` and `claude plugin update agent-skills@quocld`, then restart the session.
 Then ask Claude to "finish my harness setup": `harness-map` checks the rest (tools, logins, project setup) and asks you for what it needs.
 
 Coming from the old `install.sh` links: run `python3 migrate-to-plugin.py` (add `--dry-run` to preview).

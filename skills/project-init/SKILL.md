@@ -94,7 +94,7 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 
 | Check | Command |
 | --- | --- |
-| agent-skills plugin installed | `claude plugin list` shows `agent-skills@agent-skills` enabled; the skills, hooks and global rules all come with it |
+| agent-skills plugin installed | `claude plugin list` shows `agent-skills@quocld` enabled; the skills, hooks and global rules all come with it |
 | Hooks registered and working | `bash <agent-skills plugin or checkout>/hooks/test.sh` passes: it checks the plugin's `hooks.json` mounts every gate and runs the deny and allow probes |
 | Git platform CLI logged in | `gh auth status` or `glab auth status` |
 | Integration branch exists | `git ls-remote --exit-code --heads origin refs/heads/<int>`, with `<int>` from `worktree-flow` section 0 |

@@ -78,7 +78,7 @@ def main():
     print()
     print("Install the plugin in Claude Code, if you have not yet:")
     print("  /plugin marketplace add quocld/agent-skills")
-    print("  /plugin install agent-skills@agent-skills")
+    print("  /plugin install agent-skills@quocld")
 
 
 if __name__ == "__main__":
