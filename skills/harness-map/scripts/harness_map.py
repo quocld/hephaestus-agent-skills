@@ -126,7 +126,35 @@ def collect_global():
                   INSTALL_FIX)]
 
 
-def collect_skills():
+def skill_clashes(project):
+    """{name: [(where, same_text)]} for repo skills whose name another skill already uses: the user's own skills
+    (not links into agent-skills), the project's .claude/skills, or another enabled plugin. Two skills with one name
+    both load by description, so the agent follows whichever it happens to pick."""
+    places = [("~/.claude/skills", CLAUDE / "skills")]
+    if project:
+        places.append((f"{Path(project).name}/.claude/skills", Path(project) / ".claude" / "skills"))
+    settings = load_obj(CLAUDE / "settings.json")
+    installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
+    for pid, on in _dict(settings.get("enabledPlugins")).items():
+        if (on is True or isinstance(on, list)) and pid.split("@")[0] != "agent-skills":
+            root = Path(_str(plugin_entry(installed, pid).get("installPath")))
+            places.append((f"plugin {pid.split('@')[0]}", root / "skills"))
+    out = {}
+    for d in sorted(p for p in SKILLS_DIR.iterdir() if (p / "SKILL.md").exists()):
+        ours = (d / "SKILL.md").read_text(errors="replace")
+        for where, base in places:
+            other = base / d.name
+            if not (other / "SKILL.md").exists() or links_into_agent_skills(other, f"skills/{d.name}"):
+                continue
+            try:
+                same = (other / "SKILL.md").read_text(errors="replace") == ours
+            except OSError:
+                same = False
+            out.setdefault(d.name, []).append((where, same))
+    return out
+
+
+def collect_skills(project=None):
     checks, cards = [], []
     readme = (REPO / "README.md").read_text() if (REPO / "README.md").exists() else ""
     for d in sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()):
@@ -195,6 +223,16 @@ def collect_skills():
     if foreign:
         checks.append(check("Skills", "Other user skills", "info",
                             f"{len(foreign)} skills in ~/.claude/skills not from this repo: " + ", ".join(foreign)))
+    for name, hits in skill_clashes(project).items():
+        differ = [w for w, same in hits if not same]
+        if differ:
+            checks.append(check("Skills", f"{name}: name clash", "warn",
+                                "another skill named " + name + " is active in " + ", ".join(differ)
+                                + "; both load by description, so the agent follows either one",
+                                f"keep the existing {name} and fork ours as hx-{name} (the onboarding prompt does this), or remove one of them"))
+        else:
+            checks.append(check("Skills", f"{name}: duplicate copy", "info",
+                                "an identical copy is also in " + ", ".join(w for w, _ in hits) + "; it loads twice"))
     return checks, cards
 
 
@@ -696,7 +734,7 @@ def tier_of(c):
     if title in OPTIONAL_TITLES or title.endswith(": logs field"):
         return "optional"
     if sec == "Skills":
-        return SKILL_TIER.get(title, "optional")
+        return SKILL_TIER.get(title.split(":")[0], "optional")
     if sec == "Tools":
         return "core" if TOOL_KIND.get(title, "required") == "required" else "optional"
     if sec == "Plugins & MCP":
@@ -963,9 +1001,10 @@ def short_desc(text, limit=155):
 
 def write_docs_site(out_dir, site_url=None, gsc_token=None):
     """The public docs site: no checks, no settings, no paths or host names, so it can be published as is.
-    index.html, one crawlable page per skill under skills/<name>/, sitemap.xml, robots.txt, icon.png, version.json."""
-    from harness_docs import repo_hooks
-    from page import repo_skills, skill_doc
+    index.html, one crawlable page per skill under skills/<name>/, the install guide the onboarding prompt points at
+    (install.md for agents, install/ for people), sitemap.xml, robots.txt, icon.png, version.json."""
+    from harness_docs import ONBOARD_BUTTON, onboard_source, repo_hooks
+    from page import render_markdown, repo_skills, skill_doc
     import shutil as _sh
     site_url = (site_url or "").rstrip("/") or None
     code, sha, _ = run(["git", "-C", str(REPO), "rev-parse", "HEAD"])
@@ -982,8 +1021,9 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
     ld = {"@context": "https://schema.org", "@type": "WebSite", "name": f"{SITE_NAME} Docs", "description": SITE_DESC}
     if site_url:
         ld["url"] = home
-    body = docs_body(repo_hooks(), standalone=True) + skill_sources()
-    page = render_page(title, SITE_NAME, "/ Docs", body, footer, head=seo_head(title, SITE_DESC, home, site_url, gsc_token, ld))
+    body = docs_body(repo_hooks(), standalone=True) + skill_sources() + onboard_source()
+    page = render_page(title, SITE_NAME, "/ Docs", body, footer, ONBOARD_BUTTON,
+                       head=seo_head(title, SITE_DESC, home, site_url, gsc_token, ld))
     (out_dir / "index.html").write_text(page)
 
     urls = [home]
@@ -1003,12 +1043,29 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
             ld.update({"url": url, "isPartOf": {"@type": "WebSite", "name": f"{SITE_NAME} Docs", "url": home}})
         body = (f'<div class="grid skillpage"><nav class="side"><div class="h">Skills</div><a href="../../">All docs</a>{nav}</nav>'
                 f'<div><p class="crumbs"><a href="../../">Docs</a> / <a href="../../#skill-reference">Skills</a> / {esc(d.name)}</p>'
-                f'<section class="card"><div class="rbody">{doc[0]}{doc[1]}</div></section></div></div>')
-        page = render_page(ptitle, SITE_NAME, f"/ Docs / {d.name}", body, footer,
+                f'<section class="card"><div class="rbody">{doc[0]}{doc[1]}</div></section></div></div>' + onboard_source())
+        page = render_page(ptitle, SITE_NAME, f"/ Docs / {d.name}", body, footer, ONBOARD_BUTTON,
                            head=seo_head(ptitle, desc, url, site_url, gsc_token, ld))
         (out_dir / "skills" / d.name).mkdir(parents=True, exist_ok=True)
         (out_dir / "skills" / d.name / "index.html").write_text(page)
         urls.append(url)
+
+    guide = (SKILL / "assets" / "install-guide.md").read_text()
+    (out_dir / "install.md").write_text(guide)
+    gtitle, gdesc = f"Install {SITE_NAME} | {SITE_NAME}", f"How a coding agent installs {SITE_NAME} without overwriting the harness it already has."
+    url = f"{site_url}/install/" if site_url else ""
+    ld = {"@context": "https://schema.org", "@type": "HowTo", "name": f"Install {SITE_NAME}", "description": gdesc}
+    if site_url:
+        ld["url"] = url
+    body = ('<div class="grid skillpage"><nav class="side"><div class="h">Install</div><a href="../">All docs</a>'
+            '<a href="../install.md">install.md (for agents)</a></nav>'
+            f'<div><p class="crumbs"><a href="../">Docs</a> / Install</p>'
+            f'<section class="card"><div class="rbody">{render_markdown(guide)}</div></section></div></div>' + onboard_source())
+    page = render_page(gtitle, SITE_NAME, "/ Docs / Install", body, footer, ONBOARD_BUTTON,
+                       head=seo_head(gtitle, gdesc, url, site_url, gsc_token, ld))
+    (out_dir / "install").mkdir(parents=True, exist_ok=True)
+    (out_dir / "install" / "index.html").write_text(page)
+    urls.append(url)
 
     icon = REPO / "assets" / "icon.png"
     if icon.exists():
@@ -1020,7 +1077,7 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
         (out_dir / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?>\n'
                                              f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n')
     (out_dir / "version.json").write_text(json.dumps({"sha": sha, "version": version}) + "\n")
-    print(f"Docs site {version}: {out_dir / 'index.html'} + {len(urls) - 1} skill pages (commit {sha[:12]})"
+    print(f"Docs site {version}: {out_dir / 'index.html'} + {len(urls) - 2} skill pages + install guide (commit {sha[:12]})"
           + ("" if site_url else "; no --site-url, so no canonical links or sitemap"))
     return 0
 
@@ -1078,7 +1135,7 @@ def main():
     probe = not a.no_probe
 
     checks = collect_global()
-    sk, cards = collect_skills()
+    sk, cards = collect_skills(project)
     checks += sk
     checks += collect_hooks(probe)
     pc, registry = collect_project(project)
