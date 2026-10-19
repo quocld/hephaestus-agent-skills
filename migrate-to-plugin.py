@@ -62,7 +62,7 @@ def main():
               "(grep -rl agent-skills-hooks), then remove this link by hand.")
     print()
     print("Install the plugin in Claude Code, if you have not yet:")
-    print("  /plugin marketplace add quocld/agent-skills")
+    print("  /plugin marketplace add quocld/hephaestus-agent-skills")
     print("  /plugin install agent-skills@quocld")
 
 

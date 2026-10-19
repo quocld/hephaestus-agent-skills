@@ -72,7 +72,7 @@ def same_repo(a, b):
 
 # ---------------------------------------------------------------- collectors
 
-INSTALL_FIX = "/plugin marketplace add quocld/agent-skills, then /plugin install agent-skills@quocld"
+INSTALL_FIX = "/plugin marketplace add quocld/hephaestus-agent-skills, then /plugin install agent-skills@quocld"
 MIGRATE_FIX = "python3 migrate-to-plugin.py (from the agent-skills plugin folder or any clone)"
 LEGACY = [("~/.claude/CLAUDE.md -> AGENTS.md", CLAUDE / "CLAUDE.md", "AGENTS.md"),
           ("~/OPINIONS.md -> OPINIONS.md", HOME / "OPINIONS.md", "OPINIONS.md"),
@@ -780,7 +780,7 @@ def pillar_status(checks):
 
 
 SETUP_PROMPT = """Check my agent harness and finish setting it up, one step at a time, with the harness-map skill's setup flow (section 3 of its SKILL.md).
-If the harness-map skill is not available, tell me to install the agent-skills plugin first (/plugin marketplace add quocld/agent-skills, then /plugin install agent-skills@quocld) and stop.
+If the harness-map skill is not available, tell me to install the agent-skills plugin first (/plugin marketplace add quocld/hephaestus-agent-skills, then /plugin install agent-skills@quocld) and stop.
 
 1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
 2. Go through the gaps in order: this machine first (install, hooks, secrets, tools and logins), then this project (project-init, then environments), core before optional.

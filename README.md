@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://hephaestus-skills-docs.vercel.app"><strong>Docs</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#skills">Skills</a> ·
   <a href="#hooks">Hooks</a> ·
@@ -22,12 +23,14 @@
 It gives every session the same rules (`AGENTS.md`), one git worktree per task, root-cause debugging, verification gates, E2E evidence, security and code review, environment and log access, and hooks that stop risky actions before they happen.
 The `AGENTS.md` and skills also work in any harness that reads them (Codex, Cursor, OpenCode).
 
+**Documentation:** [hephaestus-skills-docs.vercel.app](https://hephaestus-skills-docs.vercel.app) shows the eight components of an agent harness, where every skill and hook acts in the Claude Code lifecycle, the task path, the verification loop, and each skill in full.
+
 ## Install
 
 In Claude Code:
 
 ```text
-/plugin marketplace add quocld/agent-skills
+/plugin marketplace add quocld/hephaestus-agent-skills
 /plugin install agent-skills@quocld
 ```
 
