@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Write the harness docs page: the harness wheel, where each skill and hook sits in the Claude Code lifecycle, and the task path.
-
-Skill placement comes from assets/lifecycle.json; hooks are read live from settings and enabled plugins.
-Read-only, like harness_map.py. Usage: python3 harness_docs.py [--out FILE] [--open]
+"""The Docs tab of the harness map page: where each skill and hook sits in the Claude Code lifecycle, the task path,
+and reference tables. Skill placement comes from assets/lifecycle.json; hooks are read live from settings and enabled
+plugins. harness_map.py renders it next to the dashboard in one HTML file.
 """
 from __future__ import annotations
 
-import argparse
-import datetime as dt
 import re
-import socket
-import sys
 from pathlib import Path
 
-from page import CLAUDE, PILLARS, REPO, SKILL, esc, icon, load_json, pillar_cards, render_page, repo_skills, run, short, wheel_svg
+from page import CLAUDE, SKILL, esc, icon, load_json, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -161,7 +156,7 @@ def lifecycle_svg(hooks):
         p.append(f'<rect x="{MX}" y="{y}" width="{MW}" height="{NODE_H}" rx="8" fill="{fill}" stroke="{stroke}" stroke-width="1.2"/>')
         p.append(text(MX + MW / 2, y + 25, label, "node", "middle", f'style="fill:{ink}"'))
 
-        chips = chips_for(r, HOOKS)
+        chips = chips_for(r, hooks)
         if chips:
             lines = chip_rows(chips, CX, CR)
             top = y + NODE_H / 2 - (len(lines) * 22 - 4) / 2
@@ -299,36 +294,32 @@ def card(id_, ic, title, desc, inner):
             f'<span class="desc">{esc(desc)}</span></div>{inner}</section>')
 
 
-def render(hooks, version, now):
+def unplaced_skills():
+    """Repo skills missing from assets/lifecycle.json, and entries there with no such skill."""
+    names = {d.name for d, _ in repo_skills()}
+    return sorted(names - set(LIFE["skills"])), sorted(set(LIFE["skills"]) - names)
+
+
+def docs_body(hooks):
+    """Body of the Docs tab: KPIs, lifecycle map, task path, skill reference, hooks table."""
     skills = repo_skills()
     meta = {d.name: fm for d, fm in skills}
-    unmapped = [n for n in meta if n not in LIFE["skills"]]
-    stale = [n for n in LIFE["skills"] if n not in meta]
-    _, sha, _ = run(["git", "-C", str(REPO), "log", "-1", "--format=%h"])
+    unmapped, _ = unplaced_skills()
     ours = sorted({n for _, _, k, n, _ in hooks if k == "gate"})
     plugins = sorted({n for _, _, k, n, _ in hooks if k == "plugin"})
 
     h = [DOC_CSS]
-    h.append(f'<div class="hero"><div><div class="eyebrow">Harness docs {esc(version)}</div><h1>How this harness is built</h1>'
-             '<p class="sub">The eight components of an agent harness and what this repo puts in each, the Claude Code lifecycle '
-             'redrawn with every skill and hook, and the path a normal task takes through them.</p>'
-             f'<div class="meta"><span>Generated <b>{now}</b></span><span>Repo <b class="mono">{esc(short(REPO))}</b></span>'
-             f'<span>Commit <b class="mono">{esc(sha.strip())}</b></span></div></div></div>')
+    h.append(f'<div class="hero"><div><div class="eyebrow">Harness docs {esc(LIFE["version"])}</div><h1>How this harness is built</h1>'
+             '<p class="sub">The Claude Code lifecycle redrawn with every skill and hook, the path a normal task takes through them, '
+             'and what loads each skill. The eight components live on the Dashboard wheel.</p></div></div>')
     h.append('<div class="kpis">' + "".join(
         f'<div class="stat"><div class="n">{n}</div><div class="l"><span class="dot {c}"></span>{esc(l)}</div></div>'
         for n, c, l in [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
                         (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")]) + '</div>')
 
-    nav = [("wheel", "Harness wheel"), ("lifecycle", "Lifecycle map"), ("path", "Task path"),
-           ("skills", "Skill reference"), ("hooks", "Hooks wired")]
+    nav = [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
     h.append('<div class="grid"><nav class="side"><div class="h">Docs</div>' +
              "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in nav) + '</nav><div>')
-
-    wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
-                 f'<span class="mono" style="font-size:11px;color:var(--muted)">{len(pl["covered_by"].get("skills", []))} skills</span></a>'
-                 for pl in PILLARS)
-    h.append(card("wheel", "Skills", "Harness wheel", "The eight components of an agent harness; hover or tap a slice for what it covers",
-                  f'<div class="wheelwrap">{wheel_svg()}<div class="wlist">{wl}</div></div>{pillar_cards()}'))
 
     legend = ('<div class="legend">'
               '<span><i class="sw" style="background:var(--accent-soft);outline:1px solid var(--accent-text)"></i>skill</span>'
@@ -354,47 +345,15 @@ def render(hooks, version, now):
         rows.append(f'<tr><td class="mono">{esc(n)}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
     for n in unmapped:
         rows.append(f'<tr><td class="mono">{esc(n)}</td><td colspan="4"><span class="chip warn">not placed in assets/lifecycle.json yet</span></td></tr>')
-    h.append(card("skills", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act",
+    h.append(card("skill-reference", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act",
                   '<div style="overflow-x:auto"><table class="t"><tr><th>Skill</th><th>Tier</th><th>Loads</th><th>Lifecycle</th><th>When</th></tr>'
                   + "".join(rows) + '</table></div>'))
 
     hrows = "".join(
         f'<tr><td>{esc(ev)}</td><td class="mono">{esc(m)}</td><td><span class="chip {"bad" if k == "gate" else ""}">{esc(n)}</span></td><td>{esc(src)}</td></tr>'
         for ev, m, k, n, src in sorted(hooks, key=lambda r: (r[0], r[2] != "gate", r[3])))
-    h.append(card("hooks", "Hooks", "Hooks wired", "Read live from ~/.claude settings and enabled plugins",
+    h.append(card("hooks-wired", "Hooks", "Hooks wired", "Read live from ~/.claude settings and enabled plugins",
                   '<div style="overflow-x:auto"><table class="t"><tr><th>Event</th><th>Matcher</th><th>Hook</th><th>From</th></tr>'
                   + (hrows or '<tr><td colspan="4">No hooks registered.</td></tr>') + '</table></div>'))
     h.append('</div></div>')
-    footer = (f'Harness docs {esc(version)}, generated by <span class="mono">skills/harness-map/scripts/harness_docs.py</span> '
-              'from <span class="mono">assets/lifecycle.json</span> and live settings. Re-run to refresh.')
-    return render_page(f"Harness Docs {version}", "Harness Docs", f"/ {version}", "".join(h), footer), unmapped, stale
-
-
-HOOKS = []
-
-
-def main():
-    global HOOKS
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--out", default=str(CLAUDE / "harness-docs.html"))
-    ap.add_argument("--open", action="store_true", help="open the page in the default browser")
-    a = ap.parse_args()
-
-    HOOKS = live_hooks()
-    page, unmapped, stale = render(HOOKS, LIFE["version"], dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
-    out = Path(a.out).expanduser()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(page)
-    print(f"Harness docs {LIFE['version']}: {out}")
-    print(f"{len(LIFE['skills']) - len(stale)} skills placed, {len(HOOKS)} hooks wired on {socket.gethostname().split('.')[0]}")
-    if unmapped:
-        print("Not placed in assets/lifecycle.json: " + ", ".join(unmapped))
-    if stale:
-        print("In assets/lifecycle.json but no such skill: " + ", ".join(stale))
-    if a.open:
-        run(["open" if sys.platform == "darwin" else "xdg-open", str(out)])
-    sys.exit(1 if unmapped or stale else 0)
-
-
-if __name__ == "__main__":
-    main()
+    return "".join(h)

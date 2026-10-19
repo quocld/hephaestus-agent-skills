@@ -1,4 +1,4 @@
-"""Shared paths, helpers and the page template for harness-map's generators (harness_map.py, harness_docs.py)."""
+"""Shared paths, helpers and the page template for the harness map page (harness_map.py, with its Docs tab from harness_docs.py)."""
 from __future__ import annotations
 
 import html

@@ -150,6 +150,9 @@ box-shadow:0 24px 56px -12px rgba(16,16,40,.32),0 4px 14px rgba(16,16,40,.1);ani
 .envempty{position:relative}
 .envempty .eo{margin:0 18px 18px;padding:14px 16px;border-radius:10px;background:var(--accent-soft);color:var(--text-2);font-size:13px}
 .envempty .eo p{margin:6px 0 10px}
+body:not([data-tab="docs"]) .pane[data-pane="docs"],body[data-tab="docs"] .pane[data-pane="dash"]{display:none}
+body[data-tab="docs"] .seg[aria-label="Filter"]{display:none}
+.seg.tabs button{font-size:12.5px;padding:5px 12px}
 .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .tierblock{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:4px}
 .tierblock.core{border-top:3px solid var(--accent)}.tierblock.optional{border-top:3px solid var(--neutral)}
@@ -188,6 +191,7 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
 .wpop .wclose{display:none}
 @media (hover:none){.wpop{left:8px!important;right:8px;top:auto!important;bottom:8px;width:auto;max-height:60vh}
 .wpop .wclose{display:grid;position:sticky;top:0;float:right;width:28px;height:28px;place-items:center;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);color:var(--text);font-size:16px;cursor:pointer}}
+@media (max-width:640px){.seg[aria-label="Filter"]{display:none}}
 @media (max-width:900px){.facts{grid-template-columns:1fr}.card>.hd{flex-wrap:wrap}.card>.hd h2{white-space:nowrap}.card>.hd .desc{flex-basis:100%;order:3}.wheelwrap{grid-template-columns:1fr}.tiers{grid-template-columns:1fr}.trow{grid-template-columns:12px 110px 1fr 40px}.crumb,.seg[aria-label="Theme"]{display:none}.grid{grid-template-columns:1fr}nav.side{display:none}.stats{grid-template-columns:repeat(2,1fr)}
 .hero{grid-template-columns:1fr}.row{grid-template-columns:1fr;gap:4px}.wrap{padding:0 16px}h1{font-size:28px}}
 </style>
@@ -219,6 +223,23 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   document.querySelectorAll('.copy').forEach(function(b){b.onclick=function(){
     var t=b.previousElementSibling.textContent;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1200)},function(){b.textContent='Select'});}});
+  // Tabs: Dashboard and Docs share one page. The hash decides the tab: #docs, or any id inside the docs pane.
+  var docsPane=document.querySelector('.pane[data-pane="docs"]');
+  function setTab(t){
+    document.body.dataset.tab=t;
+    document.querySelectorAll('[data-tab]').forEach(function(b){if(b.tagName==='BUTTON')b.setAttribute('aria-pressed',String(b.dataset.tab===t))});
+  }
+  function fromHash(){
+    var id=decodeURIComponent(location.hash.slice(1)), el=id&&document.getElementById(id);
+    setTab(id==='docs'||(el&&docsPane&&docsPane.contains(el))?'docs':'dash');
+    if(el)el.scrollIntoView(); else if(id==='docs')scrollTo(0,0);
+  }
+  if(docsPane){
+    document.querySelectorAll('button[data-tab]').forEach(function(b){b.onclick=function(){
+      setTab(b.dataset.tab); history.replaceState(null,'',b.dataset.tab==='docs'?'#docs':location.pathname+location.search); scrollTo(0,0);
+    }});
+    addEventListener('hashchange',fromHash); fromHash();
+  }
   // Harness wheel popover: hover or focus a slice or list row, tap on touch, Escape or tap outside to close.
   var pop=document.getElementById('wpop'), hideT=null, cur=null;
   function mark(id){document.querySelectorAll('[data-pillar]').forEach(function(x){x.classList.toggle('on',x.dataset.pillar===id)})}

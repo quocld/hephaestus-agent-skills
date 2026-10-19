@@ -8,19 +8,18 @@ user-invocable: true
 # harness-map
 
 Setup gaps hide in many places at once: links install.sh never made, hooks not registered, CLIs a skill needs, plugins, secrets in settings, a project without its agent block.
-This skill renders two HTML pages from one template: a live dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel, the project facts and every environment from `.agents/environments.json`) and the harness docs (the wheel's definitions, the Claude Code lifecycle with every skill and hook placed on it, the task path).
+This skill renders one HTML page with two tabs: Dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel, the project facts and every environment from `.agents/environments.json`) and Docs (the Claude Code lifecycle with every skill and hook placed on it, the task path, skill and hook reference).
 
 ## 1. Generate
 
 ```bash
-python3 ~/.claude/skills/harness-map/scripts/harness_map.py --open    # dashboard -> ~/.claude/harness-map.html
-python3 ~/.claude/skills/harness-map/scripts/harness_docs.py --open   # docs -> ~/.claude/harness-docs.html
+python3 ~/.claude/skills/harness-map/scripts/harness_map.py --open    # -> ~/.claude/harness-map.html
 ```
 
-Run the dashboard for "what is missing" questions and the docs for "how does it fit together" questions; run both when unsure.
+The page opens on Dashboard; `#docs` (or any docs section, such as `#lifecycle`) opens the Docs tab.
 
 - It checks the git repo of the current directory as the project; pass `--project <dir>` for another one. Outside a git repo the Project section is skipped.
-- Either page goes elsewhere with `--out <file>`.
+- The page goes elsewhere with `--out <file>`.
 - `--no-probe` skips `hooks/test.sh` and `gh auth status` when the user wants it instant or offline.
 - The skill list comes from the checkout the script runs from, and fix commands point at the main checkout's `install.sh`.
 
@@ -29,7 +28,7 @@ The script is read-only, never prints a secret value (only the key name, and for
 ## 2. Report
 
 Print the path of the HTML file, the core and optional readiness, and the numbered "Fix first" list from the script's stdout, in that order; core items first.
-For the docs, print the path and any skill the script says is not placed in `assets/lifecycle.json` (it exits 1 then).
+Also print any skill the script says is not placed in `assets/lifecycle.json`; the Skills section flags it too.
 Do not retype the whole report; the page holds the detail.
 
 ## 3. Fixing
@@ -49,14 +48,14 @@ When asked, take the list from the top and route each item to its owner:
 
 Re-run the script (with `--open` only if the user wants the page again) and show the new score.
 
-## 4. Changing the pages
+## 4. Changing the page
 
 | Change | Where |
 | --- | --- |
 | A new skill in the repo | `assets/lifecycle.json`: its `tier` (core or optional), lifecycle `events`, task-path steps in `path` (setup, prompt, gather, act, verify, retry, response, remember), `when`; and the pillar(s) it serves in `assets/pillars.json` |
 | A gap closed or found in one of the eight components | `gaps` of that pillar in `assets/pillars.json` |
 | A new check | One collector per section in `scripts/harness_map.py`; a CLI goes in `TOOLS`; a new section also needs `DESCS` and an icon in `scripts/page.py` |
-| Look and feel | `assets/template.html` only; both pages render through `render_page` in `scripts/page.py` |
+| Look and feel | `assets/template.html` only; the page renders through `render_page` in `scripts/page.py`; the Docs tab body comes from `scripts/harness_docs.py` |
 
 A core item is one every session depends on; optional only matters for some skills, stacks or habits (`tier_of` in `harness_map.py`).
 Keep pages self-contained (inline CSS and JS, Google Fonts with system fallbacks) and every color on the `:root` tokens, which follow the SpecsGraph design system v2.
