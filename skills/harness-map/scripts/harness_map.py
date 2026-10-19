@@ -209,7 +209,7 @@ def collect_hooks(probe):
     cmds = [_str(h.get("command")) for src in (settings, local)
             for e in _dicts(_dict(src.get("hooks")).get("PreToolUse")) for h in _dicts(e.get("hooks"))]
     plugin_hooks = (PLUGIN_DIR / "hooks" / "hooks.json").read_text() if PLUGIN_DIR and (PLUGIN_DIR / "hooks" / "hooks.json").exists() else ""
-    for script in ("no-em-dash.py", "guard-protected-branches.py"):
+    for script in ("no-em-dash.py", "guard-protected-branches.py", "feature-status-guard.py"):
         src = REPO / "hooks" / script
         if not src.exists():
             out.append(check("Hooks", script, "info", "not in this checkout of the repo"))
@@ -575,6 +575,17 @@ def project_facts(project):
     return facts
 
 
+def feature_status_fact(project):
+    """Whether the repo tracks features with feature-status, read from the working tree (never a remote call)."""
+    status = Path(project) / "docs" / "status"
+    agents = Path(project) / "AGENTS.md"
+    named = agents.exists() and "feature-status" in agents.read_text(errors="ignore")
+    files = sorted(f for f in status.glob("*.md") if f.name.lower() != "readme.md") if status.is_dir() else []
+    if status.is_dir() or named:
+        return f"opted in: {len(files)} feature file(s) in `docs/status/`"
+    return "not used (feature-status; project-init offers the opt-in)"
+
+
 def inline_code(text):
     return re.sub(r"`([^`]+)`", r'<code>\1</code>', esc(text))
 
@@ -590,7 +601,8 @@ def env_panel(project, registry):
     checks_ = sorted((Path(project) / ".agents" / "checks").glob("*.md"))
     head = [("Repository", short(project)), ("Remote", (remote.strip() or "none") + f" ({platform})"),
             ("Current branch", branch.strip() or "detached"),
-            ("Project checks", f"{len(checks_)} in `.agents/checks/`" if checks_ else "none in `.agents/checks/` (verify-loop)")]
+            ("Project checks", f"{len(checks_)} in `.agents/checks/`" if checks_ else "none in `.agents/checks/` (verify-loop)"),
+            ("Feature status", feature_status_fact(project))]
     facts = project_facts(project)
     kv = "".join(f'<div class="kv"><span>{esc(k)}</span><b>{inline_code(v)}</b></div>' for k, v in head + facts)
     block = (kv if facts else kv + '<div class="kvempty">No project-init block yet: integration branch, tracker, commands, '

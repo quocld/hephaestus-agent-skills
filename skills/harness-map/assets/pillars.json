@@ -48,7 +48,8 @@
       ],
       "covered_by": {
         "files": [
-          "Agent and Workflow tools (ask first)"
+          "Agent and Workflow tools (ask first)",
+          "docs/status/<ID>.md states (feature-status)"
         ],
         "skills": [
           "worktree-flow",
@@ -57,12 +58,13 @@
           "bug-triage",
           "ask-or-decide",
           "gnhf",
-          "jira-bug-hunter"
+          "jira-bug-hunter",
+          "feature-status"
         ],
         "sections": []
       },
       "gaps": [
-        "No shared timeout or retry budget across skills; verify-loop owns the gate order, each skill still states its own stop rule."
+        "No shared timeout or retry budget across skills; feature-status tracks each feature's state, but each skill still states its own stop rule."
       ]
     },
     {
@@ -141,7 +143,7 @@
       ],
       "covered_by": {
         "files": [
-          "hooks: no-em-dash, guard-protected-branches",
+          "hooks: no-em-dash, guard-protected-branches, feature-status-guard",
           ".agents/checks/ project checks"
         ],
         "skills": [
@@ -174,11 +176,13 @@
       "principle": "Không đồng nhất memory với context window: context là những gì agent đang nhìn thấy; memory/state là thông tin có thể lưu lại và truy xuất ở các lần chạy sau.",
       "covered_by": {
         "files": [
+          "docs/status/<ID>.md per feature, claimed on the remote",
           "worktree resume file",
           "~/.claude memory",
           "PR/MR as the shared record"
         ],
         "skills": [
+          "feature-status",
           "stow",
           "worktree-flow"
         ],
