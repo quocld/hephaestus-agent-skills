@@ -1001,9 +1001,10 @@ def short_desc(text, limit=155):
 
 def write_docs_site(out_dir, site_url=None, gsc_token=None):
     """The public docs site: no checks, no settings, no paths or host names, so it can be published as is.
-    index.html, one crawlable page per skill under skills/<name>/, sitemap.xml, robots.txt, icon.png, version.json."""
+    index.html, one crawlable page per skill under skills/<name>/, the install guide the onboarding prompt points at
+    (install.md for agents, install/ for people), sitemap.xml, robots.txt, icon.png, version.json."""
     from harness_docs import ONBOARD_BUTTON, onboard_source, repo_hooks
-    from page import repo_skills, skill_doc
+    from page import render_markdown, repo_skills, skill_doc
     import shutil as _sh
     site_url = (site_url or "").rstrip("/") or None
     code, sha, _ = run(["git", "-C", str(REPO), "rev-parse", "HEAD"])
@@ -1049,6 +1050,23 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
         (out_dir / "skills" / d.name / "index.html").write_text(page)
         urls.append(url)
 
+    guide = (SKILL / "assets" / "install-guide.md").read_text()
+    (out_dir / "install.md").write_text(guide)
+    gtitle, gdesc = f"Install {SITE_NAME} | {SITE_NAME}", f"How a coding agent installs {SITE_NAME} without overwriting the harness it already has."
+    url = f"{site_url}/install/" if site_url else ""
+    ld = {"@context": "https://schema.org", "@type": "HowTo", "name": f"Install {SITE_NAME}", "description": gdesc}
+    if site_url:
+        ld["url"] = url
+    body = ('<div class="grid skillpage"><nav class="side"><div class="h">Install</div><a href="../">All docs</a>'
+            '<a href="../install.md">install.md (for agents)</a></nav>'
+            f'<div><p class="crumbs"><a href="../">Docs</a> / Install</p>'
+            f'<section class="card"><div class="rbody">{render_markdown(guide)}</div></section></div></div>' + onboard_source())
+    page = render_page(gtitle, SITE_NAME, "/ Docs / Install", body, footer, ONBOARD_BUTTON,
+                       head=seo_head(gtitle, gdesc, url, site_url, gsc_token, ld))
+    (out_dir / "install").mkdir(parents=True, exist_ok=True)
+    (out_dir / "install" / "index.html").write_text(page)
+    urls.append(url)
+
     icon = REPO / "assets" / "icon.png"
     if icon.exists():
         _sh.copy(icon, out_dir / "icon.png")
@@ -1059,7 +1077,7 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
         (out_dir / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?>\n'
                                              f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n')
     (out_dir / "version.json").write_text(json.dumps({"sha": sha, "version": version}) + "\n")
-    print(f"Docs site {version}: {out_dir / 'index.html'} + {len(urls) - 1} skill pages (commit {sha[:12]})"
+    print(f"Docs site {version}: {out_dir / 'index.html'} + {len(urls) - 2} skill pages + install guide (commit {sha[:12]})"
           + ("" if site_url else "; no --site-url, so no canonical links or sitemap"))
     return 0
 

@@ -298,6 +298,7 @@ def main():
         check("root-cause: duplicate copy" in page and "root-cause: name clash" not in page, "existing harness: an identical copy is only a duplicate")
 
     # The onboarding prompt has one source (assets/onboard-prompt.md); the README and the docs site carry it verbatim.
+    # It stays one line that points at the install guide, which the docs site publishes as is.
     prompt = (HERE.parent / "assets" / "onboard-prompt.md").read_text().strip()
     readme = (HERE.parents[2] / "README.md").read_text()
     check(prompt in readme and "## Onboard your agent" not in readme
@@ -308,6 +309,12 @@ def main():
         site = (Path(tmp) / "index.html").read_text() if (Path(tmp) / "index.html").exists() else ""
         import html as _html
         skill_page = (Path(tmp) / "skills" / "root-cause" / "index.html").read_text()
+        guide = (HERE.parent / "assets" / "install-guide.md").read_text()
+        check(len(prompt.splitlines()) == 1 and "https://hephaestus-skills-docs.vercel.app/install.md" in prompt,
+              "onboard prompt: one line pointing at the published install guide")
+        check((Path(tmp) / "install.md").exists() and (Path(tmp) / "install.md").read_text() == guide
+              and "hx-&lt;name&gt;" in (Path(tmp) / "install" / "index.html").read_text(),
+              "install guide: the docs site serves it raw at install.md and as a page at install/")
         check('data-open="onboard-src"' in site and 'id="onboard-src"' in site and _html.escape(prompt, quote=True) in site
               and 'data-open="onboard-src"' in skill_page, "onboard prompt: a header button on every docs page opens it")
 
