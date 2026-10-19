@@ -49,7 +49,7 @@ Clone the repo to `~/.hephaestus-skills` (or `git pull` it if it is already ther
 
 - **Global rules:** load the clone's `AGENTS.md` as your global instructions. Add a reference to it in your global instructions file or setting; never overwrite a file that already has content.
 - **Skills:** make every `skills/<name>/SKILL.md` available the way your harness loads skills, using the `hx-` forks from step 3 where names clash. If your harness has no skills feature, add one line per skill (name, description, path) to your instructions and read a skill's `SKILL.md` before any task its description matches.
-- **Hooks:** `hooks/` holds Claude Code hooks (no em dash in writes, ask before pushing or merging to protected branches). Wire them only if your harness has an equivalent pre-tool hook; otherwise tell the user those rules stay advisory.
+- **Hooks:** `hooks/` holds Claude Code hooks (no em dash on changed lines, ask before pushing or merging to protected branches). Wire them only if your harness has an equivalent pre-tool hook; otherwise tell the user those rules stay advisory.
 
 ## 6. Ask before you change
 

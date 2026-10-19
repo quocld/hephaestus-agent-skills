@@ -65,12 +65,12 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | --- | --- | --- |
 | `feature-status` | One status file per feature in `docs/status/`, claimed on the remote before the worktree exists and edited only by its script: states, per-AC test tiers with E2E evidence, board. | `python3`; `gh` or `glab` for `board --live` |
 | `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |
-| `feature-build` | Implement a feature or user story end to end: gaps, exploration, design options, verify, PR. Lean per-technology notes for Next.js, React, Vercel, Supabase, NestJS. | - |
+| `feature-build` | Implement a feature or user story end to end in an S, M or L lane sized from the change: gaps, exploration, design options, verify, PR. Lean per-technology notes for Next.js, React, Vercel, Supabase, NestJS. | - |
 | `root-cause` | Find the cause before fixing: failing layer, backward trace, 3-failed-fixes stop, flaky tests, polluter bisection. | - |
-| `verify-loop` | One ordered chain of gates before any PR (toolchain, project checks, proof tests, requirements, review, E2E) with a PASS/FAIL table. | - |
+| `verify-loop` | One ordered chain of gates before any PR (toolchain, project checks, proof tests, requirements, review, E2E) with a PASS/FAIL table; a lighter gate set for docs, config and copy-only changes, and targeted reruns after a fix. | - |
 | `fresh-review` | Independent review by a fresh subagent before a PR, looped until clean. | - |
 | `e2e-verify` | Strict "verified" definition for acceptance criteria in a real browser, with evidence files. | Playwright MCP or chrome-devtools-axi |
-| `security-pass` | Per-PR security pass for Next.js/Supabase multi-tenant apps: RLS, service role, route auth, tenant isolation. | - |
+| `security-pass` | Per-PR security pass for any stack: authz on every entry point, tenant isolation, IDOR, secrets, injection; Next.js/Supabase specifics (RLS, service role). | - |
 | `flow-trace` | Trace one business lifecycle end to end: one-way-door states, unhandled events, broken idempotency. | - |
 | `bug-triage` | Bug/QA ticket loop: classify, depth by risk, prove the test, verify the deploy, hand back. | Jira access |
 | `jira-bug-hunter` | Work assigned Jira bugs one at a time: fix, review, merge into `dev`, verify with video, daily HTML demo report. | Jira, Playwright MCP, `environments` |
@@ -80,7 +80,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | `logging-standard` | Structured log contract: fields, levels, correlation, errors, redaction, volume, tests. | - |
 | `betterstack-logs` | Better Stack log setup per project and reading an environment's logs while debugging. | Better Stack MCP |
 | `harness-map` | One HTML page: setup dashboard, ranked fix list, and a lifecycle map of every skill and hook. | python3 |
-| `project-init` | Set up a repo for this plugin: AGENTS.md block, environment registry, version endpoint, tool doctor. | - |
+| `project-init` | Set up a repo for this plugin: AGENTS.md block, environment registry, version endpoint, and a read-only doctor script. | - |
 | `ask-or-decide` | When to decide autonomously vs. ask, and how to ask. | - |
 | `knowledge-placement` | Where a new rule or fact belongs; keeps AGENTS.md lean; how to write a skill. | - |
 | `stow` | Save durable knowledge from a session before a reset or break. | - |
@@ -94,8 +94,8 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | Hook | Does |
 | --- | --- |
 | `session-start.py` | Loads `AGENTS.md` into every session and points to `OPINIONS.md`. |
-| `no-em-dash.py` | Blocks writes that contain an em dash. |
-| `feature-status-guard.py` | In repos that use `feature-status`: denies hand edits of `docs/status/*.md`, a feature branch or worktree with no claim (or a second branch for a claimed ticket), and a PR/MR whose status file is not `in-review`. |
+| `no-em-dash.py` | Blocks writes that add an em dash on a line they change. |
+| `feature-status-guard.py` | In repos that use `feature-status`: denies hand edits of `docs/status/*.md`, a ticket-id branch or worktree with no claim (or a second branch for a claimed ID), and a PR/MR from a ticket-id or claimed branch whose status file is not `in-review`. |
 | `guard-protected-branches.py` | Asks before (or denies, in no-prompt modes) pushes and merges to `main`, `staging`, `prod` and PR/MR merges. |
 
 Details and tests: [`hooks/README.md`](hooks/README.md).
@@ -108,6 +108,8 @@ Details and tests: [`hooks/README.md`](hooks/README.md).
 | `OPINIONS.md` | Engineering and product viewpoints, read by agents when relevant. |
 | `skills/` | One folder per skill (`SKILL.md` plus scripts and references). |
 | `hooks/` | Gate hooks, registered by `hooks/hooks.json`. |
+| `evals/` | Red/green scenarios, near misses and reader tests per skill (`evals/README.md`). |
+| `.github/` | CI: skill reference check, hook and script tests, em dash scan. |
 | `.claude-plugin/` | Plugin manifest and the marketplace that serves it from this repo. |
 | `assets/` | Logo (`icon.svg`, `icon.png`). |
 | `SOURCES.md`, `LICENSES/` | Upstream sources and their licenses. |
@@ -115,6 +117,7 @@ Details and tests: [`hooks/README.md`](hooks/README.md).
 ## Adding a skill
 
 Follow `skills/knowledge-placement` first, create `skills/<name>/SKILL.md` with `name` and `description` frontmatter, and place it in `skills/harness-map/assets/lifecycle.json`.
+Run `python3 .github/scripts/check_skill_refs.py` after renaming a skill or renumbering a section.
 `.claude-plugin/plugin.json` has no `version` on purpose: the commit SHA is the version, so every pushed commit reaches users through `claude plugin update`.
 
 ## References

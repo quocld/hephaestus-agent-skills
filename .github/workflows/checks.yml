@@ -1,0 +1,86 @@
+# On every PR and every push to a branch other than main: cross-skill references, the hook and script test suites,
+# and no em dash added to tracked Markdown or Python. Release and docs deploy stay in release.yml (main only).
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      # hooks/test.sh and test_status.sh build throwaway repos under $TMPDIR, which the runner leaves unset.
+      TMPDIR: ${{ runner.temp }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Users' hooks run under the system python3 (3.9 on macOS), so 3.9 stays the floor: both are installed, the last
+      # one is the default python3, and python3.9 on PATH is what test_harness_map.py's old-version check picks up.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.9
+            3.12
+
+      - name: Hooks and scripts compile under Python 3.9
+        run: python3.9 -m py_compile hooks/*.py .github/scripts/*.py skills/*/scripts/*.py
+
+      - name: Git identity for the throwaway test repos
+        run: |
+          git config --global user.name checks
+          git config --global user.email checks@example.invalid
+          git config --global init.defaultBranch main
+
+      - name: Cross-skill references resolve
+        run: |
+          python3 .github/scripts/check_skill_refs.py --self-test
+          python3 .github/scripts/check_skill_refs.py
+
+      - name: Hook tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          HOME="$RUNNER_TEMP/home" bash hooks/test.sh
+
+      - name: feature-status tests
+        run: bash skills/feature-status/scripts/test_status.sh
+
+      - name: harness-map tests
+        run: python3 skills/harness-map/scripts/test_harness_map.py
+
+      - name: project-init doctor tests
+        run: python3 skills/project-init/scripts/test_doctor.py
+
+      - name: No em dash added to tracked Markdown or Python
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            base="$PR_BASE"
+          else
+            base="$(git merge-base origin/main HEAD)"
+          fi
+          em="$(printf '\342\200\224')"
+          hits="$(git diff -U0 --no-color --diff-filter=ACMR "$base"...HEAD -- '*.md' '*.py' | awk -v em="$em" '
+            /^diff --git / { head = 1; next }
+            head && /^\+\+\+ / { file = substr($0, 7); next }
+            /^@@ / { head = 0; split($3, a, ","); line = substr(a[1], 2) + 0; next }
+            head { next }
+            /^\+/ { if (index($0, em)) print file ":" line ": " substr($0, 2); line++ }
+          ')"
+          if [ -n "$hits" ]; then
+            echo "Added lines contain an em dash (U+2014); use a plain \"-\" instead:"
+            echo "$hits"
+            exit 1
+          fi
+          echo "no em dash added since $base"

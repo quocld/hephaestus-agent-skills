@@ -251,7 +251,10 @@ def main():
         check(all(f'id="skill-src-{n}"' in page for n in names), f"skill reader: all {len(names)} SKILL.md files are in the page")
         check('data-skill="worktree-flow"' in page and '<g class="skl" data-skill="worktree-flow"' in page,
               "skill reader: names in tables and chips in diagrams open the skill")
-        phrase = "Every task gets its own worktree and branch"
+        # A plain sentence from the skill's own body, so editing that skill's wording does not break this test.
+        body = (repo / "skills" / "worktree-flow" / "SKILL.md").read_text().split("---", 2)[-1].splitlines()
+        phrase = next((ln.strip()[:40] for ln in body if len(ln.strip()) > 40 and ln.strip()[0].isalpha()
+                       and not re.search(r"[`*_\[\]<>&|\"']", ln)), "worktree-flow")
         check(phrase in page, "skill reader: a skill's body text is readable in the page")
         check('id="reader"' in page and "openSkill" in page, "skill reader: the reader panel and its script are mounted")
         ids = re.findall(r'\bid="([^"]+)"', page)

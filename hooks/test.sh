@@ -2,6 +2,8 @@
 # Pipe allow, ask and deny payloads through every hook, then check that settings.json registers them.
 # Exits non-zero on any mismatch. Builds its own throwaway repos and never touches a remote.
 set -euo pipefail
+# An inherited GIT_DIR or GIT_WORK_TREE would point the throwaway git commands below at a real repo.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
 HOOKS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
@@ -110,8 +112,42 @@ raw_case no-em-dash.py deny  'MultiEdit with em dash' '{"tool_name":"MultiEdit",
 raw_case no-em-dash.py deny  'NotebookEdit with em dash' '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"a.ipynb","new_source":"# a EMDASH b"}}'
 raw_case no-em-dash.py allow 'Write with plain dash' '{"tool_name":"Write","tool_input":{"file_path":"a.md","content":"a - b"}}'
 raw_case no-em-dash.py allow 'Edit removing an em dash' '{"tool_name":"Edit","tool_input":{"file_path":"a.md","old_string":"aEMDASHb","new_string":"a - b"}}'
+# only changed lines count: an exact line already in old_string, the existing file or notebook passes
+python3 - "$TMP/em.md" "$TMP/em.ipynb" <<'PY'
+import json, sys
+em = chr(8212)
+open(sys.argv[1], "w").write(f"keep a {em} b\nplain\n")
+json.dump({"cells": [{"cell_type": "markdown", "source": [f"# a {em} b\n", "x"]}]}, open(sys.argv[2], "w"))
+PY
+raw_case no-em-dash.py allow 'Write keeps unchanged em-dash lines of an existing file' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TMP/em.md\",\"content\":\"keep a EMDASH b\\nplain edited\\n\"}}"
+raw_case no-em-dash.py allow 'Write, relative path resolved from cwd' "{\"tool_name\":\"Write\",\"cwd\":\"$TMP\",\"tool_input\":{\"file_path\":\"em.md\",\"content\":\"new\\nkeep a EMDASH b\\n\"}}"
+raw_case no-em-dash.py deny  'Write adds a new em-dash line to an existing file' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TMP/em.md\",\"content\":\"keep a EMDASH b\\nnew EMDASH line\\n\"}}"
+raw_case no-em-dash.py deny  'Write changes an em-dash line and keeps the dash' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TMP/em.md\",\"content\":\"keep a EMDASH c\\nplain\\n\"}}"
+raw_case no-em-dash.py deny  'Write of a new file with an em dash' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TMP/new-em.md\",\"content\":\"keep a EMDASH b\"}}"
+raw_case no-em-dash.py allow 'Edit repeats an unchanged em-dash line of old_string' '{"tool_name":"Edit","tool_input":{"file_path":"a.md","old_string":"keep a EMDASH b\nplain","new_string":"keep a EMDASH b\nplain edited"}}'
+raw_case no-em-dash.py deny  'Edit changes an em-dash line and keeps the dash' '{"tool_name":"Edit","tool_input":{"file_path":"a.md","old_string":"keep a EMDASH b","new_string":"kept a EMDASH b"}}'
+raw_case no-em-dash.py deny  'Edit adds an em-dash line next to an unchanged one' '{"tool_name":"Edit","tool_input":{"file_path":"a.md","old_string":"keep a EMDASH b","new_string":"keep a EMDASH b\nnew EMDASH"}}'
+raw_case no-em-dash.py allow 'MultiEdit whose edits keep unchanged em-dash lines' '{"tool_name":"MultiEdit","tool_input":{"file_path":"a.md","edits":[{"old_string":"a EMDASH b\nx","new_string":"a EMDASH b\ny"},{"old_string":"p","new_string":"q"}]}}'
+raw_case no-em-dash.py deny  'MultiEdit judges each edit against its own old_string' '{"tool_name":"MultiEdit","tool_input":{"file_path":"a.md","edits":[{"old_string":"a EMDASH b","new_string":"a EMDASH b"},{"old_string":"y","new_string":"a EMDASH b"}]}}'
+raw_case no-em-dash.py allow 'NotebookEdit keeps an em-dash line of an existing cell' "{\"tool_name\":\"NotebookEdit\",\"tool_input\":{\"notebook_path\":\"$TMP/em.ipynb\",\"new_source\":\"# a EMDASH b\\ny\"}}"
+raw_case no-em-dash.py deny  'NotebookEdit adds an em-dash line' "{\"tool_name\":\"NotebookEdit\",\"tool_input\":{\"notebook_path\":\"$TMP/em.ipynb\",\"new_source\":\"# c EMDASH d\"}}"
+raw_case no-em-dash.py deny  'Write over an unreadable path checks the new text in full' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TMP\",\"content\":\"keep a EMDASH b\"}}"
 raw_case no-em-dash.py allow 'bad JSON fails open' 'not json'
 raw_case no-em-dash.py allow 'non-object JSON fails open' '[1]'
+# When the changed-line check itself raises, the fallback checks every new text line by line, MultiEdit edits included.
+if python3 -I - "$HOOKS/no-em-dash.py" <<'PY'
+import importlib.util, io, json, sys, contextlib
+spec = importlib.util.spec_from_file_location("hook", sys.argv[1]); hook = importlib.util.module_from_spec(spec); spec.loader.exec_module(hook)
+def boom(*a): raise RuntimeError("boom")
+bad = "bad " + chr(8212) + " line"
+hook.changed_em_dash_lines = boom
+sys.stdin = io.StringIO(json.dumps({"tool_input": {"edits": [{"old_string": "x", "new_string": "ok\n" + bad}]}}))
+out = io.StringIO()
+with contextlib.redirect_stdout(out): hook.main()
+reason = json.loads(out.getvalue())["hookSpecificOutput"]["permissionDecisionReason"]
+sys.exit(0 if reason.startswith("1 line(s)") and repr(bad) in reason else 1)
+PY
+then echo "ok   deny  fallback checks MultiEdit edits line by line"; else echo "FAIL fallback checks MultiEdit edits line by line"; FAIL=1; fi
 
 echo "== permission modes and per-repo opt-out"
 mode_case deny  "$FEAT" bypassPermissions 'git push origin main'
@@ -176,6 +212,11 @@ git -C "$FS_SEED" push -q origin dev:refs/heads/claim/WEST-2 dev:refs/heads/clai
 git -C "$FS_SEED" switch -q -c claim-20 dev
 status_md WEST-20 picked feat/WEST-20-real > "$FS_SEED/docs/status/WEST-20.md"
 git -C "$FS_SEED" add -A && git -C "$FS_SEED" commit -q -m pick20 && git -C "$FS_SEED" push -q origin claim-20:refs/heads/claim/WEST-20
+# a slug ID picked without a ticket: claim/csv-export and its branch fix/csv-export, state picked
+git -C "$FS_SEED" switch -q -c fix/csv-export dev
+status_md csv-export picked fix/csv-export > "$FS_SEED/docs/status/csv-export.md"
+git -C "$FS_SEED" add -A && git -C "$FS_SEED" commit -q -m pick-csv
+git -C "$FS_SEED" push -q origin fix/csv-export fix/csv-export:refs/heads/claim/csv-export
 # clone E whose origin is unreachable: the hook must decide from local refs without touching the network
 FS_E="$TMP/fs-e"
 git clone -q "$FS_ORIGIN" "$FS_E"
@@ -297,13 +338,24 @@ fs_bash deny  "$FS_A" "git worktree add -b feat/WEST-1-again ../wt9 origin/dev"
 fs_bash deny  "$FS_A" "git worktree add -b feat/WEST-1-done ../wt9 origin/dev"
 fs_bash allow "$FS_A" "git worktree add --no-track -b feat/WEST-12-landed ../wt12 origin/dev"
 fs_bash deny  "$FS_E" "git worktree add -b feat/WEST-9-new ../wt9 origin/dev"
-fs_bash deny  "$FS_A" "git worktree add -b feat/dark-modes-toggle ../wt9 origin/dev"
+# a slug-only branch with no claim is a small no-ticket change, out of scope for rules 2 and 3
+fs_bash allow "$FS_A" "git worktree add -b feat/dark-modes-toggle ../wt9 origin/dev"
+fs_bash allow "$FS_A" "git worktree add -b fix/csv-typo ../wt9 origin/dev"
+fs_bash allow "$DET"  "git switch -c docs/readme-typo origin/dev"
+fs_bash allow "$DET"  "git checkout -b docs/readme-typo origin/dev"
+# a ticket branch with no claim is still denied
+fs_bash deny  "$FS_A" "git worktree add -b fix/WEST-30-typo ../wt9 origin/dev"
+fs_bash deny  "$DET"  "git switch -c docs/WEST-30-readme origin/dev"
 # claims pushed after A was cloned are seen only after a fetch: the hook reads local refs, never the network
 fs_bash deny  "$FS_A" "git worktree add -b feat/WEST-2-claimed ../wt2 origin/dev"
 git -C "$FS_A" fetch -q origin
 fs_bash allow "$FS_A" "git worktree add -b feat/WEST-2-claimed ../wt2 origin/dev"
 fs_bash allow "$FS_A" "git worktree add -fb feat/WEST-2-claimed ../wt2 origin/dev"
 fs_bash allow "$FS_A" "git worktree add -b feat/dark-mode-toggle ../wt9 origin/dev"
+# a slug branch WITH a claim is still judged: one ID, one branch
+fs_bash deny  "$FS_A" "git worktree add -b fix/csv-export-v2 ../wtc origin/dev"
+fs_bash deny  "$DET"  "git switch -c feat/csv-export origin/dev"
+fs_bash allow "$FS_A" "git worktree add -b fix/csv-export ../wtc origin/fix/csv-export"
 # a claim that names another branch does not cover a new branch for the same ID (read from the local claim ref)
 fs_bash deny  "$FS_A" "git worktree add -b feat/WEST-20-other ../wt20 origin/dev"
 fs_bash deny  "$FS_A" "git worktree add -b fix/WEST-20 ../wt20 origin/dev"
@@ -378,6 +430,14 @@ fs_bash deny  "$WT5"  'cd $(git rev-parse --show-toplevel) && gh pr create --fil
 fs_bash allow "$WT6"  'cd "$(git rev-parse --show-toplevel)" && gh pr create --fill'
 fs_bash allow "$TMP/plain-wt" 'cd "$SOMEWHERE" && gh pr create --base main --fill'
 fs_bash allow "$FS_A" "gh pr list --search WEST-5"
+# rule 3 judges a slug branch only when it has a claim
+git -C "$FS_A" worktree add -q -b docs/readme-typo "$TMP/fs-wt-typo" origin/dev
+git -C "$FS_A" worktree add -q -b fix/csv-export "$TMP/fs-wt-csv" origin/fix/csv-export
+fs_bash allow "$TMP/fs-wt-typo" "gh pr create --base dev --fill"
+fs_bash allow "$TMP/fs-wt-typo" "glab mr create --target-branch dev --fill"
+fs_bash allow "$FS_A" "gh pr create --base dev --head docs/readme-typo --fill"
+fs_bash deny  "$TMP/fs-wt-csv" "gh pr create --base dev --fill"
+fs_bash allow "$TMP/fs-wt-csv" "gh pr create --base dev --fill --draft"
 FEATURE_STATUS_SCRIPT="$STUB_BAD" fs_bash deny  "$WT6" "gh pr create --base dev --fill"
 FEATURE_STATUS_SCRIPT="$STUB_BAD" fs_bash allow "$WT6" "gh pr create --base dev --fill --draft"
 FEATURE_STATUS_SCRIPT="$TMP/absent.py" fs_bash allow "$WT6" "gh pr create --base dev --fill"

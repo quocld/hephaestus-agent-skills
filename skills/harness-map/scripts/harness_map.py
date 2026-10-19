@@ -268,7 +268,9 @@ def collect_hooks(probe):
     if not probe:
         out.append(check("Hooks", "hooks/test.sh probes", "skip", "skipped (--no-probe)"))
     elif test.exists():
-        code, so, se = run(["bash", str(test)], timeout=90)
+        # The test builds throwaway repos; an inherited GIT_DIR or GIT_WORK_TREE would point its git calls at a real one.
+        clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")}
+        code, so, se = run(["bash", str(test)], timeout=90, env=clean)
         fails = [ln for ln in (so + se).splitlines() if ln.startswith("FAIL") or "WARN" in ln]
         if code == 0:
             n = sum(1 for ln in so.splitlines() if ln.startswith("ok"))
@@ -290,7 +292,7 @@ def collect_tools(probe, registry, project):
     reg_text = json.dumps(registry) if registry else ""
     remote = run(["git", "-C", str(project), "remote", "get-url", "origin"])[1] if project else ""
     # Missing CLIs that only matter when the project or registry uses them stay informational.
-    needed = {"glab": "gitlab" in remote, "op": "op://" in reg_text,
+    needed = {"glab": "gitlab" in remote, "op": "op://" in reg_text or secrets_use_op(project),
               "vercel": "vercel" in reg_text.lower(), "supabase": "supabase" in reg_text.lower()}
     for name, kind, used_by, fix in TOOLS:
         path = shutil.which(name)
@@ -317,6 +319,16 @@ def collect_tools(probe, registry, project):
             out.append(check("Tools", "gh auth", "ok", "logged in as " + (", ".join(sorted(set(acct))) or "unknown")))
         else:
             out.append(check("Tools", "gh auth", "fail", "gh is not logged in or the token expired", "! gh auth login"))
+    # Logins and subcommands the project or registry needs; status only, never an account token.
+    compose = '"composeproject"' in reg_text.lower() or "docker compose" in reg_text.lower()
+    for title, used, cmd, fix in (("glab auth", needed["glab"], ["glab", "auth", "status"], "! glab auth login"),
+                                  ("vercel login", needed["vercel"], ["vercel", "whoami"], "! vercel login"),
+                                  ("op sign-in", needed["op"], ["op", "whoami"], "! eval $(op signin)"),
+                                  ("docker compose", compose, ["docker", "compose", "version"], "install Docker Desktop (brew install --cask docker)")):
+        if used and probe and shutil.which(cmd[0]):
+            code, _, _ = run(cmd, timeout=20)
+            out.append(check("Tools", title, "ok" if code == 0 else "fail",
+                             f"`{' '.join(cmd)}` " + ("passes" if code == 0 else f"exits {code}"), "" if code == 0 else fix))
     return out, rows
 
 
@@ -325,7 +337,35 @@ def uses_betterstack(registry):
                for e in env_map(registry).values() for s_ in e.get("services", []))
 
 
-def collect_plugins(project=None, registry=None):
+AXI_PROBE = ["npx", "-y", "--prefer-offline", "chrome-devtools-axi", "--help"]
+
+
+def git_batch_env():
+    """Environment for a git call that reaches origin: it fails instead of waiting for a password or a host-key prompt."""
+    return dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_SSH_COMMAND="ssh -o BatchMode=yes")
+
+
+def betterstack_connection(probe):
+    """The Better Stack MCP row from `claude mcp list`: ok only on a Connected line."""
+    cmd = "claude mcp list"
+    if not probe:
+        return check("Plugins & MCP", "Better Stack MCP", "skip", "configured; connection not probed (--no-probe)", cmd)
+    if not shutil.which("claude"):
+        return check("Plugins & MCP", "Better Stack MCP", "skip", "configured; the claude CLI is not on PATH to probe it", cmd)
+    so = run(cmd.split(), timeout=60)[1]
+    line = next((ln for ln in so.splitlines() if re.match(r"^(plugin:betterstack:)?betterstack(-ro)?:", ln)), "")
+    if "Connected" in line:
+        return check("Plugins & MCP", "Better Stack MCP", "ok", "connected (betterstack-logs)")
+    if "Needs authentication" in line:
+        return check("Plugins & MCP", "Better Stack MCP", "fail", "added but not signed in (betterstack-logs section 1)",
+                     "/mcp, select betterstack and sign in")
+    return check("Plugins & MCP", "Better Stack MCP", "fail",
+                 "`claude mcp list` shows it failing to connect" if line else "`claude mcp list` does not list it",
+                 "/mcp to reconnect, or re-add it per betterstack-logs section 1")
+
+
+def collect_plugins(project=None, registry=None, probe=False, deep=False):
+    """deep (the project-init doctor only) also runs `claude mcp list` and the npx browser-tool probe."""
     out, plugins = [], []
     settings = load_obj(CLAUDE / "settings.json") or {}
     enabled = _dict(settings.get("enabledPlugins"))
@@ -367,8 +407,11 @@ def collect_plugins(project=None, registry=None):
     else:
         out.append(check("Plugins & MCP", "Jira access", "warn", "no Atlassian MCP and no JIRA_* variables; bug-triage and jira-bug-hunter cannot read tickets",
                          "claude mcp add --transport http --scope user atlassian https://mcp.atlassian.com/v1/sse"))
-    if "betterstack" in names:
-        out.append(check("Plugins & MCP", "Better Stack MCP", "ok", "available for betterstack-logs"))
+    if "betterstack" in names and not deep:
+        out.append(check("Plugins & MCP", "Better Stack MCP", "ok", "configured for betterstack-logs (connection not probed)"))
+    elif "betterstack" in names:
+        # Only `claude mcp list` tells a connected server from a failed one or one still waiting for its OAuth sign-in.
+        out.append(betterstack_connection(probe))
     elif uses_betterstack(registry):
         out.append(check("Plugins & MCP", "Better Stack MCP", "missing", "the registry names Better Stack log sources but no Better Stack MCP is connected",
                          "! claude mcp add --transport http --scope user betterstack https://mcp.betterstack.com"))
@@ -376,9 +419,14 @@ def collect_plugins(project=None, registry=None):
         out.append(check("Plugins & MCP", "Better Stack MCP", "info", "not connected; needed only once a project ships logs to Better Stack (betterstack-logs)"))
     if any("playwright" in n.lower() for n in mcp_names):
         out.append(check("Plugins & MCP", "Browser tool for e2e-verify", "ok", "Playwright MCP is available (first choice)"))
+    elif shutil.which("npx") and deep and not probe:
+        out.append(check("Plugins & MCP", "Browser tool for e2e-verify", "skip",
+                         "no Playwright MCP; the chrome-devtools-axi fallback was not probed (--no-probe)", " ".join(AXI_PROBE)))
     elif shutil.which("npx"):
-        out.append(check("Plugins & MCP", "Browser tool for e2e-verify", "warn",
-                         "no Playwright MCP; e2e-verify falls back to chrome-devtools-axi through npx",
+        code = run(AXI_PROBE, timeout=120)[0] if deep else 0
+        out.append(check("Plugins & MCP", "Browser tool for e2e-verify", "warn" if code == 0 else "fail",
+                         "no Playwright MCP; e2e-verify falls back to chrome-devtools-axi through npx" +
+                         ("" if code == 0 else f", and `{' '.join(AXI_PROBE)}` exits {code}"),
                          "claude mcp add playwright -- npx -y @playwright/mcp@latest"))
     else:
         out.append(check("Plugins & MCP", "Browser tool for e2e-verify", "missing", "no Playwright MCP and no npx",
@@ -427,7 +475,14 @@ def collect_hygiene():
     return out
 
 
-def collect_project(project):
+def integration_branch(registry):
+    """(<int>, True when the registry names it): the dev environment's branch, else dev (worktree-flow section 0)."""
+    named = env_map(registry).get("dev", {}).get("branch") if isinstance(registry, dict) else None
+    return (named, True) if named else ("dev", False)
+
+
+def collect_project(project, probe=False, deep=False):
+    """deep (the project-init doctor only) asks origin itself for the integration branch instead of the fetched refs."""
     sec = "Project"
     out, registry = [], None
     if not project:
@@ -477,20 +532,28 @@ def collect_project(project):
         if f.exists():
             todos += [f"{f.name}:{i}" for i, ln in enumerate(f.read_text().splitlines(), 1) if "TODO(" in ln]
     if todos:
-        out.append(check(sec, "Open TODO(owner)", "warn", ", ".join(todos[:8]), "answer them and re-run project-init"))
+        out.append(check(sec, "Open TODO(owner)", "warn", ", ".join(todos), "answer them and re-run project-init"))
 
-    int_branch = None
-    if isinstance(registry, dict):
-        int_branch = env_map(registry).get("dev", {}).get("branch") or None
-    code, so, _ = run(["git", "-C", str(p), "branch", "-r", "--format=%(refname:short)"])
-    remote = set(so.split())
-    cand = int_branch or "dev"
-    if f"origin/{cand}" in remote:
-        out.append(check(sec, "Integration branch", "ok", f"origin/{cand} exists" + ("" if int_branch else " (default dev)")))
+    cand, named = integration_branch(registry)
+    has_origin = run(["git", "-C", str(p), "remote", "get-url", "origin"])[0] == 0
+    if not has_origin:
+        code, where = 2, "(the repo has no origin remote)"
+    elif deep and probe:   # the remote itself, as worktree-flow section 0 asks; otherwise the fetched refs
+        code = run(["git", "-C", str(p), "ls-remote", "--exit-code", "--heads", "origin", f"refs/heads/{cand}"],
+                   timeout=20, env=git_batch_env())[0]
+        where = "on origin"
     else:
+        so = run(["git", "-C", str(p), "branch", "-r", "--format=%(refname:short)"])[1]
+        code, where = (0 if f"origin/{cand}" in so.split() else 2), "in fetched refs"
+    if code == 0:
+        out.append(check(sec, "Integration branch", "ok", f"origin/{cand} exists" + ("" if named else " (default dev)")))
+    elif code == 2:
         out.append(check(sec, "Integration branch", "missing",
-                         f"origin/{cand} not found in fetched refs; worktree-flow will stop and ask where PRs go",
+                         f"origin/{cand} not found {where}; worktree-flow will stop and ask where PRs go",
                          "project-init asks which branch PRs go into and records it (the dev environment's branch in .agents/environments.json)"))
+    else:
+        out.append(check(sec, "Integration branch", "fail", f"git ls-remote origin exits {code}: origin is unreachable or needs a login",
+                         "! gh auth login (GitHub) or ! glab auth login (GitLab), then rerun"))
 
     _, url, _ = run(["git", "-C", str(p), "remote", "get-url", "origin"])
     if strip_userinfo(url.strip())[1]:
@@ -550,6 +613,12 @@ def secret_names(project):
         return set()
     return {ln.split("=", 1)[0].removeprefix("export ").strip() for ln in f.read_text().splitlines()
             if "=" in ln and not ln.lstrip().startswith("#")}
+
+
+def secrets_use_op(project):
+    """Whether .agents/secrets.env holds an op:// reference; only that text is looked for, no value is kept."""
+    f = Path(project) / ".agents" / "secrets.env" if project else None
+    return bool(f and f.exists() and "op://" in f.read_text(errors="ignore"))
 
 
 def secret_state(ref, known):
@@ -724,7 +793,7 @@ CMD = re.compile(r"^(~|/|!|\$|(brew|npm|npx|bash|echo|rm|claude|corepack|git|gh|
 # Core = every session depends on it; optional = only some skills, stacks or habits need it.
 OPTIONAL_TITLES = {"Legacy install.sh links", "~/OPINIONS.md -> OPINIONS.md", "Other user skills", "settings.json backups",
                    "Bypass-permissions prompt skipped", "Playwright config", "Open TODO(owner)", "Repository",
-                   "Project checks (verify-loop)"}
+                   "Project checks (verify-loop)", "vercel login", "op sign-in", "docker compose"}
 CORE_PLUGIN_TITLES = {"Browser tool for e2e-verify"}
 TOOL_KIND = {name: kind for name, kind, _, _ in TOOLS}
 
@@ -1112,7 +1181,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--project", help="git repo to check (default: the current directory if it is one, else skipped)")
     ap.add_argument("--out", default=str(CLAUDE / "harness-map.html"))
-    ap.add_argument("--no-probe", action="store_true", help="skip hooks/test.sh and gh auth status")
+    ap.add_argument("--no-probe", action="store_true", help="skip hooks/test.sh and the login status checks (gh, glab, vercel, op)")
     ap.add_argument("--open", action="store_true", help="open the report in the default browser")
     ap.add_argument("--prompt", action="store_true", help="print only the setup prompt (still writes the page)")
     ap.add_argument("--version", help="release version to show (default: newest v* tag, else dev)")
@@ -1138,10 +1207,10 @@ def main():
     sk, cards = collect_skills(project)
     checks += sk
     checks += collect_hooks(probe)
-    pc, registry = collect_project(project)
+    pc, registry = collect_project(project, probe)
     tc, _ = collect_tools(probe, registry, project)
     checks += tc
-    plc, plugins = collect_plugins(project, registry)
+    plc, plugins = collect_plugins(project, registry, probe)
     checks += plc + collect_hygiene() + pc
     for c in checks:
         c["tier"] = tier_of(c)
