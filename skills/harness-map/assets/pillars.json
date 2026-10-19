@@ -143,8 +143,9 @@
       ],
       "covered_by": {
         "files": [
-          "hooks: no-em-dash, guard-protected-branches, feature-status-guard",
-          ".agents/checks/ project checks"
+          "hooks: no-em-dash (changed lines only), guard-protected-branches, feature-status-guard (ticket-id or claimed branches)",
+          ".agents/checks/ project checks",
+          ".github/workflows/checks.yml: skill references, hook and script tests on every PR"
         ],
         "skills": [
           "verify-loop",
@@ -241,7 +242,8 @@
         "files": [
           ".agents/checks/ (rules learned from repeated bugs)",
           "hooks/test.sh",
-          "red/green skill tests"
+          "evals/<skill>.md: red/green scenarios, near misses, reader-test questions",
+          "check_skill_refs.py: every cross-skill section reference resolves (CI)"
         ],
         "skills": [
           "verify-loop",
@@ -251,7 +253,7 @@
         "sections": []
       },
       "gaps": [
-        "No benchmark task set with expected outcomes; skill red/green tests are run by hand, not kept as a suite."
+        "No benchmark task set with expected outcomes; evals/ keeps the skill scenarios, but red/green runs are by hand and their results are not tracked."
       ]
     }
   ]
