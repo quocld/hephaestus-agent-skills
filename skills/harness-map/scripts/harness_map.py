@@ -8,37 +8,18 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import html
 import json
 import os
 import re
 import shutil
 import socket
-import subprocess
 import sys
 from pathlib import Path
 
-HOME = Path.home()
-CLAUDE = Path(os.environ.get("CLAUDE_DIR", HOME / ".claude"))
-REPO = Path(__file__).resolve().parents[3]
-SKILLS_DIR = REPO / "skills"
+from page import (CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+                  load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
-
-def _main_checkout():
-    """The repo's main worktree, so fix commands never point at a throwaway task worktree."""
-    try:
-        so = subprocess.run(["git", "-C", str(REPO), "worktree", "list", "--porcelain"], capture_output=True, text=True, timeout=10).stdout
-        first = so.split("\n", 1)[0]
-        return Path(first[len("worktree "):]) if first.startswith("worktree ") else REPO
-    except (OSError, subprocess.TimeoutExpired):
-        return REPO
-
-
-MAIN = _main_checkout()
-
-# Ranked by how much each status blocks work; drives sorting and the readiness score.
-RANK = {"fail": 0, "missing": 1, "warn": 2, "ok": 3, "info": 4, "skip": 5}
-LABEL = {"fail": "Failing", "missing": "Missing", "warn": "Attention", "ok": "OK", "info": "Info", "skip": "Skipped"}
+SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
 
 # CLI tools the skills call. kind: required = most sessions need it; skill = only the named skills need it.
 TOOLS = [
@@ -65,41 +46,6 @@ def check(section, title, status, detail="", fix="", group=""):
     return {"section": section, "title": title, "status": status, "detail": detail, "fix": fix, "group": group}
 
 
-def run(cmd, cwd=None, timeout=20):
-    try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
-        return p.returncode, p.stdout, p.stderr
-    except (OSError, subprocess.TimeoutExpired) as e:
-        return 127, "", str(e)
-
-
-def load_json(path):
-    try:
-        return json.loads(Path(path).read_text())
-    except (OSError, ValueError):
-        return None
-
-
-def frontmatter(path):
-    """Parse the small YAML subset skills use: scalars and folded `>` blocks."""
-    try:
-        text = path.read_text()
-    except OSError:
-        return None
-    m = re.match(r"^---\n(.*?)\n---", text, re.S)
-    if not m:
-        return None
-    out, key = {}, None
-    for line in m.group(1).splitlines():
-        kv = re.match(r"^([A-Za-z0-9_-]+):\s*(.*)$", line)
-        if kv:
-            key, val = kv.group(1), kv.group(2).strip()
-            out[key] = "" if val in (">", "|", ">-", "|-") else val.strip("\"'")
-        elif key and line.startswith(" "):
-            out[key] = (out[key] + " " + line.strip()).strip()
-    return out
-
-
 def link_check(section, title, dst, src, fix):
     dst, src = Path(dst), Path(src)
     if dst.is_symlink():
@@ -121,11 +67,6 @@ def same_repo(a, b):
         code, so, _ = run(["git", "-C", str(p if p.is_dir() else p.parent), "rev-parse", "--path-format=absolute", "--git-common-dir"])
         dirs.append(so.strip() if code == 0 else None)
     return dirs[0] is not None and dirs[0] == dirs[1]
-
-
-def short(p):
-    s = str(p)
-    return "~" + s[len(str(HOME)):] if s.startswith(str(HOME)) else s
 
 
 # ---------------------------------------------------------------- collectors
@@ -413,138 +354,6 @@ def collect_project(project):
 
 # ---------------------------------------------------------------- render
 
-CSS = r"""
-:root{--bg:#f7f7f9;--surface:#fff;--surface-2:#f6f6f8;--surface-3:#eeeef2;--border:rgba(28,28,28,.08);--border-2:rgba(28,28,28,.13);
---text:#1c1c1c;--text-2:#3a3a41;--muted:#5f5f66;--accent:#4a38f5;--accent-soft:#efedfe;--accent-text:#3b2ad9;
---agent:#ed87fc;--agent-soft:#fcebfe;--agent-text:#7a1f87;
---ok:#1a7f37;--ok-soft:#e8f5ec;--ok-text:#156b2e;--warn:#9a8300;--warn-soft:#fdfbd0;--warn-text:#7a6a00;
---bad:#b42318;--bad-soft:#fdedeb;--bad-text:#b42318;--neutral:#8a8a93;--neutral-soft:#f0f0f3;--neutral-text:#55555c;
---code-bg:#15151b;--code-text:#e7e7ee;--code-muted:#a0a0ae;
---shadow-1:0 1px 2px rgba(0,0,0,.04);--shadow-2:0 6px 16px -4px rgba(16,16,40,.1),0 1px 3px rgba(16,16,40,.05);
---brand:linear-gradient(140deg,#6553ff 0%,#4a38f5 55%,#3420d8 100%);color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1011;--surface:#141516;--surface-2:#191a1b;--surface-3:#1c1c1f;
---border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.13);--text:#ededf0;--text-2:#d2d2d9;--muted:#a3a3ad;
---accent:#6b5cff;--accent-soft:rgba(124,110,255,.16);--accent-text:#aba2ff;--agent-soft:rgba(237,135,252,.13);--agent-text:#f4b9fd;
---ok:#3fb760;--ok-soft:rgba(63,183,96,.15);--ok-text:#6fd68c;--warn:#e3cf3a;--warn-soft:rgba(254,255,183,.1);--warn-text:#eee68e;
---bad:#f26b5e;--bad-soft:rgba(242,107,94,.15);--bad-text:#ff9187;--neutral:#8e8e98;--neutral-soft:rgba(255,255,255,.07);--neutral-text:#bdbdc6;
---code-bg:#08090a;--shadow-1:0 1px 2px rgba(0,0,0,.35);--shadow-2:0 8px 20px -6px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35);color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0f1011;--surface:#141516;--surface-2:#191a1b;--surface-3:#1c1c1f;
---border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.13);--text:#ededf0;--text-2:#d2d2d9;--muted:#a3a3ad;
---accent:#6b5cff;--accent-soft:rgba(124,110,255,.16);--accent-text:#aba2ff;--agent-soft:rgba(237,135,252,.13);--agent-text:#f4b9fd;
---ok:#3fb760;--ok-soft:rgba(63,183,96,.15);--ok-text:#6fd68c;--warn:#e3cf3a;--warn-soft:rgba(254,255,183,.1);--warn-text:#eee68e;
---bad:#f26b5e;--bad-soft:rgba(242,107,94,.15);--bad-text:#ff9187;--neutral:#8e8e98;--neutral-soft:rgba(255,255,255,.07);--neutral-text:#bdbdc6;
---code-bg:#08090a;--shadow-1:0 1px 2px rgba(0,0,0,.35);--shadow-2:0 8px 20px -6px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35);color-scheme:dark}
-*{box-sizing:border-box}html,body{margin:0}
-body{background:var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-.mono,code{font-family:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
-.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
-header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
-.top .wrap{display:flex;align-items:center;gap:12px;height:56px}
-.mark{width:28px;height:28px;border-radius:8px;background:var(--brand);display:grid;place-items:center;box-shadow:0 1px 2px rgba(74,56,245,.3),inset 0 1px 0 rgba(255,255,255,.15)}
-.brand{font-family:"Host Grotesk",Inter,sans-serif;font-weight:600;letter-spacing:-.01em}
-.crumb{color:var(--muted)}.sp{flex:1}
-.seg{display:inline-flex;background:var(--surface-3);border-radius:8px;padding:2px;gap:2px}
-.seg button{all:unset;cursor:pointer;padding:4px 10px;border-radius:6px;color:var(--muted);font-size:12px;font-weight:500}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--border)}
-.hero{padding:40px 0 24px;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:end}
-.eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text)}
-h1{font-family:"Host Grotesk",Inter,sans-serif;font-size:34px;line-height:1.15;letter-spacing:-.02em;margin:8px 0 10px;font-weight:600}
-.sub{color:var(--muted);max-width:640px;margin:0}
-.meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:16px;color:var(--muted);font-size:12px}
-.meta b{color:var(--text-2);font-weight:500}
-.ring{position:relative;width:132px;height:132px}
-.ring svg{transform:rotate(-90deg)}
-.ring .v{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
-.ring .v b{font-family:"Host Grotesk",Inter,sans-serif;font-size:32px;font-weight:600;letter-spacing:-.02em;display:block;line-height:1}
-.ring .v span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px}
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow-1)}
-.stat .n{font-family:"Host Grotesk",Inter,sans-serif;font-size:26px;font-weight:600;letter-spacing:-.02em}
-.stat .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--neutral);flex:none}
-.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.fail,.dot.missing{background:var(--bad)}.dot.info{background:var(--accent)}
-.grid{display:grid;grid-template-columns:240px 1fr;gap:28px;padding-bottom:64px}
-nav.side{position:sticky;top:76px;align-self:start;display:flex;flex-direction:column;gap:2px}
-nav.side .h{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px 4px}
-nav.side a{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--text-2);text-decoration:none;font-size:13px}
-nav.side a:hover{background:var(--surface-3)}
-nav.side a .c{margin-left:auto;font-size:11px;color:var(--muted)}
-section.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-1);margin-bottom:20px;overflow:hidden;scroll-margin-top:72px}
-.card>.hd{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}
-.card>.hd h2{font-size:15px;font-weight:600;margin:0;letter-spacing:-.005em}
-.card>.hd .desc{color:var(--muted);font-size:12px}
-.card>.hd .bar{margin-left:auto;display:flex;gap:4px}
-.pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap;border:1px solid transparent}
-.pill.ok{background:var(--ok-soft);color:var(--ok-text)}.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
-.pill.fail,.pill.missing{background:var(--bad-soft);color:var(--bad-text)}.pill.info{background:var(--accent-soft);color:var(--accent-text)}
-.pill.skip{background:var(--neutral-soft);color:var(--neutral-text)}
-.row{display:grid;grid-template-columns:104px 260px 1fr;gap:14px;padding:11px 18px;border-top:1px solid var(--border);align-items:start}
-.row:first-of-type{border-top:0}
-.row .t{font-weight:500;word-break:break-word}.row .d{color:var(--text-2);word-break:break-word}
-.fix{display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:6px 6px 6px 10px}
-.fix code{flex:1;overflow-x:auto;white-space:nowrap;color:var(--code-text)}
-.fix code::before{content:"$ ";color:var(--agent)}
-.hint{margin-top:6px;font-size:12.5px;color:var(--accent-text);display:flex;gap:6px}
-.hint::before{content:"\2192"}
-.copy{all:unset;cursor:pointer;font-size:11px;color:var(--code-muted);padding:2px 8px;border-radius:5px;border:1px solid rgba(255,255,255,.1)}
-.copy:hover{color:#fff;border-color:rgba(255,255,255,.25)}
-body.only-action .row[data-s="ok"],body.only-action .row[data-s="info"],body.only-action .row[data-s="skip"]{display:none}
-body.only-action .skill[data-s="ok"]{display:none}
-.todo{padding:6px 18px 14px}
-.todo ol{margin:0;padding:0;list-style:none;counter-reset:t}
-.todo li{counter-increment:t;display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px 0;border-top:1px solid var(--border)}
-.todo li:first-child{border-top:0}
-.todo li::before{content:counter(t);width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:600;background:var(--accent-soft);color:var(--accent-text)}
-.todo .tt{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.todo .tt b{font-weight:600}
-.todo .sec{font-size:11px;color:var(--muted)}
-.skills{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;padding:16px 18px}
-.skill{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface-2);display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s}
-.skill:hover{border-color:var(--border-2);box-shadow:var(--shadow-2)}
-.skill .nm{display:flex;align-items:center;gap:8px;font-weight:600}
-.skill .nm .dot{margin-left:auto}
-.skill p{margin:0;color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-size:11px;padding:1px 7px;border-radius:5px;background:var(--surface-3);color:var(--text-2)}
-.chip.agent{background:var(--agent-soft);color:var(--agent-text)}.chip.acc{background:var(--accent-soft);color:var(--accent-text)}
-.chip.bad{background:var(--bad-soft);color:var(--bad-text)}.chip.warn{background:var(--warn-soft);color:var(--warn-text)}
-.flow{padding:18px;overflow-x:auto}
-.flow svg{display:block;min-width:720px;width:100%;height:auto}
-.flow text{font-family:Inter,sans-serif;font-size:12px;fill:var(--text)}
-.flow .lbl{font-size:10.5px;fill:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.empty{padding:28px 18px;color:var(--muted);text-align:center}
-footer{color:var(--muted);font-size:12px;padding:0 0 40px}
-.seg button,.brand{white-space:nowrap}
-@media (max-width:900px){.crumb,.seg[aria-label="Theme"]{display:none}.grid{grid-template-columns:1fr}nav.side{display:none}.stats{grid-template-columns:repeat(2,1fr)}
-.hero{grid-template-columns:1fr}.row{grid-template-columns:1fr;gap:4px}.wrap{padding:0 16px}h1{font-size:28px}}
-"""
-
-JS = r"""
-(function(){
-  var root=document.documentElement, KEY='harness-map-theme';
-  function setTheme(t){ if(t==='system'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',t)}
-    document.querySelectorAll('[data-theme-btn]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.themeBtn===t))});
-    try{localStorage.setItem(KEY,t)}catch(e){} }
-  var saved='system'; try{saved=localStorage.getItem(KEY)||'system'}catch(e){}
-  setTheme(saved);
-  document.querySelectorAll('[data-theme-btn]').forEach(function(b){b.onclick=function(){setTheme(b.dataset.themeBtn)}});
-  document.querySelectorAll('[data-view]').forEach(function(b){b.onclick=function(){
-    document.body.classList.toggle('only-action',b.dataset.view==='action');
-    document.querySelectorAll('[data-view]').forEach(function(x){x.setAttribute('aria-pressed',String(x===b))});}});
-  document.querySelectorAll('.copy').forEach(function(b){b.onclick=function(){
-    var t=b.previousElementSibling.textContent;
-    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1200)},function(){b.textContent='Select'});}});
-})();
-"""
-
-ICONS = {
-    "Global instructions": '<path d="M4 4h12v12H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 8h6M7 11h4" stroke="currentColor" stroke-width="1.6"/>',
-    "Skills": '<path d="M10 3l6 3.5v7L10 17l-6-3.5v-7z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Hooks": '<path d="M7 4v6a3 3 0 006 0V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="13" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Tools": '<path d="M4 6l4 4-4 4M10 14h6" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Plugins & MCP": '<path d="M8 3v4M12 3v4M6 7h8v3a4 4 0 01-8 0zM10 14v3" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Settings hygiene": '<path d="M10 3l6 2.5V10c0 3.5-2.6 6-6 7-3.4-1-6-3.5-6-7V5.5z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Project": '<path d="M3 6h5l2 2h7v8H3z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-}
 DESCS = {
     "Global instructions": "Files install.sh links so every session reads them",
     "Skills": "This repo's skills, their install link and frontmatter health",
@@ -557,19 +366,41 @@ DESCS = {
 ORDER = list(DESCS)
 
 
-def esc(s):
-    return html.escape(str(s), quote=True)
-
-
-def icon(sec):
-    return f'<svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">{ICONS.get(sec, "")}</svg>'
-
-
-def pill(s):
-    return f'<span class="pill {s}"><span class="dot {s}"></span>{LABEL[s]}</span>'
-
-
 CMD = re.compile(r"^(~|/|!|\$|(brew|npm|npx|bash|echo|rm|claude|corepack|git|gh|glab)\b)")
+
+
+# Core = every session depends on it; optional = only some skills, stacks or habits need it.
+OPTIONAL_TITLES = {"~/OPINIONS.md -> OPINIONS.md", "Other user skills", "settings.json backups",
+                   "Bypass-permissions prompt skipped", "Playwright config", "Open TODO(owner)", "Repository"}
+CORE_PLUGIN_TITLES = {"Browser tool for e2e-verify"}
+TOOL_KIND = {name: kind for name, kind, _, _ in TOOLS}
+
+
+def tier_of(c):
+    sec, title = c["section"], c["title"]
+    if title in OPTIONAL_TITLES:
+        return "optional"
+    if sec == "Skills":
+        return SKILL_TIER.get(title, "optional")
+    if sec == "Tools":
+        return "core" if TOOL_KIND.get(title, "required") == "required" else "optional"
+    if sec == "Plugins & MCP":
+        return "core" if title in CORE_PLUGIN_TITLES else "optional"
+    return "core"
+
+
+def readiness(checks):
+    """Percent ready; every skill row together weighs 3 checks so 20 skills do not drown the rest."""
+    scored = [c for c in checks if c["status"] in ("ok", "warn", "fail", "missing")]
+    n_skill = sum(1 for c in scored if c["group"] == "skill") or 1
+    weight = lambda c: 3 / n_skill if c["group"] == "skill" else 1
+    value = {"ok": 1, "warn": 0.5}
+    total = sum(weight(c) for c in scored)
+    return round(100 * sum(weight(c) * value.get(c["status"], 0) for c in scored) / total) if total else 100
+
+
+def tier_chip(t):
+    return f'<span class="tier {t}">{"Core" if t == "core" else "Optional"}</span>'
 
 
 def fix_html(fix):
@@ -580,89 +411,101 @@ def fix_html(fix):
     return f'<div class="fix"><code>{esc(fix)}</code><button class="copy" type="button">Copy</button></div>'
 
 
-def ring(score):
-    r, c = 54, 2 * 3.14159 * 54
+def ring(score, label="ready", size=132):
+    sw = 10 if size > 100 else 7
+    r = size / 2 - sw - 2
+    c = 2 * 3.14159 * r
     color = "var(--ok)" if score >= 85 else "var(--warn)" if score >= 60 else "var(--bad)"
-    return (f'<div class="ring"><svg width="132" height="132" viewBox="0 0 132 132">'
-            f'<circle cx="66" cy="66" r="{r}" fill="none" stroke="var(--surface-3)" stroke-width="10"/>'
-            f'<circle cx="66" cy="66" r="{r}" fill="none" stroke="{color}" stroke-width="10" stroke-linecap="round" '
+    return (f'<div class="ring" style="width:{size}px;height:{size}px"><svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
+            f'<circle cx="{size / 2}" cy="{size / 2}" r="{r}" fill="none" stroke="var(--surface-3)" stroke-width="{sw}"/>'
+            f'<circle cx="{size / 2}" cy="{size / 2}" r="{r}" fill="none" stroke="{color}" stroke-width="{sw}" stroke-linecap="round" '
             f'stroke-dasharray="{c * score / 100:.1f} {c:.1f}"/></svg>'
-            f'<div class="v"><div><b>{score}%</b><span>ready</span></div></div></div>')
+            f'<div class="v"><div><b>{score}%</b>{f"<span>{esc(label)}</span>" if label else ""}</div></div></div>')
 
 
-def flow_svg(by_sec):
-    """Layered picture of the harness: what loads always, on demand, as gates, and what it calls out to."""
-    def worst(sec):
-        items = by_sec.get(sec, [])
-        return min((c["status"] for c in items), key=RANK.get, default="skip")
-    cols = [
-        ("Always loaded", [("AGENTS.md", "Global instructions"), ("OPINIONS.md", "Global instructions")]),
-        ("On demand", [("Skills", "Skills"), ("Plugins", "Plugins & MCP")]),
-        ("Gates", [("PreToolUse hooks", "Hooks"), ("Settings", "Settings hygiene")]),
-        ("Calls out to", [("CLIs", "Tools"), ("Project setup", "Project")]),
-    ]
-    color = {"ok": "var(--ok)", "warn": "var(--warn)", "fail": "var(--bad)", "missing": "var(--bad)", "info": "var(--accent)", "skip": "var(--neutral)"}
-    w, colw, boxw, boxh = 960, 240, 196, 52
-    parts = ['<svg viewBox="0 0 960 190" role="img" aria-label="Harness layers">']
-    for i, (lbl, boxes) in enumerate(cols):
-        x = i * colw + 22
-        parts.append(f'<text class="lbl" x="{x}" y="16">{esc(lbl)}</text>')
-        for j, (name, sec) in enumerate(boxes):
-            y = 32 + j * 76
-            st = worst(sec)
-            parts.append(f'<rect x="{x}" y="{y}" width="{boxw}" height="{boxh}" rx="10" fill="var(--surface-2)" stroke="var(--border-2)"/>'
-                         f'<rect x="{x}" y="{y + 14}" width="3" height="{boxh - 28}" rx="1.5" fill="{color[st]}"/>'
-                         f'<text x="{x + 16}" y="{y + 22}" font-weight="600">{esc(name)}</text>'
-                         f'<text x="{x + 16}" y="{y + 40}" style="fill:var(--muted);font-size:11px">{esc(LABEL[st])}</text>')
-            if i < len(cols) - 1:
-                parts.append(f'<path d="M{x + boxw + 4} {y + boxh / 2} H{x + colw - 6}" stroke="var(--border-2)" stroke-width="1.5" '
-                             f'fill="none" marker-end="url(#ah)"/>')
-    parts.append('<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'
-                 '<path d="M0 0L8 4L0 8z" fill="var(--border-2)"/></marker></defs></svg>')
-    return "".join(parts)
+TIER_TEXT = {
+    "core": ("Core", "Every session depends on these. Fix all of them first."),
+    "optional": ("Optional", "Only some skills, stacks or habits need these. Fix when you use them."),
+}
+
+
+def tier_block(tier, checks, by_sec, actions):
+    """One overview panel: per section, how many of this tier's checks pass, as a bar."""
+    mine = [c for c in checks if c["tier"] == tier]
+    title, text = TIER_TEXT[tier]
+    gaps = sum(1 for c in actions if c["tier"] == tier)
+    rows = []
+    for sec in ORDER:
+        items = [c for c in by_sec.get(sec, []) if c["tier"] == tier and c["status"] in ("ok", "warn", "fail", "missing")]
+        if not items:
+            continue
+        ok = sum(1 for c in items if c["status"] == "ok")
+        bad = sum(1 for c in items if c["status"] in ("fail", "missing"))
+        warn = len(items) - ok - bad
+        st = "ok" if ok == len(items) else "fail" if bad else "warn"
+        seg = lambda n, cls: f'<i class="{cls}" style="flex:{n}"></i>' if n else ""
+        rows.append(f'<a class="trow" href="#{slug(sec)}"><span class="dot {st}"></span><span class="tn">{esc(sec)}</span>'
+                    f'<span class="tbar">{seg(ok, "ok")}{seg(warn, "warn")}{seg(bad, "bad")}</span>'
+                    f'<span class="tc">{ok}/{len(items)}</span></a>')
+    status = (f'<span class="pill {"fail" if tier == "core" else "warn"}">{gaps} to fix</span>' if gaps else
+              '<span class="pill ok">All set</span>' if tier == "core" else '<span class="pill info">As needed</span>')
+    return (f'<div class="tierblock {tier}" data-t="{tier}"><div class="th">{ring(readiness(mine), "", 72)}<div>'
+            f'<div class="tt2">{tier_chip(tier)}{status}</div><b>{title}</b><p>{text}</p></div></div>{"".join(rows)}</div>')
+
+
+def pillar_status(checks):
+    """Per pillar: designed coverage (ok, or warn when the repo lists known gaps), whether this machine is
+    missing pieces of it (alert), and notes naming those pieces."""
+    status, related, alerts = {}, {}, {}
+    for pl in PILLARS:
+        cov = pl["covered_by"]
+        rel = [c for c in checks if c["section"] in cov.get("sections", [])
+               or (c["section"] == "Skills" and c["title"] in cov.get("skills", []))
+               or (c["section"] == "Plugins & MCP" and any(c["title"].startswith(x) for x in cov.get("plugins", [])))]
+        bad = [c for c in rel if c["status"] in ("fail", "missing")]
+        warn = [c for c in rel if c["status"] == "warn"]
+        missing_plugins = [x for x in cov.get("plugins", []) if not any(c["title"].startswith(x) and c["status"] == "ok" for c in rel)]
+        status[pl["id"]] = "warn" if pl.get("gaps") else "ok"
+        alerts[pl["id"]] = bool(bad or missing_plugins)
+        skills = [c["title"] for c in bad if c["section"] == "Skills"]
+        names = ": " + ", ".join(skills) if len(skills) <= 6 else " (run install.sh)"
+        notes = [f"{len(skills)} skill{'s' if len(skills) > 1 else ''} not installed{names}"] if skills else []
+        notes += [f'{c["title"]}: {c["detail"]}' for c in bad + warn if c["section"] != "Skills"]
+        notes += [f"plugin {x} not enabled" for x in missing_plugins]
+        related[pl["id"]] = notes
+    return status, related, alerts
 
 
 def render(checks, cards, plugins, project, probe):
     by_sec = {}
     for c in checks:
         by_sec.setdefault(c["section"], []).append(c)
-    # Every skill row is one check, so together they weigh 3; otherwise 20 uninstalled skills drown everything else.
-    scored = [c for c in checks if c["status"] in ("ok", "warn", "fail", "missing")]
-    n_skill = sum(1 for c in scored if c["group"] == "skill")
-    weight = lambda c: 3 / n_skill if c["group"] == "skill" else 1
-    value = {"ok": 1, "warn": 0.5}
-    score = round(100 * sum(weight(c) * value.get(c["status"], 0) for c in scored) / max(1, sum(weight(c) for c in scored)))
+    score = readiness([c for c in checks if c["tier"] == "core"])
     count = {s: sum(1 for c in checks if c["status"] == s) for s in RANK}
     actions = group_actions(checks)
 
     code, sha, _ = run(["git", "-C", str(REPO), "log", "-1", "--format=%h %s"])
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     h = []
-    h.append('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-             '<title>Harness Map</title>'
-             '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-             '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Host+Grotesk:wght@500;600&family=Azeret+Mono:wght@400;500&display=swap" rel="stylesheet">'
-             f'<style>{CSS}</style></head><body>')
-    h.append('<header class="top"><div class="wrap"><div class="mark"><svg width="16" height="16" viewBox="0 0 20 20"><path d="M10 2l7 4v8l-7 4-7-4V6z" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="10" cy="10" r="2.4" fill="#fff"/></svg></div>'
-             '<span class="brand">Harness Map</span><span class="crumb">/ ' + esc(socket.gethostname().split(".")[0]) + '</span><span class="sp"></span>'
-             '<div class="seg" role="group" aria-label="Filter"><button data-view="all" aria-pressed="true">All</button><button data-view="action" aria-pressed="false">Needs action</button></div>'
-             '<div class="seg" role="group" aria-label="Theme"><button data-theme-btn="light">Light</button><button data-theme-btn="system">Auto</button><button data-theme-btn="dark">Dark</button></div>'
-             '</div></header><main class="wrap">')
     proj = f'<span>Project <b class="mono">{esc(short(project))}</b></span>' if project else ""
     h.append(f'<div class="hero"><div><div class="eyebrow">Agent harness</div><h1>What is set up, what is missing</h1>'
              f'<p class="sub">Global instructions, skills, hooks, tools, plugins and the current project, checked live on this machine. '
-             f'Fix the numbered list from the top; every command is copyable.</p>'
+             f'Core is what every session needs; optional only matters for some skills. Fix core first; every command is copyable.</p>'
              f'<div class="meta"><span>Generated <b>{now}</b></span><span>Repo <b class="mono">{esc(short(REPO))}</b></span>'
              f'<span>Commit <b class="mono" title="{esc(sha.strip())}">{esc(sha.strip() if len(sha.strip()) <= 52 else sha.strip()[:50] + "...")}</b></span>{proj}'
-             f'{"" if probe else "<span><b>Probes skipped</b></span>"}</div></div>{ring(score)}</div>')
-    h.append('<div class="stats">' + "".join(
-        f'<div class="stat"><div class="n">{n}</div><div class="l"><span class="dot {cls}"></span>{lbl}</div></div>'
-        for n, cls, lbl in [(count["ok"], "ok", "OK"), (count["warn"], "warn", "Attention"),
-                            (count["fail"] + count["missing"], "fail", "Missing or failing"),
-                            (sum(1 for c in cards if c["installed"]), "info", f"of {len(cards)} skills installed"),
-                            (len([p for p in plugins if p["on"]]), "info", "plugins enabled")]) + '</div>')
+             f'{"" if probe else "<span><b>Probes skipped</b></span>"}</div></div>{ring(score, "core ready")}</div>')
+    pst, prel, palert = pillar_status(checks)
+    wl = "".join(f'<a href="#pillar-{pl["id"]}"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
+                 f'<span class="chips">{"<span class=\"pill fail\">Setup</span>" if palert[pl["id"]] else ""}'
+                 f'<span class="pill {pst[pl["id"]]}">{WHEEL_WORD[pst[pl["id"]]]}</span></span></a>' for pl in PILLARS)
+    covered = sum(1 for v in pst.values() if v == "ok")
+    need = sum(1 for v in palert.values() if v)
+    h.append(f'<section class="card" id="wheel"><div class="hd">{icon("Skills")}<h2>Harness wheel</h2>'
+             f'<span class="desc">Color: how fully this repo covers each component. Red badge: pieces not set up on this machine</span></div>'
+             f'<div class="wheelwrap">{wheel_svg(pst, ("Agent Harness", f"{covered}/{len(PILLARS)} fully covered"), palert)}<div class="wlist">{wl}</div></div></section>')
+    h.append(f'<div class="tiers" id="overview">{tier_block("core", checks, by_sec, actions)}{tier_block("optional", checks, by_sec, actions)}</div>')
 
-    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#map">Harness layers</a>'
+    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a><a href="#pillars">Eight components</a>'
              f'<a href="#todo">Fix first<span class="c">{len(actions)}</span></a><div class="h">Checks</div>')
     for sec in ORDER:
         if sec in by_sec:
@@ -671,24 +514,31 @@ def render(checks, cards, plugins, project, probe):
             h.append(f'<a href="#{slug(sec)}"><span class="dot {st}"></span>{esc(sec)}<span class="c">{bad or ""}</span></a>')
     h.append('<a href="#catalog">Skill catalog</a></nav><div>')
 
-    h.append(f'<section class="card" id="map"><div class="hd">{icon("Skills")}<h2>Harness layers</h2><span class="desc">Each box shows its worst check</span></div>'
-             f'<div class="flow">{flow_svg(by_sec)}</div></section>')
 
-    h.append(f'<section class="card" id="todo"><div class="hd">{icon("Tools")}<h2>Fix first</h2><span class="desc">Failing and missing before attention items</span></div>')
+    h.append(f'<section class="card" id="todo"><div class="hd">{icon("Tools")}<h2>Fix first</h2><span class="desc">Core gaps first, then optional ones</span></div>')
     if actions:
-        h.append('<div class="todo"><ol>')
-        for c in actions:
-            h.append(f'<li><div><div class="tt">{pill(c["status"])}<b>{esc(c["title"])}</b><span class="sec">{esc(c["section"])}</span></div>'
-                     f'<div class="d" style="color:var(--text-2);margin-top:4px">{esc(c["detail"])}</div>{fix_html(c["fix"])}</div></li>')
-        h.append('</ol></div>')
+        for tier in ("core", "optional"):
+            mine = [c for c in actions if c["tier"] == tier]
+            if not mine:
+                continue
+            title, text = TIER_TEXT[tier]
+            h.append(f'<div class="todo" data-t="{tier}"><div class="tgh">{tier_chip(tier)}<span>{esc(text)}</span></div><ol>')
+            for c in mine:
+                h.append(f'<li data-t="{tier}"><div><div class="tt">{pill(c["status"])}<b>{esc(c["title"])}</b><span class="sec">{esc(c["section"])}</span></div>'
+                         f'<div class="d" style="color:var(--text-2);margin-top:4px">{esc(c["detail"])}</div>{fix_html(c["fix"])}</div></li>')
+            h.append('</ol></div>')
     else:
         h.append('<div class="empty">Nothing to fix. The harness is fully set up.</div>')
     h.append('</section>')
+    inst = {c["name"]: c["installed"] for c in cards}
+    h.append(f'<section class="card" id="pillars"><div class="hd">{icon("Flow")}<h2>Eight components</h2>'
+             f'<span class="desc">What each component needs, what this harness has, what is missing</span></div>'
+             f'{pillar_cards(pst, prel, inst, palert)}</section>')
 
     for sec in ORDER:
         if sec not in by_sec:
             continue
-        rows = sorted(by_sec[sec], key=lambda c: RANK[c["status"]])
+        rows = sorted(by_sec[sec], key=lambda c: (c["tier"] != "core", RANK[c["status"]]))
         h.append(f'<section class="card" id="{slug(sec)}"><div class="hd">{icon(sec)}<h2>{esc(sec)}</h2><span class="desc">{esc(DESCS[sec])}</span><div class="bar">')
         for s in ("fail", "missing", "warn", "ok"):
             n = sum(1 for c in rows if c["status"] == s)
@@ -700,22 +550,33 @@ def render(checks, cards, plugins, project, probe):
             # A fix shared by many rows (install.sh for every skill) is shown once, on its first row.
             fx = "" if c["fix"] in seen else fix_html(c["fix"])
             seen.add(c["fix"])
-            h.append(f'<div class="row" data-s="{c["status"]}"><div>{pill(c["status"])}</div><div class="t">{esc(c["title"])}</div>'
+            h.append(f'<div class="row" data-s="{c["status"]}" data-t="{c["tier"]}"><div>{pill(c["status"])}</div><div class="t">{esc(c["title"])} {tier_chip(c["tier"])}</div>'
                      f'<div class="d">{esc(c["detail"])}{fx}</div></div>')
         h.append('</section>')
 
-    h.append(f'<section class="card" id="catalog"><div class="hd">{icon("Skills")}<h2>Skill catalog</h2><span class="desc">{len(cards)} skills in this repo</span></div><div class="skills">')
-    for s in cards:
-        chips = ['<span class="chip acc">/' + esc(s["name"]) + '</span>' if s["invocable"] else '<span class="chip agent">auto-loaded</span>']
-        chips.append('<span class="chip">installed</span>' if s["installed"] else '<span class="chip bad">not installed</span>')
-        chips += [f'<span class="chip">{esc(x)}/</span>' for x in s["extras"]]
-        chips += [f'<span class="chip warn">{esc(i)}</span>' for i in s["issues"]]
-        h.append(f'<div class="skill" data-s="{s["status"]}"><div class="nm"><span class="mono" style="font-size:13px;font-weight:600">{esc(s["name"])}</span><span class="dot {s["status"]}"></span></div>'
-                 f'<p title="{esc(s["desc"])}">{esc(s["desc"])}</p><div class="chips">{"".join(chips)}</div></div>')
-    h.append('</div></section>')
-    h.append(f'<footer>Generated by <span class="mono">skills/harness-map/scripts/harness_map.py</span>. Read-only; secret values are never shown. '
-             f'Re-run to refresh.</footer></div></div></main><script>{JS}</script></body></html>')
-    return "".join(h), score, count, actions
+    h.append(f'<section class="card" id="catalog"><div class="hd">{icon("Skills")}<h2>Skill catalog</h2><span class="desc">{len(cards)} skills in this repo</span></div>')
+    for tier in ("core", "optional"):
+        group = [s for s in cards if SKILL_TIER.get(s["name"], "optional") == tier]
+        if not group:
+              continue
+        h.append(f'<div class="cath" data-t="{tier}">{tier_chip(tier)}<span>{len(group)} skills. {esc(TIER_TEXT[tier][1])}</span></div><div class="skills">')
+        for s in group:
+            chips = ['<span class="chip acc">/' + esc(s["name"]) + '</span>' if s["invocable"] else '<span class="chip agent">auto-loaded</span>']
+            chips.append('<span class="chip">installed</span>' if s["installed"] else '<span class="chip bad">not installed</span>')
+            chips += [f'<span class="chip">{esc(x)}/</span>' for x in s["extras"]]
+            chips += [f'<span class="chip warn">{esc(i)}</span>' for i in s["issues"]]
+            h.append(f'<div class="skill" data-s="{s["status"]}" data-t="{tier}"><div class="nm"><span class="mono" style="font-size:13px;font-weight:600">{esc(s["name"])}</span><span class="dot {s["status"]}"></span></div>'
+                     f'<p title="{esc(s["desc"])}">{esc(s["desc"])}</p><div class="chips">{"".join(chips)}</div></div>')
+        h.append('</div>')
+    h.append('</section>')
+    h.append('</div></div>')
+    tools = ('<div class="seg" role="group" aria-label="Filter"><button data-view="all" aria-pressed="true">All</button>'
+             '<button data-view="core" aria-pressed="false">Core only</button>'
+             '<button data-view="action" aria-pressed="false">Needs action</button></div>')
+    footer = ('Generated by <span class="mono">skills/harness-map/scripts/harness_map.py</span>. '
+              'Read-only; secret values are never shown. Re-run to refresh.')
+    page = render_page("Harness Map", "Harness Map", "/ " + socket.gethostname().split(".")[0], "".join(h), footer, tools)
+    return page, score, count, actions
 
 
 def group_actions(checks):
@@ -724,22 +585,19 @@ def group_actions(checks):
     for c in checks:
         if c["status"] not in ("fail", "missing", "warn"):
             continue
-        key = (c["status"], c["section"], c["fix"] or id(c))
+        key = (c["status"], c["section"], c["tier"], c["fix"] or id(c))
         groups.setdefault(key, []).append(c)
     actions = []
-    for (status, sec, _), items in groups.items():
+    for (status, sec, tier, _), items in groups.items():
         if len(items) == 1:
             actions.append(items[0])
         else:
-            title = (f"{len(items)} skills not installed" if sec == "Skills" and status == "missing"
+            title = (f"{len(items)} {tier} skills not installed" if sec == "Skills" and status == "missing"
                      else f"{len(items)} items, same fix")
-            actions.append(check(sec, title, status,
-                                 ", ".join(i["title"] for i in items), items[0]["fix"]))
-    return sorted(actions, key=lambda c: (RANK[c["status"]], ORDER.index(c["section"])))
-
-
-def slug(s):
-    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+            g = check(sec, title, status, ", ".join(i["title"] for i in items), items[0]["fix"])
+            g["tier"] = tier
+            actions.append(g)
+    return sorted(actions, key=lambda c: (c["tier"] != "core", RANK[c["status"]], ORDER.index(c["section"])))
 
 
 def git_root(path):
@@ -769,6 +627,8 @@ def main():
     checks += tc
     plc, plugins = collect_plugins()
     checks += plc + collect_hygiene() + pc
+    for c in checks:
+        c["tier"] = tier_of(c)
 
     page, score, count, actions = render(checks, cards, plugins, project, probe)
     out = Path(a.out).expanduser()
@@ -776,9 +636,10 @@ def main():
     out.write_text(page)
 
     print(f"Harness map: {out}")
-    print(f"Ready {score}%  ok {count['ok']}  attention {count['warn']}  missing/failing {count['missing'] + count['fail']}")
+    opt = readiness([c for c in checks if c["tier"] == "optional"])
+    print(f"Core ready {score}%  optional ready {opt}%  ok {count['ok']}  attention {count['warn']}  missing/failing {count['missing'] + count['fail']}")
     for i, c in enumerate(actions, 1):
-        print(f"{i:>2}. [{LABEL[c['status']]}] {c['section']} / {c['title']}: {c['detail']}" + (f"\n    fix: {c['fix']}" if c["fix"] else ""))
+        print(f"{i:>2}. [{c['tier']}] [{LABEL[c['status']]}] {c['section']} / {c['title']}: {c['detail']}" + (f"\n    fix: {c['fix']}" if c["fix"] else ""))
     if a.open:
         run(["open" if sys.platform == "darwin" else "xdg-open", str(out)])
 

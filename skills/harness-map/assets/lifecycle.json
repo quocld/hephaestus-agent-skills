@@ -1,0 +1,72 @@
+{
+  "version": "v1",
+  "events": {
+    "session_start": {"label": "SessionStart", "hooks": ["SessionStart"], "note": "AGENTS.md, CLAUDE.md and every skill description load here"},
+    "prompt": {"label": "UserPromptSubmit", "hooks": ["UserPromptSubmit"], "note": "Slash commands expand; the model picks skills by description"},
+    "pre_tool": {"label": "PreToolUse", "hooks": ["PreToolUse"], "note": "Gates run before every tool call"},
+    "permission": {"label": "PermissionRequest", "hooks": ["PermissionRequest"], "note": "An ask from a hook becomes a prompt; bypass mode denies instead"},
+    "tool": {"label": "[tool executes]", "hooks": [], "note": "Bash, Edit, MCP, Skill, Agent, Workflow"},
+    "post_tool": {"label": "PostToolUse / PostToolUseFailure", "hooks": ["PostToolUse", "PostToolUseFailure"], "note": "Results and failures come back"},
+    "post_batch": {"label": "PostToolBatch", "hooks": ["PostToolBatch"], "note": "After a batch of parallel calls"},
+    "subagent": {"label": "SubagentStart / SubagentStop", "hooks": ["SubagentStart", "SubagentStop"], "note": "Agent tool and workflow agents"},
+    "task_created": {"label": "TaskCreated", "hooks": ["TaskCreated"], "note": "Background work starts"},
+    "task_completed": {"label": "TaskCompleted", "hooks": ["TaskCompleted"], "note": "Background work reports back"},
+    "stop": {"label": "Stop / StopFailure", "hooks": ["Stop", "StopFailure"], "note": "The turn ends: the place to prove done"},
+    "teammate_idle": {"label": "TeammateIdle", "hooks": ["TeammateIdle"], "note": "A teammate session waits"},
+    "pre_compact": {"label": "PreCompact", "hooks": ["PreCompact"], "note": "Context is about to be summarized"},
+    "post_compact": {"label": "PostCompact", "hooks": ["PostCompact"], "note": "Context was summarized"},
+    "session_end": {"label": "SessionEnd", "hooks": ["SessionEnd"], "note": "Session closes; resumed sessions start again"}
+  },
+  "side": [
+    {"label": "Setup", "sub": "opt-in", "row": "session_start", "arrow": true, "hooks": ["Setup"], "skills": ["project-init", "harness-map"]},
+    {"label": "UserPrompt Expansion", "sub": "slash commands", "row": "prompt", "arrow": true, "hooks": [], "skills": []},
+    {"label": "PermissionDenied", "sub": "auto-mode deny", "row": "permission", "arrow": true, "hooks": ["PermissionDenied"], "skills": []},
+    {"label": "Elicitation / Result", "sub": "MCP input", "row": "tool", "arrow": true, "hooks": ["Elicitation", "ElicitationResult"], "skills": []},
+    {"label": "Notification", "sub": "async", "row": "stop", "arrow": false, "hooks": ["Notification"], "skills": []},
+    {"label": "ConfigChange", "sub": "async", "row": "teammate_idle", "arrow": false, "hooks": ["ConfigChange"], "skills": []},
+    {"label": "WorktreeCreate / Remove", "sub": "isolation", "row": "pre_compact", "arrow": false, "hooks": ["WorktreeCreate", "WorktreeRemove"], "skills": ["worktree-flow"]},
+    {"label": "CwdChanged / FileChanged", "sub": "env reactive", "row": "post_compact", "arrow": false, "hooks": ["CwdChanged", "FileChanged"], "skills": []},
+    {"label": "InstructionsLoaded", "sub": "async", "row": "session_end", "arrow": false, "hooks": ["InstructionsLoaded"], "skills": ["knowledge-placement"]}
+  ],
+  "skills": {
+    "harness-map": {"tier": "core", "events": ["session_start"], "stage": "setup", "when": "Setup audit: what is installed, missing or failing, as one HTML page"},
+    "project-init": {"tier": "core", "events": ["session_start"], "stage": "setup", "when": "Repo has no agent block yet, or a doctor run"},
+    "environments": {"tier": "core", "events": ["pre_tool"], "stage": "setup", "when": "Before any deploy, SSH, migration or remote data access"},
+    "worktree-flow": {"tier": "core", "events": ["pre_tool", "stop"], "stage": "start", "when": "Before the first file change (own worktree) and when finishing (PR into the integration branch)"},
+    "feature-build": {"tier": "core", "events": ["prompt"], "stage": "build", "when": "/feature-build or a user story to implement"},
+    "bug-triage": {"tier": "core", "events": ["prompt"], "stage": "build", "when": "/bug-triage or a bug or QA ticket"},
+    "vision": {"tier": "optional", "events": ["prompt"], "stage": "build", "when": "/vision to draft or stress-test VISION.md"},
+    "fe-guardrails": {"tier": "optional", "events": ["pre_tool"], "stage": "build", "when": "Before writing React or Next.js screens, forms and error states"},
+    "ask-or-decide": {"tier": "core", "events": ["pre_tool"], "stage": "build", "when": "Before an AskUserQuestion call or a scope change"},
+    "axi": {"tier": "optional", "events": ["tool"], "stage": "build", "when": "While building a CLI that agents will call"},
+    "server-touch": {"tier": "optional", "events": ["pre_tool"], "stage": "build", "when": "Before a Bash call that touches a live Docker Compose host"},
+    "root-cause": {"tier": "core", "events": ["post_tool"], "stage": "debug", "when": "A test, build or deploy fails, or a fix did not work"},
+    "chrome-devtools-axi": {"tier": "optional", "events": ["tool"], "stage": "prove", "when": "The browser driver behind e2e-verify when Playwright MCP is absent"},
+    "e2e-verify": {"tier": "core", "events": ["tool", "stop"], "stage": "prove", "when": "Before calling a user-facing change done: browser evidence per AC"},
+    "flow-trace": {"tier": "core", "events": ["stop"], "stage": "prove", "when": "Before done on state machines, webhooks, jobs, money, access gates"},
+    "security-pass": {"tier": "core", "events": ["stop"], "stage": "prove", "when": "Before done when the diff hits auth, tenant data, SQL, storage, env"},
+    "fresh-review": {"tier": "core", "events": ["subagent", "stop"], "stage": "review", "when": "Before a PR: a fresh subagent reviews the diff until clean"},
+    "no-mistakes": {"tier": "optional", "events": ["prompt", "stop"], "stage": "review", "when": "/no-mistakes gate before the push target"},
+    "gnhf": {"tier": "optional", "events": ["prompt", "task_created", "task_completed"], "stage": "review", "when": "/gnhf overnight loop of small committed changes"},
+    "stow": {"tier": "optional", "events": ["pre_compact", "session_end"], "stage": "remember", "when": "Before a context reset or a break: save what was learned"},
+    "knowledge-placement": {"tier": "core", "events": ["pre_tool", "subagent"], "stage": "remember", "when": "Before editing AGENTS.md or a skill; red/green skill tests use fresh subagents"}
+  },
+  "stages": [
+    {"id": "setup", "label": "Setup", "sub": "once per machine or repo"},
+    {"id": "start", "label": "Start", "sub": "own worktree"},
+    {"id": "build", "label": "Build", "sub": "story, bug, screen"},
+    {"id": "debug", "label": "Debug", "sub": "cause before fix"},
+    {"id": "prove", "label": "Prove", "sub": "evidence, not claims"},
+    {"id": "review", "label": "Review & ship", "sub": "PR into dev"},
+    {"id": "remember", "label": "Remember", "sub": "durable knowledge"}
+  ],
+  "ultracode": {
+    "lane": [
+      {"row": "prompt", "label": "\"ultracode\" in prompt", "sub": "ask first (AGENTS.md)"},
+      {"row": "tool", "label": "Workflow tool", "sub": "JS script orchestrates"},
+      {"row": "subagent", "label": "N subagents", "sub": "up to 16 at once", "stack": true},
+      {"row": "task_completed", "label": "Verify + synthesize", "sub": "one answer back"}
+    ],
+    "phases": ["Understand", "Design", "Implement", "Review"]
+  }
+}
