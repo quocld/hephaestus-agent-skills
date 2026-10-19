@@ -667,7 +667,44 @@ def pillar_status(checks):
     return status, related, alerts
 
 
-def render(checks, cards, plugins, project, probe, registry=None):
+def setup_prompt(actions, project, score, opt):
+    """A prompt the user pastes into Claude Code to finish the setup, built from this run's fix list.
+    It names keys and paths only; secret values never enter it."""
+    installed = CLAUDE / "skills" / "harness-map" / "scripts" / "harness_map.py"
+    rerun = short(installed) if installed.exists() else f"{short(MAIN)}/skills/harness-map/scripts/harness_map.py"
+    lines = [f"Finish my agent harness setup. harness-map reports core {score}% and optional {opt}% ready "
+             f"(agent-skills repo {short(MAIN)}" + (f", project {short(project)}" if project else "") + ").", ""]
+    first = {}   # fix -> where it first appeared, so one command that fixes several items runs once
+    for tier, head in (("core", "Core, do all of these in order"), ("optional", "Optional, ask me which of these I want first")):
+        mine = [c for c in actions if c["tier"] == tier]
+        if not mine:
+            continue
+        lines.append(head + ":")
+        for i, c in enumerate(mine, 1):
+            if c["fix"] and c["fix"] in first:
+                fix = f" Fix: the same command as {first[c['fix']]}; run it once."
+            else:
+                fix = f" Fix: {c['fix']}" if c["fix"] else ""
+                if c["fix"]:
+                    first[c["fix"]] = f"{tier} {i}"
+            lines.append(f"{i}. [{LABEL[c['status']]}] {c['section']} / {c['title']}: {c['detail']}.{fix}")
+        lines.append("")
+    if not actions:
+        lines += ["Nothing is missing. Verify it: run the hooks test and one skill end to end, then report.", ""]
+    lines += [
+        "Rules:",
+        "- Confirm with me before running install.sh: it moves existing real files into ~/.claude/backups/ and links this repo in their place.",
+        "- Hooks: merge the entries from hooks/README.md into hooks.PreToolUse of ~/.claude/settings.json, never replace the array, then run hooks/test.sh.",
+        "- Secrets: never print, copy, move or commit a secret value. For a plaintext secret, tell me where it is and what to do; I move and rotate it.",
+        "- Logins and MCP sign-ins are mine: give me the exact `! <command>` (or /mcp) to run and wait.",
+        "- Project setup goes through the project-init skill and environments through the environments skill, in a worktree, finished as a PR into the integration branch.",
+        "- Ask me for facts you cannot find (environment URLs, SSH aliases, test accounts) in one batch; write TODO(<owner>) for what I do not know.",
+        f"- When done, rerun `python3 {rerun} --no-probe" + (f" --project {short(project)}" if project else "") + "` and show me the new core and optional readiness and anything still open.",
+    ]
+    return "\n".join(lines)
+
+
+def render(checks, cards, plugins, project, probe, registry=None, opt=0):
     by_sec = {}
     for c in checks:
         by_sec.setdefault(c["section"], []).append(c)
@@ -691,13 +728,21 @@ def render(checks, cards, plugins, project, probe, registry=None):
                  f'<span class="pill {pst[pl["id"]]}">{WHEEL_WORD[pst[pl["id"]]]}</span></span></a>' for pl in PILLARS)
     covered = sum(1 for v in pst.values() if v == "ok")
     need = sum(1 for v in palert.values() if v)
+    prompt = setup_prompt(actions, project, score, opt)
+    ncore = sum(1 for c in actions if c["tier"] == "core")
+    nopt = len(actions) - ncore
+    h.append(f'<section class="card prompt" id="prompt"><div class="hd">{icon("Tools")}<h2>Setup prompt</h2>'
+             f'<span class="desc">Paste into Claude Code to finish the setup: {ncore} core and {nopt} optional steps, with the safety rules</span>'
+             f'<div class="bar"><button class="btn ghost" type="button" data-expand="prompt-text">Expand</button>'
+             f'<button class="btn primary" type="button" data-copy="prompt-text">Copy prompt</button></div></div>'
+             f'<pre id="prompt-text" class="ptext">{esc(prompt)}</pre></section>')
     h.append(f'<section class="card" id="wheel"><div class="hd">{icon("Skills")}<h2>Harness wheel</h2>'
              f'<span class="desc">Color: how fully this repo covers each component. Red badge: not set up on this machine. Hover or tap for details</span></div>'
              f'<div class="wheelwrap">{wheel_svg(pst, ("Agent Harness", f"{covered}/{len(PILLARS)} fully covered"), palert)}<div class="wlist">{wl}</div></div>'
              f'{pillar_cards(pst, prel, {c["name"]: c["installed"] for c in cards}, palert)}</section>')
     h.append(f'<div class="tiers" id="overview">{tier_block("core", checks, by_sec, actions)}{tier_block("optional", checks, by_sec, actions)}</div>')
 
-    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a><a href="#envs">Project & environments</a>'
+    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#prompt">Setup prompt</a><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a><a href="#envs">Project & environments</a>'
              f'<a href="#todo">Fix first<span class="c">{len(actions)}</span></a><div class="h">Checks</div>')
     for sec in ORDER:
         if sec in by_sec:
@@ -807,6 +852,7 @@ def main():
     ap.add_argument("--out", default=str(CLAUDE / "harness-map.html"))
     ap.add_argument("--no-probe", action="store_true", help="skip hooks/test.sh and gh auth status")
     ap.add_argument("--open", action="store_true", help="open the report in the default browser")
+    ap.add_argument("--prompt", action="store_true", help="print only the setup prompt (still writes the page)")
     a = ap.parse_args()
 
     project = git_root(a.project or os.getcwd())
@@ -826,13 +872,16 @@ def main():
     for c in checks:
         c["tier"] = tier_of(c)
 
-    page, score, count, actions = render(checks, cards, plugins, project, probe, registry)
+    opt = readiness([c for c in checks if c["tier"] == "optional"])
+    page, score, count, actions = render(checks, cards, plugins, project, probe, registry, opt)
     out = Path(a.out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page)
 
+    if a.prompt:
+        print(setup_prompt(actions, project, score, opt))
+        return
     print(f"Harness map: {out}  (tabs: Dashboard, Docs)")
-    opt = readiness([c for c in checks if c["tier"] == "optional"])
     print(f"Core ready {score}%  optional ready {opt}%  ok {count['ok']}  attention {count['warn']}  missing/failing {count['missing'] + count['fail']}")
     for i, c in enumerate(actions, 1):
         print(f"{i:>2}. [{c['tier']}] [{LABEL[c['status']]}] {c['section']} / {c['title']}: {c['detail']}" + (f"\n    fix: {c['fix']}" if c["fix"] else ""))

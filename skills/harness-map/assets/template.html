@@ -159,6 +159,14 @@ background-size:200% auto;-webkit-background-clip:text;background-clip:text;colo
 @keyframes ult{to{background-position:200% center}}
 .chip.ultchip{background:transparent;box-shadow:inset 0 0 0 1px rgba(167,139,250,.55);font-weight:700}
 @media (prefers-reduced-motion:reduce){.ult{animation:none}}
+.btn{all:unset;cursor:pointer;font-size:12.5px;font-weight:500;padding:6px 12px;border-radius:8px;white-space:nowrap}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:0 1px 2px rgba(74,56,245,.28),inset 0 1px 0 rgba(255,255,255,.14)}
+.btn.primary:hover{filter:brightness(1.08)}.btn.ghost{color:var(--text-2);box-shadow:inset 0 0 0 1px var(--border-2)}.btn.ghost:hover{background:var(--surface-3)}
+.btn:focus-visible{box-shadow:0 0 0 3px rgba(74,56,245,.3)}
+.card.prompt{border-top:3px solid var(--accent)}
+.ptext{margin:0;padding:16px 18px;background:var(--code-bg);color:var(--code-text);font:12px/1.6 "Azeret Mono",ui-monospace,monospace;
+white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;border-radius:0 0 13px 13px}
+.ptext.open{max-height:none}
 .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .tierblock{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:4px}
 .tierblock.core{border-top:3px solid var(--accent)}.tierblock.optional{border-top:3px solid var(--neutral)}
@@ -235,6 +243,13 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   document.querySelectorAll('.copy').forEach(function(b){b.onclick=function(){
     var t=b.previousElementSibling.textContent;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1200)},function(){b.textContent='Select'});}});
+  // Copy and expand buttons for a block of text by id (the setup prompt).
+  document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){
+    var t=document.getElementById(b.dataset.copy).textContent, label=b.textContent;
+    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent=label},1400)},
+      function(){var r=document.createRange();r.selectNodeContents(document.getElementById(b.dataset.copy));var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Press Cmd+C'});}});
+  document.querySelectorAll('[data-expand]').forEach(function(b){b.onclick=function(){
+    var el=document.getElementById(b.dataset.expand); b.textContent=el.classList.toggle('open')?'Collapse':'Expand';}});
   // Respect reduced motion for the SVG gradient too (CSS covers the HTML one).
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){document.querySelectorAll('.ult-anim').forEach(function(a){a.remove()})}
   // Tabs: Dashboard and Docs share one page. The hash decides the tab: #docs, or any id inside the docs pane.

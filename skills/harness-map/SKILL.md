@@ -27,6 +27,7 @@ The script is read-only, never prints a secret value (only the key name, and for
 
 ## 2. Report
 
+When the user wants an agent to finish the setup, `--prompt` prints the same setup prompt the top of the Dashboard offers to copy; run it in a new session or act on it here.
 Print the path of the HTML file, the core and optional readiness, and the numbered "Fix first" list from the script's stdout, in that order; core items first.
 Also print any skill the script says is not placed in `assets/lifecycle.json`; the Skills section flags it too.
 Do not retype the whole report; the page holds the detail.
