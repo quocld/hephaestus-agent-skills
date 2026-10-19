@@ -34,7 +34,7 @@
         "Điều phối subagents khi có lợi, không mặc định multi-agent."
       ],
       "covered_by": {
-        "files": ["Workflow tool (ultracode, ask first)"],
+        "files": ["Agent and Workflow tools (ask first)"],
         "skills": ["worktree-flow", "feature-build", "bug-triage", "ask-or-decide", "gnhf"],
         "sections": []
       },

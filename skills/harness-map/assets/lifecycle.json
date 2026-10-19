@@ -60,14 +60,5 @@
     "retry": {"label": "Fails: find the cause", "files": []},
     "response": {"label": "Response", "sub": "review, PR into dev", "files": []},
     "remember": {"label": "Remember for the next task", "files": []}
-  },
-  "ultracode": {
-    "lane": [
-      {"row": "prompt", "label": "\"ultracode\" in prompt", "sub": "ask first (AGENTS.md)"},
-      {"row": "tool", "label": "Workflow tool", "sub": "JS script orchestrates"},
-      {"row": "subagent", "label": "N subagents", "sub": "up to 16 at once", "stack": true},
-      {"row": "task_completed", "label": "Verify + synthesize", "sub": "one answer back"}
-    ],
-    "phases": ["Understand", "Design", "Implement", "Review"]
   }
 }

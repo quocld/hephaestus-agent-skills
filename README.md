@@ -21,7 +21,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | --- | --- | --- |
 | `verify-loop` | One ordered chain of gates before any PR (toolchain, project checks, proof tests, requirements, review, E2E) with a PASS/FAIL table; per-project checks in `.agents/checks/`; optional CI jobs. | - |
 | `fresh-review` | Independent review by a fresh subagent before a PR, looped until clean. | - |
-| `harness-map` | Dashboard of the whole harness (core vs optional, eight-component wheel, ranked fix list) and harness docs (lifecycle map of every skill and hook, ultracode), from one shared HTML template. | python3 |
+| `harness-map` | Dashboard of the whole harness (core vs optional, eight-component wheel, ranked fix list) and harness docs (harness wheel, lifecycle map of every skill and hook, task path), from one shared HTML template. | python3 |
 | `project-init` | Set up a repo for this skill set: AGENTS.md agent setup block, environment registry, version endpoint, tool doctor. | - |
 | `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |
 | `ask-or-decide` | When to decide autonomously vs. ask, and how to ask. | - |

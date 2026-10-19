@@ -8,7 +8,7 @@ user-invocable: true
 # harness-map
 
 Setup gaps hide in many places at once: links install.sh never made, hooks not registered, CLIs a skill needs, plugins, secrets in settings, a project without its agent block.
-This skill renders two HTML pages from one template: a live dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel) and the harness docs (the wheel's definitions, the Claude Code lifecycle with every skill and hook placed on it, the task path, ultracode).
+This skill renders two HTML pages from one template: a live dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel) and the harness docs (the wheel's definitions, the Claude Code lifecycle with every skill and hook placed on it, the task path).
 
 ## 1. Generate
 

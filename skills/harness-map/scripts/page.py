@@ -29,7 +29,6 @@ ICONS = {
     "Settings hygiene": '<path d="M10 3l6 2.5V10c0 3.5-2.6 6-6 7-3.4-1-6-3.5-6-7V5.5z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     "Project": '<path d="M3 6h5l2 2h7v8H3z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     "Flow": '<path d="M3 10h4l2-5 2 10 2-5h4" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Fanout": '<circle cx="5" cy="10" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 10h3M10 5v10M10 5h5M10 10h5M10 15h5" fill="none" stroke="currentColor" stroke-width="1.6"/>',
 }
 
 
