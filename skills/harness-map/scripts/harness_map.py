@@ -966,13 +966,17 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
 
 
 SITE_NAME = "Hephaestus Skills"
+# Google Search Console's HTML-tag token for the docs site. It is public by design (every page carries it), so it
+# lives here and every build, local or CI, keeps the site verified. --gsc-token or GOOGLE_SITE_VERIFICATION override it.
+GSC_TOKEN = ""
 SITE_DESC = ("Hephaestus Skills, a Claude Code plugin: 25 agent skills, safety hooks and global rules, "
              "with the lifecycle map, task path and every skill in full.")
 
 
-def seo_head(title, desc, url, site_url, gsc_token, ld):
+def seo_head(title, desc, url, site_url, gsc_token, ld, kind="website", crumbs=()):
     """Search and sharing metadata for one page of the docs site: description, canonical, Open Graph, Twitter,
-    JSON-LD, and the Google Search Console verification tag when a token is given."""
+    a crawlable favicon, JSON-LD (plus a BreadcrumbList from crumbs, [(name, url)]), and the Google Search Console
+    verification tag when a token is given."""
     tags = [f'<meta name="description" content="{esc(desc)}">', '<meta name="robots" content="index,follow">',
             '<meta name="theme-color" content="#0c0a09">']
     if site_url:
@@ -981,8 +985,10 @@ def seo_head(title, desc, url, site_url, gsc_token, ld):
                  f'<meta property="og:image" content="{esc(site_url)}/icon.png">',
                  '<meta property="og:image:width" content="512"><meta property="og:image:height" content="512">',
                  f'<meta property="og:image:alt" content="{SITE_NAME} logo: a hammer striking hot metal on an anvil">',
-                 f'<meta name="twitter:image" content="{esc(site_url)}/icon.png">']
-    tags += ['<meta property="og:type" content="website">', f'<meta property="og:site_name" content="{SITE_NAME}">',
+                 f'<meta name="twitter:image" content="{esc(site_url)}/icon.png">',
+                 # Search results only show a favicon Google can fetch; the inline SVG one is for browsers.
+                 '<link rel="icon" type="image/png" sizes="512x512" href="/icon.png">']
+    tags += [f'<meta property="og:type" content="{kind}">', f'<meta property="og:site_name" content="{SITE_NAME}">',
              f'<meta property="og:title" content="{esc(title)}">', f'<meta property="og:description" content="{esc(desc)}">',
              '<meta name="twitter:card" content="summary">', f'<meta name="twitter:title" content="{esc(title)}">',
              f'<meta name="twitter:description" content="{esc(desc)}">',
@@ -990,7 +996,13 @@ def seo_head(title, desc, url, site_url, gsc_token, ld):
     if gsc_token:
         tags.append(f'<meta name="google-site-verification" content="{esc(gsc_token)}">')
     # JSON in a script tag: escape "<" so no value can close the tag.
-    tags.append('<script type="application/ld+json">' + json.dumps(ld, ensure_ascii=False).replace("<", "\\u003c") + '</script>')
+    lds = [ld]
+    if site_url and crumbs:
+        lds.append({"@context": "https://schema.org", "@type": "BreadcrumbList",
+                    "itemListElement": [{"@type": "ListItem", "position": i + 1, "name": n, "item": u}
+                                        for i, (n, u) in enumerate(crumbs)]})
+    tags += ['<script type="application/ld+json">' + json.dumps(x, ensure_ascii=False).replace("<", "\\u003c") + '</script>'
+             for x in lds]
     return "\n".join(tags)
 
 
@@ -1002,7 +1014,8 @@ def short_desc(text, limit=155):
 def write_docs_site(out_dir, site_url=None, gsc_token=None):
     """The public docs site: no checks, no settings, no paths or host names, so it can be published as is.
     index.html, one crawlable page per skill under skills/<name>/, the install guide the onboarding prompt points at
-    (install.md for agents, install/ for people), sitemap.xml, robots.txt, icon.png, version.json."""
+    (install.md for agents, install/ for people), llms.txt, 404.html, vercel.json (one URL per page: trailing slash,
+    raw files kept out of the index), sitemap.xml, robots.txt, icon.png, version.json."""
     from harness_docs import ONBOARD_BUTTON, onboard_source, repo_hooks
     from page import render_markdown, repo_skills, skill_doc
     import shutil as _sh
@@ -1045,13 +1058,15 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
                 f'<div><p class="crumbs"><a href="../../">Docs</a> / <a href="../../#skill-reference">Skills</a> / {esc(d.name)}</p>'
                 f'<section class="card"><div class="rbody">{doc[0]}{doc[1]}</div></section></div></div>' + onboard_source())
         page = render_page(ptitle, SITE_NAME, f"/ Docs / {d.name}", body, footer, ONBOARD_BUTTON,
-                           head=seo_head(ptitle, desc, url, site_url, gsc_token, ld))
+                           head=seo_head(ptitle, desc, url, site_url, gsc_token, ld, "article",
+                                         [("Docs", home), ("Skills", f"{home}#skill-reference"), (d.name, url)]))
         (out_dir / "skills" / d.name).mkdir(parents=True, exist_ok=True)
         (out_dir / "skills" / d.name / "index.html").write_text(page)
         urls.append(url)
 
     guide = (SKILL / "assets" / "install-guide.md").read_text()
     (out_dir / "install.md").write_text(guide)
+    gh1, _, grest = guide.partition("\n")   # the guide's "# " title is the page's one h1; render_markdown shifts the rest down
     gtitle, gdesc = f"Install {SITE_NAME} | {SITE_NAME}", f"How a coding agent installs {SITE_NAME} without overwriting the harness it already has."
     url = f"{site_url}/install/" if site_url else ""
     ld = {"@context": "https://schema.org", "@type": "HowTo", "name": f"Install {SITE_NAME}", "description": gdesc}
@@ -1060,9 +1075,10 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
     body = ('<div class="grid skillpage"><nav class="side"><div class="h">Install</div><a href="../">All docs</a>'
             '<a href="../install.md">install.md (for agents)</a></nav>'
             f'<div><p class="crumbs"><a href="../">Docs</a> / Install</p>'
-            f'<section class="card"><div class="rbody">{render_markdown(guide)}</div></section></div></div>' + onboard_source())
+            f'<section class="card"><div class="rbody"><h1>{esc(gh1.lstrip("# ").strip())}</h1>{render_markdown(grest)}</div></section></div></div>'
+            + onboard_source())
     page = render_page(gtitle, SITE_NAME, "/ Docs / Install", body, footer, ONBOARD_BUTTON,
-                       head=seo_head(gtitle, gdesc, url, site_url, gsc_token, ld))
+                       head=seo_head(gtitle, gdesc, url, site_url, gsc_token, ld, "article", [("Docs", home), ("Install", url)]))
     (out_dir / "install").mkdir(parents=True, exist_ok=True)
     (out_dir / "install" / "index.html").write_text(page)
     urls.append(url)
@@ -1070,6 +1086,23 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
     icon = REPO / "assets" / "icon.png"
     if icon.exists():
         _sh.copy(icon, out_dir / "icon.png")
+    page = render_page(f"Page not found | {SITE_NAME}", SITE_NAME, "/ Docs", '<section class="card"><div class="rbody">'
+                       '<h1>Page not found</h1><p>This page does not exist. <a href="/">Back to the docs</a> or '
+                       '<a href="/install/">install Hephaestus Skills</a>.</p></div></section>' + onboard_source(), footer, ONBOARD_BUTTON,
+                       head='<meta name="robots" content="noindex">')
+    (out_dir / "404.html").write_text(page)
+    # One URL per page: /install redirects to /install/; the raw guide and llms.txt are for agents, not the index.
+    raw_hdr = [{"key": "X-Robots-Tag", "value": "noindex"}]
+    (out_dir / "vercel.json").write_text(json.dumps({
+        "trailingSlash": True,
+        "headers": [{"source": "/install.md", "headers": raw_hdr + ([{"key": "Link", "value": f'<{url}>; rel="canonical"'}] if site_url else [])},
+                    {"source": "/llms.txt", "headers": raw_hdr}]}, indent=2) + "\n")
+    base = site_url or ""
+    llms = [f"# {SITE_NAME}", "", f"> {SITE_DESC}", "", "## Install", "",
+            f"- [Install guide]({base}/install.md): follow it to install {SITE_NAME} without overwriting an existing harness", "",
+            "## Skills", ""]
+    llms += [f"- [{d.name}]({base}/skills/{d.name}/): {short_desc(fm.get('description', ''))}" for d, fm in skills]
+    (out_dir / "llms.txt").write_text("\n".join(llms) + "\n")
     robots = "User-agent: *\nAllow: /\n" + (f"Sitemap: {site_url}/sitemap.xml\n" if site_url else "")
     (out_dir / "robots.txt").write_text(robots)
     if site_url:
@@ -1118,7 +1151,7 @@ def main():
     ap.add_argument("--version", help="release version to show (default: newest v* tag, else dev)")
     ap.add_argument("--site-url", default=os.environ.get("DOCS_SITE_URL"),
                     help="public URL of the docs site, for canonical links, Open Graph and sitemap.xml (--docs-only)")
-    ap.add_argument("--gsc-token", default=os.environ.get("GOOGLE_SITE_VERIFICATION"),
+    ap.add_argument("--gsc-token", default=os.environ.get("GOOGLE_SITE_VERIFICATION") or GSC_TOKEN,
                     help="Google Search Console HTML-tag verification token (--docs-only)")
     ap.add_argument("--docs-only", metavar="DIR", help="write the public docs site to DIR (index.html, version.json): "
                     "the Docs tab and the harness wheel only, built from the repo alone, nothing about this machine")

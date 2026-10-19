@@ -315,6 +315,18 @@ def main():
         check((Path(tmp) / "install.md").exists() and (Path(tmp) / "install.md").read_text() == guide
               and "hx-&lt;name&gt;" in (Path(tmp) / "install" / "index.html").read_text(),
               "install guide: the docs site serves it raw at install.md and as a page at install/")
+        out = Path(tmp)
+        p_ = subprocess.run([sys.executable, str(SCRIPT), "--docs-only", str(out / "seo"), "--site-url", "https://docs.example",
+                             "--gsc-token", "tok123"], capture_output=True, text=True)
+        seo = out / "seo"
+        inst, skp = (seo / "install" / "index.html").read_text(), (seo / "skills" / "root-cause" / "index.html").read_text()
+        vj = json.loads((seo / "vercel.json").read_text()) if (seo / "vercel.json").exists() else {"headers": []}
+        check(inst.count("<h1>") == 1 and '"BreadcrumbList"' in skp and 'og:type" content="article"' in skp
+              and 'rel="icon" type="image/png"' in skp and 'google-site-verification" content="tok123"' in inst,
+              "seo: one h1 per page, breadcrumbs, article type, crawlable favicon, GSC tag")
+        check(vj.get("trailingSlash") is True and any(h["source"] == "/install.md" for h in vj["headers"])
+              and (seo / "404.html").exists() and 'noindex' in (seo / "404.html").read_text() and (seo / "llms.txt").exists() and "https://docs.example/install.md" in (seo / "llms.txt").read_text(),
+              "seo: one URL per page, raw guide kept out of the index, a noindex 404, llms.txt")
         check('data-open="onboard-src"' in site and 'id="onboard-src"' in site and _html.escape(prompt, quote=True) in site
               and 'data-open="onboard-src"' in skill_page, "onboard prompt: a header button on every docs page opens it")
 
