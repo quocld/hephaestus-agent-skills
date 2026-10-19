@@ -6,7 +6,7 @@ Claude Code hooks that turn always-on rules from `AGENTS.md` into gates.
 | Script | Event and matcher | Does |
 | --- | --- | --- |
 | `no-em-dash.py` | `PreToolUse`, `Write\|Edit\|MultiEdit\|NotebookEdit` | Denies a write whose new text contains an em dash (U+2014), with a reason telling the agent to rewrite it. |
-| `guard-protected-branches.py` | `PreToolUse`, `Bash` | Returns `ask` (a permission prompt) for `git push` to main, master, staging, stage, prod, or production, `--all`/`--mirror`, `git merge` while on one of those, every `gh pr merge` or `glab mr merge`, and a push or merge whose repo directory it cannot resolve. |
+| `guard-protected-branches.py` | `PreToolUse`, `Bash` | For `git push` to main, master, staging, stage, prod, or production, `--all`/`--mirror`, `git merge` while on one of those, and every `gh pr merge` or `glab mr merge`: returns `ask` (a permission prompt), or `deny` in `bypassPermissions` and `dontAsk` modes, where no prompt would appear. A repo opts a branch out with `git config agentguard.allow <branch>`, set by the user only. |
 
 Both read the hook JSON on stdin, print nothing when the call is fine, and fail open on bad input.
 
