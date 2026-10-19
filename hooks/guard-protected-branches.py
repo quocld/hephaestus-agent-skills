@@ -225,8 +225,12 @@ def main():
     if payload.get("permission_mode") in NO_PROMPT_MODES:
         decision = "deny"
         reason += (" This permission mode shows no prompt, so the guard denies instead of asking."
-                   " If the user explicitly asked for this, tell them to run it themselves with `! <command>`,"
-                   " or to opt this repo out with `git config agentguard.allow <branch>`; never set that yourself.")
+                   " If the user explicitly asked for this, tell them to run it themselves with `! <command>`")
+        # agentguard.allow only lifts reasons that name a branch; a PR/MR merge never names one.
+        if any("branch '" in r for r in found):
+            reason += ", or to opt this repo out with `git config agentguard.allow <branch>`; never set that yourself."
+        else:
+            reason += "; `git config agentguard.allow` does not cover PR/MR merges."
     else:
         decision = "ask"
         reason += " Approve only if you asked for this."

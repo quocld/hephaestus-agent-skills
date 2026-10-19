@@ -105,6 +105,17 @@ mode_case deny  "$MAIN" bypassPermissions 'git push origin staging'
 mode_case deny  "$MAIN" bypassPermissions 'gh pr merge 3'
 git -C "$MAIN" config --unset agentguard.allow
 
+# hint_case <expected: yes|no> <cwd> <command>: does the deny reason suggest agentguard.allow?
+hint_case() {
+  local payload got
+  payload="$(python3 -c 'import json,sys; print(json.dumps({"cwd": sys.argv[1], "permission_mode": "bypassPermissions", "tool_input": {"command": sys.argv[2]}}))' "$2" "$3")"
+  got="$(printf '%s' "$payload" | python3 "$HOOKS/guard-protected-branches.py" | python3 -c 'import json,sys; r=json.load(sys.stdin)["hookSpecificOutput"]["permissionDecisionReason"]; print("yes" if "opt this repo out" in r else "no")')"
+  if [ "$got" = "$1" ]; then echo "ok   hint=$got  $3"; else echo "FAIL want hint=$1 got $got  $3"; FAIL=1; fi
+}
+hint_case yes "$FEAT" 'git push origin main'
+hint_case no  "$FEAT" 'gh pr merge 3'
+hint_case no  "$FEAT" 'glab mr merge 3'
+
 echo "== settings registration ($SETTINGS)"
 if [ ! -f "$SETTINGS" ]; then
   echo "WARN $SETTINGS not found, skipping the registration check (expected in CI)"
