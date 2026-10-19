@@ -100,16 +100,28 @@ def repo_skills():
     return [(d, frontmatter(d / "SKILL.md") or {}) for d in sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir())]
 
 
+TOKEN_LIKE = re.compile(r"^(gh[opsu]_|github_pat_|glpat-|gldt-|xox[abp]-|x-access-token)|^[A-Za-z0-9_\-]{32,}$")
+
+
 def strip_userinfo(url):
-    """A URL without its userinfo (everything up to the last @ before the path); (clean url, True when the userinfo
-    can be a credential: a password, or a bare user part on http(s), where it is a token rather than a login name)."""
-    url = _str(url)
-    m = re.match(r"^([a-z][a-z0-9+.-]*://)([^/\s]*)@(.*)$", url, re.I)
+    """A URL without its userinfo; (clean url, True when that userinfo can be a credential).
+    Fails closed: the userinfo runs to the last @ before any ? or #, so a password holding / or @ is removed whole;
+    a user part with a password, or a bare one that looks like a token, counts as a credential, while a plain
+    login name (Bitbucket's https://jdoe@...) does not."""
+    url = _str(url).strip()
+    m = re.match(r"([a-z][a-z0-9+.-]*://)(.*)", url, re.I | re.S)
     if not m:
         return url, False
-    scheme, info, rest = m.groups()
-    secret = ":" in info or scheme.lower() in ("http://", "https://")
-    return scheme + rest, secret
+    scheme, rest = m.groups()
+    cut = min([i for i in (rest.find("?"), rest.find("#")) if i != -1] or [len(rest)])
+    at = rest.rfind("@", 0, cut)
+    if at == -1:
+        return url, False
+    info = rest[:at]
+    if "/" in info and ":" not in info.split("/", 1)[0]:
+        return url, False   # the @ sits in the path (/@scope/pkg), not in userinfo
+    secret = ":" in info or bool(TOKEN_LIKE.match(info))
+    return scheme + rest[at + 1:], secret
 
 
 def plugin_entry(installed, pid):

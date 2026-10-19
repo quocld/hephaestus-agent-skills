@@ -28,7 +28,7 @@ def hook_source(cmd):
     try:
         words = shlex.split(cmd)
     except ValueError:
-        words = cmd.split()
+        return "custom", "command"   # unbalanced quotes: any guess could be part of a value
     words = [w for w in words if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
     return "custom", (Path(words[0].strip("\"'")).name if words else "command")[:28]
 

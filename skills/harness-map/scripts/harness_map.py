@@ -144,8 +144,8 @@ def collect_skills():
 
 def collect_hooks(probe):
     out = []
-    settings = load_obj(CLAUDE / "settings.json")
-    if settings is None:
+    settings = load_json(CLAUDE / "settings.json")
+    if not isinstance(settings, dict):
         return [check("Hooks", "settings.json", "missing",
                       f"{short(CLAUDE / 'settings.json')} missing or not valid JSON, so no hook is registered and no rule is enforced",
                       "create it with the hooks.PreToolUse entries from hooks/README.md, then run hooks/test.sh")]
@@ -233,8 +233,8 @@ def collect_plugins(project=None, registry=None):
     for pid, on in sorted(enabled.items()):
         inst = plugin_entry(installed, pid)
         path = Path(_str(inst.get("installPath")))
-        mcp = load_json(path / ".mcp.json") or {}
-        servers = sorted((mcp.get("mcpServers", mcp) or {}).keys()) if isinstance(mcp, dict) else []
+        mcp = load_obj(path / ".mcp.json")
+        servers = sorted(_dict(mcp.get("mcpServers", mcp)).keys())
         skills = sorted(p.name for p in (path / "skills").iterdir() if p.is_dir()) if (path / "skills").is_dir() else []
         mcp_names += servers
         plugins.append({"id": pid, "on": bool(on), "version": inst.get("version", "?"), "mcp": servers, "skills": len(skills)})
@@ -420,7 +420,7 @@ def _strs(x):
 def normalize_env(e):
     """One environment with every field the page reads in a safe shape, so a hand-edited registry cannot crash it."""
     out = dict(e)
-    out.update({k: str(e.get(k) or "") for k in ("url", "branch", "policy", "description")})
+    out.update({k: _str(e.get(k)) for k in ("url", "branch", "policy", "description")})
     out.update({k: _dict(e.get(k)) for k in ("data", "testing")})
     out["testing"] = dict(out["testing"], rules=_strs(out["testing"].get("rules")))
     out.update({k: _strs(e.get(k)) for k in ("rules", "deployOrder")})
@@ -482,7 +482,10 @@ def env_checks(registry, project):
             out.append(check("Project", f"{name}: logs field", "warn", f"{', '.join(old)} still use the old string `logs`; it is now `logsCommand`, and `logs` names a Better Stack source",
                              "rename logs to logsCommand in .agents/environments.json (environments skill)"))
         refs = [a.get(k) for a in e.get("accounts", []) for k in ("password", "mfa")] + \
-               [v for s_ in e.get("services", []) for v in s_.get("access", {}).values() if isinstance(v, dict) and "secret" in v]
+               [v if isinstance(v, dict) else {"secret": "literal"}
+                for s_ in e.get("services", []) for k, v in s_.get("access", {}).items()
+                if (isinstance(v, dict) and "secret" in v)
+                or (isinstance(v, str) and (k == "dbUrl" or SECRET_KEY.search(k) or strip_userinfo(v)[1]))]
         states = [secret_state(r, known) for r in refs if r]
         literal = sum(1 for _, st in states if st == "fail") + (1 if e.get("_url_credential") else 0)
         if literal:

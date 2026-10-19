@@ -29,6 +29,11 @@ LEAKS = {
     "@ inside a remote password": "LeakAfterAt11",
     "token-only marketplace URL": "gh" + "p_LeakTokenOnly12",
     "literal mfa": "LeakMfa13",
+    "URL with leading whitespace": "LeakSpaceUrl14",
+    "URL with a newline": "LeakNewlineUrl15",
+    "slash in a URL password": "LeakSlashUrl16",
+    "literal dbUrl string": "LeakDbUrl17",
+    "unbalanced quote in a hook": "LeakUnbalanced18",
 }
 FAILS = []
 
@@ -57,10 +62,12 @@ def leaky_machine(root):
     (claude / "plugins").mkdir(parents=True)
     hook_cmd = "SLACK_TOKEN=" + LEAKS["inline env in a hook command"] + " python3 /opt/hooks/notify.py"
     quoted = 'API_KEY="abc ' + LEAKS["quoted inline env in a hook"] + '" python3 /opt/hooks/other.py'
+    unbalanced = 'API_KEY="abc ' + LEAKS["unbalanced quote in a hook"] + ' python3 /opt/hooks/third.py'
     (claude / "settings.json").write_text(json.dumps({
         "env": {"SLACK_TOKEN": LEAKS["settings env literal"]},
         "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": hook_cmd},
-                                                               {"type": "command", "command": quoted}]}]},
+                                                               {"type": "command", "command": quoted},
+                                                               {"type": "command", "command": unbalanced}]}]},
     }))
     (home / ".claude.json").write_text(json.dumps({"mcpServers": {"x": {"env": {"API_KEY": LEAKS["MCP server env literal"]}}}}))
     url = "https://gitlab+deploy-token-1:" + LEAKS["marketplace URL credentials"] + "@git.example.com/x.git"
@@ -76,10 +83,14 @@ def leaky_machine(root):
     (project / ".agents" / "secrets.env").write_text("STAGING_DB_URL=" + LEAKS["secrets.env value"] + "\n")
     (project / ".agents" / "environments.json").write_text(json.dumps({"project": "acme", "defaultEnvironment": "dev", "environments": {
         "staging": {"policy": "confirm-writes", "url": "https://admin:" + LEAKS["environment URL basic auth"] + "@staging.acme.test", "services": [
-            {"name": "web", "type": "vps", "access": {"dbUrl": {"secret": "env:STAGING_DB_URL"}}}],
+            {"name": "web", "type": "vps", "access": {"dbUrl": {"secret": "env:STAGING_DB_URL"}}},
+            {"name": "db", "type": "supabase", "access": {"dbUrl": "postgres://u:" + LEAKS["literal dbUrl string"] + "@h/db"}}],
             "accounts": [{"role": "admin", "login": "a@acme.test", "password": LEAKS["registry literal password"],
                           "mfa": LEAKS["literal mfa"]},
-                         {"role": "member", "login": "m@acme.test", "password": {"secret": LEAKS["registry literal secret object"]}}]}}}))
+                         {"role": "member", "login": "m@acme.test", "password": {"secret": LEAKS["registry literal secret object"]}}]},
+        "qa1": {"policy": "confirm-writes", "url": " https://admin:" + LEAKS["URL with leading whitespace"] + "@qa1.acme.test", "services": []},
+        "qa2": {"policy": "confirm-writes", "url": "https://admin:" + LEAKS["URL with a newline"] + "@qa2.acme.test\nx", "services": []},
+        "qa3": {"policy": "confirm-writes", "url": "https://admin:SE/" + LEAKS["slash in a URL password"] + "@qa3.acme.test/x", "services": []}}}))
     return home, project
 
 
@@ -126,6 +137,7 @@ def main():
         for title in ("Remote URL credentials", "Credentials in plugin marketplace URLs", "literal secrets"):
             check(title in page, f"check fires: {title}")
         check("tokenonly" in page, "token-only marketplace URL is reported by name")
+        check("5 secret value(s)" in page, "staging counts 5 literal secrets (password, secret object, mfa, URL, dbUrl)")
         code, out, _ = run(home, project, ["--prompt"])
         check(all(v not in out for v in LEAKS.values()), "setup prompt holds no secret value")
         check(not any(p in out for p in (str(home), "/Users/", "Desktop")), "setup prompt holds no machine path")
@@ -146,6 +158,24 @@ def main():
                 target.unlink()
             else:
                 target.write_text(saved)
+
+        saved = (home / ".claude" / "settings.json").read_text()
+        (home / ".claude" / "settings.json").unlink()
+        code, out, page = run(home, project)
+        check(code == 0 and "settings.json missing or not valid JSON" in page, "missing settings.json: headline check shown")
+        (home / ".claude" / "settings.json").write_text(saved)
+
+        plug = root / "plug"
+        plug.mkdir()
+        (plug / ".mcp.json").write_text(json.dumps({"mcpServers": ["x"]}))
+        (home / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"p@m": True}}))
+        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {"p@m": [{"installPath": str(plug)}]}}))
+        code, out, page = run(home, project)
+        check(code == 0 and bool(page), "plugin .mcp.json with a list: no crash")
+
+        subprocess.run(["git", "-C", str(project), "remote", "set-url", "origin", "https://jdoe@bitbucket.org/team/app.git"], check=True)
+        code, out, page = run(home, project)
+        check("Remote URL credentials" not in page, "a Bitbucket user@ remote is not reported as a credential")
 
         (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": None, "enabledPlugins": {"a@b": True}}))
         (home / ".claude" / "settings.local.json").write_text(json.dumps({"hooks": None}))
