@@ -13,10 +13,10 @@ This skill renders one HTML page with two tabs: Dashboard (what is set up, what 
 ## 1. Generate
 
 ```bash
-python3 ~/.claude/skills/harness-map/scripts/harness_map.py --open    # -> ~/.claude/harness-map.html
+python3 <this skill>/scripts/harness_map.py --open    # -> ~/.claude/harness-map.html
 ```
 
-Before `install.sh` has run, use the agent-skills checkout's copy: `python3 <agent-skills checkout>/skills/harness-map/scripts/harness_map.py --open` (the setup prompt names that path).
+`<this skill>` is this skill's base directory, wherever it is installed; never write a machine-specific path into anything the user copies or commits.
 The page opens on Dashboard; `#docs` (or any docs section, such as `#lifecycle`) opens the Docs tab.
 
 - It checks the git repo of the current directory as the project; pass `--project <dir>` for another one. Outside a git repo the Project section is skipped.
@@ -38,7 +38,7 @@ When the user only asked to see the harness, stop here; finishing it is section 
 The Dashboard's setup prompt (`--prompt` prints it) starts this flow; the user may also ask for it in their own words.
 Run it from the project the user wants set up, one step at a time, never as one batch of changes.
 Never use `--no-probe` here: the hooks test is how step 2 knows it is done.
-Until step 1 has run, read any skill this flow names from the checkout (`<agent-skills checkout>/skills/<name>/SKILL.md`); if the user declines the install, keep reading them there.
+When this skill runs from a checkout before step 1, read any skill this flow names next to it (`<this skill>/../<name>/SKILL.md`); if the user declines the install, keep reading them there.
 
 1. **Check**: run the script with `--open` and read its fix list; the order below decides what comes first, not the list's order.
 2. **Take the steps in this order**, skipping a step with no gap:

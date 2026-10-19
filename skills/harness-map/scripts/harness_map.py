@@ -668,7 +668,7 @@ def pillar_status(checks):
 
 
 SETUP_PROMPT = """Check my agent harness and finish setting it up, one step at a time, with the harness-map skill's setup flow (section 3 of its SKILL.md).
-If the skill is not installed yet, read {checkout}/skills/harness-map/SKILL.md and run {checkout}/skills/harness-map/scripts/harness_map.py.
+If the harness-map skill is not available, tell me how to install the agent-skills set first (github.com/quocld/agent-skills) and stop.
 
 1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
 2. Go through the gaps in order: this machine first (install, hooks, secrets, tools and logins), then this project (project-init, then environments), core before optional.
@@ -681,7 +681,7 @@ Ask before running install.sh or adding hooks to ~/.claude/settings.json. Never 
 
 def setup_prompt():
     """The prompt the user pastes to start the setup flow (SKILL.md section 3); the agent finds the gaps itself."""
-    return SETUP_PROMPT.format(checkout=short(MAIN))
+    return SETUP_PROMPT
 
 
 def render(checks, cards, plugins, project, probe, registry=None, opt=0):
