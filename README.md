@@ -19,6 +19,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 
 | Skill | Use it for | Needs |
 | --- | --- | --- |
+| `verify-loop` | One ordered chain of gates before any PR (toolchain, project checks, proof tests, requirements, review, E2E) with a PASS/FAIL table; per-project checks in `.agents/checks/`; optional CI jobs. | - |
 | `fresh-review` | Independent review by a fresh subagent before a PR, looped until clean. | - |
 | `project-init` | Set up a repo for this skill set: AGENTS.md agent setup block, environment registry, version endpoint, tool doctor. | - |
 | `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |

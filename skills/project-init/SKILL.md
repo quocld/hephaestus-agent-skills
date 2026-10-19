@@ -62,6 +62,7 @@ Never rewrite text outside the markers.
 - API contract: `packages/contracts/`.
 - E2E: personas `admin`, `member` with storage states in `e2e/.auth/` (gitignored); evidence in `e2e/reports/`.
 - Flow traces: `docs/flow-traces/`.
+- Project checks: `.agents/checks/` (`verify-loop` section 4).
 - Frontend: shared UI in `packages/ui/`; errors parsed only by `lib/api-error.ts`.
 - Environments: `.agents/environments.json` (see the `environments` skill).
 - Logging: logger `packages/logger/` (`logging-standard`); tenant field is organization_id (logging-standard alias); log sources in the registry (`betterstack-logs`).
@@ -111,6 +112,7 @@ A row whose precondition is absent (no registry, no `op://` reference, no GitLab
 | Markers intact | `AGENTS.md` has exactly one `project-init:start` and one `project-init:end` |
 | Block paths exist | Every repo path the block names exists (`test -e <path>`); a gitignored path such as a storage state folder counts as `OK` when `git check-ignore -q <path>` succeeds, with a trailing slash on folders (`e2e/.auth/`) so dir-only patterns match |
 | Block commands resolve | Each listed command, checked with the cheap probe below, never by running it |
+| Project checks valid | `python3 ~/.claude/skills/verify-loop/scripts/checks.py list` exits 0; `SKIP` when `.agents/checks/` does not exist |
 | Open `TODO(<owner>)` | `grep -n 'TODO(' AGENTS.md .agents/environments.json`, one row per hit |
 
 Print the block once with `sed -n '/project-init:start/,/project-init:end/p' AGENTS.md` and take its paths and commands from that output.

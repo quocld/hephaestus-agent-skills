@@ -40,7 +40,7 @@ The triggers are the risk triggers named in `AGENTS.md`; an access gate includes
 | Tier | Condition | Do |
 | --- | --- | --- |
 | **ask** | Not reproduced yet, or not traced to any file | Stop and ask. Do not guess. |
-| **light** | No trigger touched | Fix -> typecheck, lint -> tests of the touched package |
+| **light** | No trigger touched | Fix -> `verify-loop` (its E2E gate only when the change is user-facing) |
 | **heavy** | At least one trigger touched | `flow-trace` is mandatory + sequence reproduction test + `e2e-verify` evidence |
 
 A one-line change can be the most dangerous bug of the month: if it touches money and status, it is heavy.
@@ -56,8 +56,9 @@ An "empty screen" bug must be traced to its read endpoint before concluding anyt
 - If tightening a guard breaks old fixtures, fix the fixtures to match the new precondition; never loosen the guard.
 - Performance fixes: follow the legacy and performance subsection of `root-cause`.
 
-## 5. Commit and open the PR/MR
+## 5. Verify, commit, and open the PR/MR
 
+- Run `verify-loop`; its requirements gate is the reporter's expected result and every scope item the comments added (step 1).
 - Commit and open the PR/MR per `worktree-flow`.
 - Merging and deploying to dev is the user's step (or CI after a merge the user asked for), per `worktree-flow` section 4.
 

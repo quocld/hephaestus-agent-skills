@@ -70,6 +70,6 @@ Write `e2e/reports/<id>-<ISO>.json` (or the project's equivalent), tracked in gi
 
 - PASS: the evidence file is what allows closing the story/ticket. No file, no close.
 - FAIL: add a screenshot and failure details, go back to fixing; do not close.
-- After a fix, re-run only the failed ACs plus the ACs whose route or component files the fix touched (`git diff --name-only <evidence commit>..HEAD`), not the whole suite.
+- After a fix, re-run only the failed ACs plus the ACs with any file on their path the fix touched (route, component, handler, service, query, migration; `git diff --name-only <evidence commit>..HEAD`), not the whole suite; when unsure whether a file is on an AC's path, re-run it.
 - After 3 FAIL cycles on the same AC, stop patching and switch to the `root-cause` skill.
 - Never report "works" for a flow that was not actually exercised; say exactly what was skipped and why.

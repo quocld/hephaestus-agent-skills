@@ -61,7 +61,7 @@ project = <KEY> AND assignee = currentUser() AND issuetype in (<every issue type
   1. The ticket key and URL, the repo path, `<int>`, the dev environment name, and the media inbox path.
   2. Follow `bug-triage` steps 0 to 5 for this ticket only, in your own worktree per `worktree-flow`, and open the PR/MR as a draft.
      Branches of this ticket whose PR/MR is merged or closed are history, not another agent: add a `-2`, `-3` suffix to yours instead of stopping.
-     Skip `fresh-review` and `e2e-verify` there: the orchestrator runs them, since a subagent cannot spawn the reviewer and the browser is shared.
+     Run `verify-loop` with gates 5 and 6 marked `DEFER orchestrator`: the orchestrator runs them, since a subagent cannot spawn the reviewer and the browser is shared.
   3. Never use the Playwright MCP browser: it is one shared instance, and a second caller fails with "Browser is already in use".
      Reproduce in a browser process of your own, a Playwright script that launches its own browser with `recordVideo` on (from the project's `@playwright/test` or `npx -y playwright`), and save the video or screenshots to the inbox as `before`.
   4. Never merge, never comment on or transition the ticket, never deploy, and never edit the ledger.
@@ -74,10 +74,11 @@ project = <KEY> AND assignee = currentUser() AND issuetype in (<every issue type
 ## 3. Review before merge, since no human reads the diff
 
 - Rerun the worker's proof yourself in its worktree, with the revert-only-the-fix commands of `root-cause` section 5; a worker's "done" is a claim.
-- Run `fresh-review` on the branch from your own context; it spawns the reviewer.
+- Run `verify-loop` gate 5 on the branch from your own context: `fresh-review` (it spawns the reviewer), plus `security-pass` and `flow-trace` when their triggers are in the diff.
   Send `auto-fix` findings back to the same worker (SendMessage) and run the next round as `fresh-review` says.
   Every `fresh-review` exit that needs the user (an `ask-user` finding, `risk_level` high in the last round, `auto-fix` findings still open after round 3) parks the ticket as `needs-decision` with that question, and the loop moves on; a parked PR/MR is never merged.
-- Mark the PR/MR ready only when `fresh-review` is clean and the project's CI checks pass (`gh pr checks <n> --watch`, or `glab ci status`).
+- Mark the PR/MR ready only when gate 5 is clean and the project's CI checks pass (`gh pr checks <n> --watch`, or `glab ci status`); then replace the review DEFER rows of the worker's `verify-loop` table in the PR/MR body with your results and the head you reviewed.
+  The behavior row and the requirement rows that cite E2E stay `DEFER orchestrator, dev verification after merge`, and section 5 fills them in the merged PR/MR's body with the evidence file and the running SHA.
 
 ## 4. Merge, one ticket at a time
 
