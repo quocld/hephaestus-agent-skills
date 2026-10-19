@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Host+Grotesk:wght@500;600&family=Azeret+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f7f7f9;--surface:#fff;--surface-2:#f6f6f8;--surface-3:#eeeef2;--border:rgba(28,28,28,.08);--border-2:rgba(28,28,28,.13);
+:root{--u1:#e11d48;--u2:#d97706;--u3:#16a34a;--u4:#0284c7;--u5:#7c3aed;--u6:#db2777;--bg:#f7f7f9;--surface:#fff;--surface-2:#f6f6f8;--surface-3:#eeeef2;--border:rgba(28,28,28,.08);--border-2:rgba(28,28,28,.13);
 --text:#1c1c1c;--text-2:#3a3a41;--muted:#5f5f66;--accent:#4a38f5;--accent-soft:#efedfe;--accent-text:#3b2ad9;
 --agent:#ed87fc;--agent-soft:#fcebfe;--agent-text:#7a1f87;
 --ok:#1a7f37;--ok-soft:#e8f5ec;--ok-text:#156b2e;--warn:#9a8300;--warn-soft:#fdfbd0;--warn-text:#7a6a00;
@@ -17,13 +17,13 @@
 --code-bg:#15151b;--code-text:#e7e7ee;--code-muted:#a0a0ae;
 --shadow-1:0 1px 2px rgba(0,0,0,.04);--shadow-2:0 6px 16px -4px rgba(16,16,40,.1),0 1px 3px rgba(16,16,40,.05);
 --brand:linear-gradient(140deg,#6553ff 0%,#4a38f5 55%,#3420d8 100%);color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1011;--surface:#141516;--surface-2:#191a1b;--surface-3:#1c1c1f;
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--u1:#ff5f6d;--u2:#ffc371;--u3:#47e891;--u4:#38bdf8;--u5:#a78bfa;--u6:#f472b6;--bg:#0f1011;--surface:#141516;--surface-2:#191a1b;--surface-3:#1c1c1f;
 --border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.13);--text:#ededf0;--text-2:#d2d2d9;--muted:#a3a3ad;
 --accent:#6b5cff;--accent-soft:rgba(124,110,255,.16);--accent-text:#aba2ff;--agent-soft:rgba(237,135,252,.13);--agent-text:#f4b9fd;
 --ok:#3fb760;--ok-soft:rgba(63,183,96,.15);--ok-text:#6fd68c;--warn:#e3cf3a;--warn-soft:rgba(254,255,183,.1);--warn-text:#eee68e;
 --bad:#f26b5e;--bad-soft:rgba(242,107,94,.15);--bad-text:#ff9187;--neutral:#8e8e98;--neutral-soft:rgba(255,255,255,.07);--neutral-text:#bdbdc6;
 --code-bg:#08090a;--shadow-1:0 1px 2px rgba(0,0,0,.35);--shadow-2:0 8px 20px -6px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35);color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0f1011;--surface:#141516;--surface-2:#191a1b;--surface-3:#1c1c1f;
+:root[data-theme="dark"]{--u1:#ff5f6d;--u2:#ffc371;--u3:#47e891;--u4:#38bdf8;--u5:#a78bfa;--u6:#f472b6;--bg:#0f1011;--surface:#141516;--surface-2:#191a1b;--surface-3:#1c1c1f;
 --border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.13);--text:#ededf0;--text-2:#d2d2d9;--muted:#a3a3ad;
 --accent:#6b5cff;--accent-soft:rgba(124,110,255,.16);--accent-text:#aba2ff;--agent-soft:rgba(237,135,252,.13);--agent-text:#f4b9fd;
 --ok:#3fb760;--ok-soft:rgba(63,183,96,.15);--ok-text:#6fd68c;--warn:#e3cf3a;--warn-soft:rgba(254,255,183,.1);--warn-text:#eee68e;
@@ -153,6 +153,12 @@ box-shadow:0 24px 56px -12px rgba(16,16,40,.32),0 4px 14px rgba(16,16,40,.1);ani
 body:not([data-tab="docs"]) .pane[data-pane="docs"],body[data-tab="docs"] .pane[data-pane="dash"]{display:none}
 body[data-tab="docs"] .seg[aria-label="Filter"]{display:none}
 .seg.tabs button{font-size:12.5px;padding:5px 12px}
+/* Ultimate skills: bold text in a moving rainbow, like the ultracode keyword. */
+.ult{font-weight:700;background:linear-gradient(90deg,var(--u1),var(--u2),var(--u3),var(--u4),var(--u5),var(--u6),var(--u1));
+background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ult 3s linear infinite}
+@keyframes ult{to{background-position:200% center}}
+.chip.ultchip{background:transparent;box-shadow:inset 0 0 0 1px rgba(167,139,250,.55);font-weight:700}
+@media (prefers-reduced-motion:reduce){.ult{animation:none}}
 .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .tierblock{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:4px}
 .tierblock.core{border-top:3px solid var(--accent)}.tierblock.optional{border-top:3px solid var(--neutral)}
@@ -208,6 +214,12 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
 <footer>{{footer}}</footer>
 </main>
 <div class="wpop pillar" id="wpop" role="dialog" aria-live="polite" hidden></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<linearGradient id="ult-grad" x1="0" y1="0" x2="1" y2="0" spreadMethod="repeat">
+<stop offset="0" style="stop-color:var(--u1)"/><stop offset=".17" style="stop-color:var(--u2)"/><stop offset=".34" style="stop-color:var(--u3)"/>
+<stop offset=".5" style="stop-color:var(--u4)"/><stop offset=".67" style="stop-color:var(--u5)"/><stop offset=".84" style="stop-color:var(--u6)"/><stop offset="1" style="stop-color:var(--u1)"/>
+<animateTransform class="ult-anim" attributeName="gradientTransform" type="translate" from="0 0" to="1 0" dur="3s" repeatCount="indefinite"/>
+</linearGradient></defs></svg>
 <script>
 (function(){
   var root=document.documentElement, KEY='harness-map-theme';
@@ -223,6 +235,8 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   document.querySelectorAll('.copy').forEach(function(b){b.onclick=function(){
     var t=b.previousElementSibling.textContent;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1200)},function(){b.textContent='Select'});}});
+  // Respect reduced motion for the SVG gradient too (CSS covers the HTML one).
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){document.querySelectorAll('.ult-anim').forEach(function(a){a.remove()})}
   // Tabs: Dashboard and Docs share one page. The hash decides the tab: #docs, or any id inside the docs pane.
   var docsPane=document.querySelector('.pane[data-pane="docs"]');
   function setTab(t){

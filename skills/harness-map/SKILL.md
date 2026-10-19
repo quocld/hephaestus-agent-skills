@@ -53,6 +53,7 @@ Re-run the script (with `--open` only if the user wants the page again) and show
 | Change | Where |
 | --- | --- |
 | A new skill in the repo | `assets/lifecycle.json`: its `tier` (core or optional), lifecycle `events`, task-path steps in `path` (setup, prompt, gather, act, verify, retry, response, remember), `when`; and the pillar(s) it serves in `assets/pillars.json` |
+| A skill that runs a whole workflow end to end and orchestrates other skills | `"ultimate": true` on it in `assets/lifecycle.json`; every page then draws its name in the animated gradient |
 | A gap closed or found in one of the eight components | `gaps` of that pillar in `assets/pillars.json` |
 | A new check | One collector per section in `scripts/harness_map.py`; a CLI goes in `TOOLS`; a new section also needs `DESCS` and an icon in `scripts/page.py` |
 | Look and feel | `assets/template.html` only; the page renders through `render_page` in `scripts/page.py`; the Docs tab body comes from `scripts/harness_docs.py` |

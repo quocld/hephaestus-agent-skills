@@ -116,6 +116,15 @@ def render_page(title, brand, crumb, body, footer, header_tools=""):
 
 
 PILLARS = (load_json(SKILL / "assets" / "pillars.json") or {}).get("pillars", [])
+# Ultimate skills run a whole workflow end to end and orchestrate other skills; every page draws their name in the
+# animated gradient (class "ult" in HTML, fill url(#ult-grad) in SVG, both defined in assets/template.html).
+ULTIMATE = {n for n, s_ in ((load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills") or {}).items() if s_.get("ultimate")}
+
+
+def ult(name, text=None):
+    """The skill name (or text) as HTML, wrapped in the ultimate effect when the skill is ultimate."""
+    t = esc(name if text is None else text)
+    return f'<span class="ult">{t}</span>' if name in ULTIMATE else t
 WHEEL_FILL = {"ok": ("var(--ok-soft)", "var(--ok)"), "warn": ("var(--warn-soft)", "var(--warn)"),
               "fail": ("var(--bad-soft)", "var(--bad)"), None: ("var(--accent-soft)", "var(--accent)")}
 WHEEL_WORD = {"ok": "Covered", "warn": "Partial", "fail": "Gaps"}  # designed coverage; setup problems are a separate alert
@@ -176,7 +185,7 @@ def pillar_cards(status=None, related=None, installed=None, alerts=None):
         if pl.get("badge"):
             badge = f'<span class="tier core">{esc(pl["badge"])}</span>' + badge
         skill_chips = "".join(
-            f'<span class="chip {"acc" if installed is None or installed.get(s) else "bad"}">{esc(s)}</span>' for s in cov.get("skills", []))
+            f'<span class="chip {"acc" if installed is None or installed.get(s) else "bad"}">{ult(s)}</span>' for s in cov.get("skills", []))
         file_chips = "".join(f'<span class="chip">{esc(f)}</span>' for f in cov.get("files", []))
         missing = list(related.get(pl["id"], [])) + pl.get("gaps", [])
         miss = ("<ul class='miss'>" + "".join(f"<li>{esc(m)}</li>" for m in missing) + "</ul>") if missing else '<p class="none">Nothing known missing.</p>'

@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from page import CLAUDE, SKILL, esc, icon, load_json, repo_skills
+from page import ULTIMATE, ult, CLAUDE, SKILL, esc, icon, load_json, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -165,8 +165,7 @@ def lifecycle_svg(hooks):
                 for kind, lab, x, w in line:
                     bg, fg = CHIP[kind]
                     yy = top + li * 22
-                    p.append(f'<rect x="{x}" y="{yy}" width="{w}" height="18" rx="5" fill="{bg}"/>')
-                    p.append(f'<text x="{x + w / 2}" y="{yy + 12.5}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+                    p.append(svg_chip(kind, lab, x, yy, w, 18, 12.5))
     p.append('</svg>')
     return "".join(p)
 
@@ -176,15 +175,23 @@ def lifecycle_svg(hooks):
 CW, CH, GAP = 7.4, 21, 27   # chip char width, chip height, chip row pitch in the larger diagrams
 
 
+def svg_chip(kind, lab, x, y, w, h, base):
+    """One chip; an ultimate skill gets the gradient outline and gradient bold text."""
+    bg, fg = CHIP[kind]
+    if kind == "skill" and lab in ULTIMATE:
+        return (f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="5" fill="{bg}" stroke="url(#ult-grad)" stroke-width="1.4"/>'
+                f'<text x="{x + w / 2:.1f}" y="{y + base}" text-anchor="middle" class="chip-t ult-t" style="fill:url(#ult-grad)">{esc(lab)}</text>')
+    return (f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="5" fill="{bg}"/>'
+            f'<text x="{x + w / 2:.1f}" y="{y + base}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+
+
 def chip_line_svg(items, center, y):
     """One centered row of chips [(kind, label)]; returns (svg, width)."""
     widths = [round(len(lab) * CW + 16) for _, lab in items]
     total = sum(widths) + 6 * (len(items) - 1)
     x, out = center - total / 2, []
     for (kind, lab), w in zip(items, widths):
-        bg, fg = CHIP[kind]
-        out.append(f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{CH}" rx="5" fill="{bg}"/>'
-                   f'<text x="{x + w / 2:.1f}" y="{y + 14.5}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+        out.append(svg_chip(kind, lab, x, y, w, CH, 14.5))
         x += w + 6
     return "".join(out), total
 
@@ -359,6 +366,7 @@ DOC_CSS = """<style>
 .life .tl{font-size:12.5px;fill:var(--muted);font-weight:500}
 .life .tframe{font-family:"Host Grotesk",Inter,sans-serif;font-size:17px;fill:var(--muted)}
 .tp .chip-t{font-size:12px}
+.life .ult-t{font-weight:700}
 .life .gn{font-family:"Host Grotesk",Inter,sans-serif;font-size:15px;font-weight:500}
 .life .gno{font-size:11px;font-weight:700;fill:#fff}
 .vlsvg .gn{font-size:17px}.vlsvg .tsub{font-size:13px}.vlsvg .tl{font-size:13.5px}
@@ -418,6 +426,7 @@ def docs_body(hooks):
               '<span><i class="sw" style="background:var(--bad-soft);outline:1px solid var(--bad-text)"></i>gate hook from this repo</span>'
               '<span><i class="sw" style="background:var(--surface-3);outline:1px solid var(--border-2)"></i>plugin hook</span>'
               '<span><i class="sw" style="border:1.5px dashed #d08a5c"></i>agentic loop</span>'
+              '<span class="chip ultchip"><span class="ult">ultimate skill</span></span>'
               '<span><i class="sw" style="border:1.5px dashed #3b82c4"></i>each turn</span></div>')
     h.append(card("lifecycle", "Flow", "Lifecycle map", "Claude Code hook events, top to bottom; chips are what acts at each one",
                   f'<div class="scroll">{lifecycle_svg(hooks)}</div>{legend}'))
@@ -434,10 +443,10 @@ def docs_body(hooks):
         if n not in meta:
             continue
         inv = meta[n].get("user-invocable", "").lower() == "true"
-        how = f'<span class="chip acc">/{esc(n)}</span>' if inv else '<span class="chip agent">by description</span>'
+        how = f'<span class="chip acc">{ult(n, "/" + n)}</span>' if inv else '<span class="chip agent">by description</span>'
         tier = f'<span class="tier {s["tier"]}">{"Core" if s["tier"] == "core" else "Optional"}</span>'
         where = " ".join(f'<span class="chip">{esc(LIFE["events"][e]["label"])}</span>' for e in s["events"])
-        rows.append(f'<tr><td class="mono">{esc(n)}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
+        rows.append(f'<tr><td class="mono">{ult(n)}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
     for n in unmapped:
         rows.append(f'<tr><td class="mono">{esc(n)}</td><td colspan="4"><span class="chip warn">not placed in assets/lifecycle.json yet</span></td></tr>')
     h.append(card("skill-reference", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act",

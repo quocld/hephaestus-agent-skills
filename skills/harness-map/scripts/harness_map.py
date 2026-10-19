@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
-from page import (CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -739,7 +739,7 @@ def render(checks, cards, plugins, project, probe, registry=None):
             # A fix shared by many rows (install.sh for every skill) is shown once, on its first row.
             fx = "" if c["fix"] in seen else fix_html(c["fix"])
             seen.add(c["fix"])
-            h.append(f'<div class="row" data-s="{c["status"]}" data-t="{c["tier"]}"><div>{pill(c["status"])}</div><div class="t">{esc(c["title"])} {tier_chip(c["tier"])}</div>'
+            h.append(f'<div class="row" data-s="{c["status"]}" data-t="{c["tier"]}"><div>{pill(c["status"])}</div><div class="t">{ult(c["title"]) if c["section"] == "Skills" else esc(c["title"])} {tier_chip(c["tier"])}</div>'
                      f'<div class="d">{esc(c["detail"])}{fx}</div></div>')
         h.append('</section>')
 
@@ -750,11 +750,13 @@ def render(checks, cards, plugins, project, probe, registry=None):
               continue
         h.append(f'<div class="cath" data-t="{tier}">{tier_chip(tier)}<span>{len(group)} skills. {esc(TIER_TEXT[tier][1])}</span></div><div class="skills">')
         for s in group:
-            chips = ['<span class="chip acc">/' + esc(s["name"]) + '</span>' if s["invocable"] else '<span class="chip agent">auto-loaded</span>']
+            chips = ['<span class="chip acc">' + ult(s["name"], "/" + s["name"]) + '</span>' if s["invocable"] else '<span class="chip agent">auto-loaded</span>']
+            if s["name"] in ULTIMATE:
+                chips.insert(0, '<span class="chip ultchip"><span class="ult">ultimate</span></span>')
             chips.append('<span class="chip">installed</span>' if s["installed"] else '<span class="chip bad">not installed</span>')
             chips += [f'<span class="chip">{esc(x)}/</span>' for x in s["extras"]]
             chips += [f'<span class="chip warn">{esc(i)}</span>' for i in s["issues"]]
-            h.append(f'<div class="skill" data-s="{s["status"]}" data-t="{tier}"><div class="nm"><span class="mono" style="font-size:13px;font-weight:600">{esc(s["name"])}</span><span class="dot {s["status"]}"></span></div>'
+            h.append(f'<div class="skill" data-s="{s["status"]}" data-t="{tier}"><div class="nm"><span class="mono" style="font-size:13px;font-weight:600">{ult(s["name"])}</span><span class="dot {s["status"]}"></span></div>'
                      f'<p title="{esc(s["desc"])}">{esc(s["desc"])}</p><div class="chips">{"".join(chips)}</div></div>')
         h.append('</div>')
     h.append('</section>')
