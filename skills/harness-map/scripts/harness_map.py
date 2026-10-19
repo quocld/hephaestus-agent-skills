@@ -497,17 +497,18 @@ def render(checks, cards, plugins, project, probe):
              f'<span>Commit <b class="mono" title="{esc(sha.strip())}">{esc(sha.strip() if len(sha.strip()) <= 52 else sha.strip()[:50] + "...")}</b></span>{proj}'
              f'{"" if probe else "<span><b>Probes skipped</b></span>"}</div></div>{ring(score, "core ready")}</div>')
     pst, prel, palert = pillar_status(checks)
-    wl = "".join(f'<a href="#pillar-{pl["id"]}"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
+    wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
                  f'<span class="chips">{"<span class=\"pill fail\">Setup</span>" if palert[pl["id"]] else ""}'
                  f'<span class="pill {pst[pl["id"]]}">{WHEEL_WORD[pst[pl["id"]]]}</span></span></a>' for pl in PILLARS)
     covered = sum(1 for v in pst.values() if v == "ok")
     need = sum(1 for v in palert.values() if v)
     h.append(f'<section class="card" id="wheel"><div class="hd">{icon("Skills")}<h2>Harness wheel</h2>'
-             f'<span class="desc">Color: how fully this repo covers each component. Red badge: pieces not set up on this machine</span></div>'
-             f'<div class="wheelwrap">{wheel_svg(pst, ("Agent Harness", f"{covered}/{len(PILLARS)} fully covered"), palert)}<div class="wlist">{wl}</div></div></section>')
+             f'<span class="desc">Color: how fully this repo covers each component. Red badge: not set up on this machine. Hover or tap for details</span></div>'
+             f'<div class="wheelwrap">{wheel_svg(pst, ("Agent Harness", f"{covered}/{len(PILLARS)} fully covered"), palert)}<div class="wlist">{wl}</div></div>'
+             f'{pillar_cards(pst, prel, {c["name"]: c["installed"] for c in cards}, palert)}</section>')
     h.append(f'<div class="tiers" id="overview">{tier_block("core", checks, by_sec, actions)}{tier_block("optional", checks, by_sec, actions)}</div>')
 
-    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a><a href="#pillars">Eight components</a>'
+    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a>'
              f'<a href="#todo">Fix first<span class="c">{len(actions)}</span></a><div class="h">Checks</div>')
     for sec in ORDER:
         if sec in by_sec:
@@ -532,10 +533,6 @@ def render(checks, cards, plugins, project, probe):
     else:
         h.append('<div class="empty">Nothing to fix. The harness is fully set up.</div>')
     h.append('</section>')
-    inst = {c["name"]: c["installed"] for c in cards}
-    h.append(f'<section class="card" id="pillars"><div class="hd">{icon("Flow")}<h2>Eight components</h2>'
-             f'<span class="desc">What each component needs, what this harness has, what is missing</span></div>'
-             f'{pillar_cards(pst, prel, inst, palert)}</section>')
 
     for sec in ORDER:
         if sec not in by_sec:

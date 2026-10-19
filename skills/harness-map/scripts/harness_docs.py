@@ -256,7 +256,7 @@ DOC_CSS = """<style>
 .life .skillsub{font-size:10px;fill:var(--accent-text);font-weight:600}
 .life .chip-t{font-family:"Azeret Mono",ui-monospace,monospace;font-size:10.5px}
 .scroll{overflow-x:auto;padding:18px}
-.scroll .life{min-width:980px}
+.scroll .life{min-width:760px}
 .legend{display:flex;flex-wrap:wrap;gap:14px;padding:0 18px 16px;color:var(--muted);font-size:12px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .sw{width:14px;height:10px;border-radius:3px;display:inline-block}
@@ -303,18 +303,16 @@ def render(hooks, version, now):
         for n, c, l in [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
                         (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")]) + '</div>')
 
-    nav = [("wheel", "Harness wheel"), ("pillars", "Eight components"), ("lifecycle", "Lifecycle map"), ("path", "Task path"), ("ultracode", "Ultracode"),
+    nav = [("wheel", "Harness wheel"), ("lifecycle", "Lifecycle map"), ("path", "Task path"), ("ultracode", "Ultracode"),
            ("skills", "Skill reference"), ("hooks", "Hooks wired")]
     h.append('<div class="grid"><nav class="side"><div class="h">Docs</div>' +
              "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in nav) + '</nav><div>')
 
-    wl = "".join(f'<a href="#pillar-{pl["id"]}"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
+    wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
                  f'<span class="mono" style="font-size:11px;color:var(--muted)">{len(pl["covered_by"].get("skills", []))} skills</span></a>'
                  for pl in PILLARS)
-    h.append(card("wheel", "Skills", "Harness wheel", "The eight components of an agent harness; click a slice for its card",
-                  f'<div class="wheelwrap">{wheel_svg()}<div class="wlist">{wl}</div></div>'))
-    h.append(card("pillars", "Flow", "Eight components", "Definition, what this repo provides, known gaps",
-                  pillar_cards()))
+    h.append(card("wheel", "Skills", "Harness wheel", "The eight components of an agent harness; hover or tap a slice for what it covers",
+                  f'<div class="wheelwrap">{wheel_svg()}<div class="wlist">{wl}</div></div>{pillar_cards()}'))
 
     legend = ('<div class="legend">'
               '<span><i class="sw" style="background:var(--accent-soft);outline:1px solid var(--accent-text)"></i>skill</span>'

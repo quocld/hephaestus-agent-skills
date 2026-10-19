@@ -128,7 +128,7 @@ def _polar(cx, cy, r, deg):
 
 
 def wheel_svg(status=None, center=("Agent Harness", "8 components"), alerts=None):
-    """Donut of the eight pillars, pillar 1 at the top, clockwise; each slice links to its card.
+    """Donut of the eight pillars, pillar 1 at the top, clockwise; hovering a slice shows its card in the popover.
     status maps pillar id to ok/warn (designed coverage); None draws every slice in the accent tint.
     alerts marks pillars whose pieces are not set up on this machine with a red badge."""
     status, alerts = status or {}, alerts or {}
@@ -151,12 +151,12 @@ def wheel_svg(status=None, center=("Agent Harness", "8 components"), alerts=None
         word = WHEEL_WORD[st] + (" · setup" if alerts.get(pl["id"]) else "") if st else ""
         sub = (f'<text x="{tx:.1f}" y="{ty + 16 + 15 * (len(words) - 1):.1f}" class="wsub" text-anchor="middle"'
                f'{" style=\"fill:var(--bad-text)\"" if alerts.get(pl["id"]) else ""}>{esc(word)}</text>') if st else ""
-        p.append(f'<a href="#pillar-{pl["id"]}" class="slice"><title>{pl["no"]}. {esc(pl["name"])}</title>'
+        p.append(f'<g class="slice" data-pillar="{pl["id"]}" tabindex="0" role="button" aria-label="{pl["no"]}. {esc(pl["name"])}">'
                  f'<path d="M{x0:.1f} {y0:.1f} A{R} {R} 0 0 1 {x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f} A{r} {r} 0 0 0 {x3:.1f} {y3:.1f}Z" '
                  f'fill="{fill}" stroke="{stroke}" stroke-width="1.4"/>'
                  f'<circle cx="{tx:.1f}" cy="{ty - 26:.1f}" r="11" fill="{"var(--bad)" if alerts.get(pl["id"]) else stroke}"/>'
                  f'<text x="{tx:.1f}" y="{ty - 22:.1f}" class="wno" text-anchor="middle">{pl["no"]}</text>'
-                 f'<text x="{tx:.1f}" y="{ty + 1:.1f}" class="wname" text-anchor="middle">{lines}</text>{sub}</a>')
+                 f'<text x="{tx:.1f}" y="{ty + 1:.1f}" class="wname" text-anchor="middle">{lines}</text>{sub}</g>')
     p.append(f'<circle cx="{cx}" cy="{cy}" r="{r - 14}" fill="var(--surface)" stroke="var(--border-2)"/>'
              f'<text x="{cx}" y="{cy - 4}" class="wc1" text-anchor="middle">{esc(center[0])}</text>'
              f'<text x="{cx}" y="{cy + 20}" class="wc2" text-anchor="middle">{esc(center[1])}</text></svg>')
@@ -164,10 +164,10 @@ def wheel_svg(status=None, center=("Agent Harness", "8 components"), alerts=None
 
 
 def pillar_cards(status=None, related=None, installed=None, alerts=None):
-    """One card per pillar: definition, what this harness has for it, and what is missing.
-    related maps pillar id to failing check titles; installed maps skill name to True/False."""
+    """One hidden card per pillar (definition, what this harness has, what is missing), shown in the
+    wheel popover on hover. related maps pillar id to failing check titles; installed maps skill name to True/False."""
     status, related, installed, alerts = status or {}, related or {}, installed, alerts or {}
-    out = ['<div class="pillars">']
+    out = ['<div class="pillar-src" hidden>']
     for pl in PILLARS:
         st = status.get(pl["id"])
         cov = pl["covered_by"]
@@ -183,10 +183,10 @@ def pillar_cards(status=None, related=None, installed=None, alerts=None):
         miss = ("<ul class='miss'>" + "".join(f"<li>{esc(m)}</li>" for m in missing) + "</ul>") if missing else '<p class="none">Nothing known missing.</p>'
         points = "".join(f"<li>{esc(x)}</li>" for x in pl["points"])
         principle = f'<p class="principle">{esc(pl["principle"])}</p>' if pl.get("principle") else ""
-        out.append(f'<article class="pillar" id="pillar-{pl["id"]}" data-s="{st or ""}"><div class="ph"><span class="pno">{pl["no"]}</span>'
+        out.append(f'<article class="pillar" id="pillar-src-{pl["id"]}" data-s="{st or ""}"><div class="ph"><span class="pno">{pl["no"]}</span>'
                    f'<h3>{esc(pl["name"])}</h3><span class="sp"></span>{badge}</div><p class="lead">{esc(pl["lead"])}</p>'
                    f'<div class="lbl2">In this harness</div><div class="chips">{skill_chips}{file_chips}</div>'
                    f'<div class="lbl2">Missing</div>{miss}'
-                   f'<details><summary>What it covers</summary><ul>{points}</ul>{principle}</details></article>')
+                   f'<div class="lbl2">What it covers</div><ul>{points}</ul>{principle}</article>')
     out.append('</div>')
     return "".join(out)
