@@ -25,6 +25,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `e2e-verify` | Strict "verified" definition for ACs in a real browser, with PASS/FAIL evidence files. | Playwright MCP or chrome-devtools-axi |
 | `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | Jira access (MCP or API) |
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
+| `environments` | Per-project registry of dev/staging/prod: servers, deploy commands (VPS, Vercel, Supabase), test accounts, rules; prod confirmed step by step. | `.agents/environments.json` in the project |
 | `stow` | Save durable knowledge from a session to disk before a reset or break. | - |
 | `vision` | Draft and stress-test a project VISION.md. | node (`npx lavish-axi`) |
 | `no-mistakes` | Push through an AI review/test/lint gate before a clean PR. | `no-mistakes` CLI |

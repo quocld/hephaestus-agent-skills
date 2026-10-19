@@ -1,0 +1,234 @@
+{
+  "$schema": "./environments.schema.json",
+  "project": "acme",
+  "defaultEnvironment": "dev",
+  "environments": {
+    "dev": {
+      "description": "Local machine. Next.js dev server plus local Supabase.",
+      "url": "http://localhost:3000",
+      "branch": "dev",
+      "policy": "autonomous",
+      "data": {
+        "testDataAllowed": true,
+        "testDataMarker": "[QA]"
+      },
+      "services": [
+        {
+          "name": "web",
+          "type": "local",
+          "runtime": "Next.js dev server",
+          "deploy": [
+            "pnpm dev"
+          ],
+          "verify": [
+            "curl -fsS -o /dev/null -w '%{http_code}' http://localhost:3000"
+          ]
+        },
+        {
+          "name": "db",
+          "type": "supabase",
+          "runtime": "supabase start (Docker)",
+          "deploy": [
+            "supabase start"
+          ],
+          "verify": [
+            "supabase status"
+          ],
+          "notes": [
+            "supabase db reset wipes local data; run it only when the user asks."
+          ]
+        }
+      ],
+      "accounts": [
+        {
+          "role": "admin",
+          "login": "admin@acme.test",
+          "password": {
+            "secret": "env:DEV_ADMIN_PASSWORD"
+          }
+        },
+        {
+          "role": "member",
+          "login": "member@acme.test",
+          "password": {
+            "secret": "env:DEV_MEMBER_PASSWORD"
+          }
+        }
+      ]
+    },
+    "staging": {
+      "description": "Shared QA environment. A separate Vercel project for staging (its production deployments) plus staging Supabase.",
+      "url": "https://staging.acme.com",
+      "branch": "staging",
+      "policy": "confirm-writes",
+      "rules": [
+        "QA tests here 09:00-18:00 +0700; ask the user before a migration in those hours so they can tell the team."
+      ],
+      "data": {
+        "testDataAllowed": true,
+        "testDataMarker": "[QA]"
+      },
+      "services": [
+        {
+          "name": "web",
+          "type": "vercel",
+          "access": {
+            "vercelProjectId": "prj_staging123",
+            "vercelOrgId": "team_acme123"
+          },
+          "version": "curl -fsS https://staging.acme.com/api/version",
+          "deploy": [
+            "git push origin <sha>:refs/heads/staging"
+          ],
+          "verify": [
+            "curl -fsS -o /dev/null -w '%{http_code}' https://staging.acme.com/api/health"
+          ],
+          "rollback": [
+            "vercel rollback --scope acme"
+          ],
+          "logs": "vercel logs https://staging.acme.com --scope acme"
+        },
+        {
+          "name": "db",
+          "type": "supabase",
+          "access": {
+            "supabaseProjectRef": "stagingref123",
+            "dashboardUrl": "https://supabase.com/dashboard/project/stagingref123",
+            "dbUrl": {
+              "secret": "env:STAGING_DB_URL"
+            }
+          },
+          "version": "psql \"$STAGING_DB_URL\" -tAc \"select max(version) from supabase_migrations.schema_migrations\"",
+          "deploy": [
+            "supabase db push --db-url \"$STAGING_DB_URL\" --dry-run",
+            "supabase db push --db-url \"$STAGING_DB_URL\"",
+            "supabase functions deploy --project-ref stagingref123"
+          ],
+          "verify": [
+            "psql \"$STAGING_DB_URL\" -tAc \"select max(version) from supabase_migrations.schema_migrations\""
+          ],
+          "rollback": [
+            "supabase migration new revert_<migration-name>",
+            "supabase db push --db-url \"$STAGING_DB_URL\""
+          ],
+          "notes": [
+            "Logs: Logs Explorer at the dashboardUrl."
+          ]
+        }
+      ],
+      "accounts": [
+        {
+          "role": "admin",
+          "login": "qa-admin@acme.test",
+          "password": {
+            "secret": "env:STAGING_ADMIN_PASSWORD"
+          }
+        },
+        {
+          "role": "member",
+          "login": "qa-member@acme.test",
+          "password": {
+            "secret": "op://Acme QA/staging member/password"
+          }
+        }
+      ],
+      "deployOrder": [
+        "db",
+        "web"
+      ]
+    },
+    "prod": {
+      "description": "Customer-facing. Next.js on a VPS behind nginx, pm2 process, plus production Supabase.",
+      "url": "https://app.acme.com",
+      "branch": "main",
+      "policy": "confirm-each-step",
+      "allowedWithoutAsking": [
+        "version",
+        "logs",
+        "verify"
+      ],
+      "rules": [
+        "Deploy only a commit whose tree passed E2E on staging.",
+        "No deploys on Friday after 15:00 +0700 or during a customer event; always ask the user whether an event is running.",
+        "Back up the database before every migration; migrations must be backward-compatible with the running code (db deploys before web)."
+      ],
+      "data": {
+        "testDataAllowed": false
+      },
+      "services": [
+        {
+          "name": "web",
+          "type": "vps",
+          "runtime": "Next.js standalone + pm2, release folders named by full SHA with a current symlink; /api/version returns the build's commit SHA",
+          "access": {
+            "ssh": "acme-prod",
+            "appDir": "/srv/acme",
+            "processName": "acme-web"
+          },
+          "version": "ssh acme-prod 'curl -fsS http://localhost:3000/api/version'",
+          "deploy": [
+            "ssh acme-prod 'git -C /srv/acme/repo fetch origin && git -C /srv/acme/repo worktree add /srv/acme/releases/<sha> <sha>'",
+            "ssh acme-prod 'cd /srv/acme/releases/<sha> && cp /srv/acme/shared/.env.production . && pnpm install --frozen-lockfile && pnpm build'",
+            "ssh acme-prod 'ln -sfn /srv/acme/releases/<sha> /srv/acme/current'",
+            "ssh acme-prod 'pm2 reload acme-web --update-env'"
+          ],
+          "verify": [
+            "curl -fsS -o /dev/null -w '%{http_code}' https://app.acme.com/api/health",
+            "curl -fsS https://app.acme.com/api/version"
+          ],
+          "rollback": [
+            "ssh acme-prod 'ln -sfn /srv/acme/releases/<previous-sha> /srv/acme/current'",
+            "ssh acme-prod 'pm2 reload acme-web --update-env'"
+          ],
+          "logs": "ssh acme-prod 'pm2 logs acme-web --lines 200 --nostream'"
+        },
+        {
+          "name": "db",
+          "type": "supabase",
+          "access": {
+            "supabaseProjectRef": "prodref456",
+            "dashboardUrl": "https://supabase.com/dashboard/project/prodref456",
+            "dbUrl": {
+              "secret": "env:PROD_DB_URL"
+            }
+          },
+          "version": "psql \"$PROD_DB_URL\" -tAc \"select max(version) from supabase_migrations.schema_migrations\"",
+          "deploy": [
+            "supabase db dump --db-url \"$PROD_DB_URL\" -f .agents/backups/prod-<timestamp>-schema.sql",
+            "supabase db dump --db-url \"$PROD_DB_URL\" --data-only -f .agents/backups/prod-<timestamp>-data.sql",
+            "supabase db push --db-url \"$PROD_DB_URL\" --dry-run",
+            "supabase db push --db-url \"$PROD_DB_URL\"",
+            "supabase functions deploy --project-ref prodref456"
+          ],
+          "verify": [
+            "psql \"$PROD_DB_URL\" -tAc \"select max(version) from supabase_migrations.schema_migrations\""
+          ],
+          "notes": [
+            "Run every command from the clean deploy checkout of <sha> (or <previous-sha> for rollback), never the working tree.",
+            "Migrations are forward-only; rollback is a reverse migration. Restoring the backup is a last resort the user decides; prefer point-in-time recovery if the plan has it.",
+            "Logs: Logs Explorer at the dashboardUrl."
+          ],
+          "rollback": [
+            "supabase migration new revert_<migration-name>",
+            "supabase db push --db-url \"$PROD_DB_URL\"",
+            "supabase functions deploy --project-ref prodref456  # run from a checkout of <previous-sha>"
+          ]
+        }
+      ],
+      "accounts": [
+        {
+          "role": "smoke",
+          "login": "smoke@acme.com",
+          "password": {
+            "secret": "op://Acme Prod/smoke account/password"
+          },
+          "notes": "Read-only smoke account. Never use a real customer account."
+        }
+      ],
+      "deployOrder": [
+        "db",
+        "web"
+      ]
+    }
+  }
+}
