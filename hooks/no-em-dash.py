@@ -33,7 +33,7 @@ def main():
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": "The new text contains an em dash (U+2014), which AGENTS.md bans. Rewrite it with a plain dash \"-\" or restructure the sentence, then retry.",
+                "permissionDecisionReason": "The new text contains an em dash (U+2014), which AGENTS.md bans. It may sit in unchanged context you copied into the replacement, or anywhere in a file you rewrite with Write. Use a plain dash \"-\" in the lines you write, keep old_string/new_string to the lines you change, then retry.",
             }
         }))
     return 0

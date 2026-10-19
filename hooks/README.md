@@ -9,6 +9,8 @@ Claude Code hooks that turn always-on rules from `AGENTS.md` into gates.
 | `guard-protected-branches.py` | `PreToolUse`, `Bash` | For `git push` to main, master, staging, stage, prod, or production, `--all`/`--mirror`, `git merge` while on one of those, and every `gh pr merge` or `glab mr merge`: returns `ask` (a permission prompt), or `deny` in `bypassPermissions` and `dontAsk` modes, where no prompt would appear. A repo opts a branch out with `git config agentguard.allow <branch>`, set by the user only. |
 
 Both read the hook JSON on stdin, print nothing when the call is fine, and fail open on bad input.
+The em dash check reads only the new text, so editing a file that already has em dashes works as long as the replacement text does not carry them; rewrite those lines with a plain dash when you touch them, and keep `old_string` small enough not to copy unchanged em-dash lines into the new text.
+Known gap: edits made through Bash (`sed`, heredocs) are not checked; the `AGENTS.md` rule still applies to them.
 
 Settings entries (merge into `hooks.PreToolUse`, never replace the array):
 
