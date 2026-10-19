@@ -9,7 +9,7 @@ import re
 import shlex
 from pathlib import Path
 
-from page import SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
+from page import PILLARS, REPO, pillar_cards, wheel_svg, SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -31,6 +31,19 @@ def hook_source(cmd):
         return "custom", "command"   # unbalanced quotes: any guess could be part of a value
     words = [w for w in words if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
     return "custom", (Path(words[0].strip("\"'")).name if words else "command")[:28]
+
+
+def repo_hooks():
+    """[(event, matcher, kind, name, where)] that this repo's plugin registers (hooks/hooks.json): the same table as
+    live_hooks, but from the repo alone, for a page that must not describe any one machine."""
+    data = load_obj(REPO / "hooks" / "hooks.json")
+    rows = []
+    for event, entries in _dict(data.get("hooks", data)).items():
+        for e in _dicts(entries):
+            for h in _dicts(e.get("hooks")):
+                m = re.search(r"hooks/([\w-]+)\.py", _str(h.get("command")))
+                rows.append((event, _str(e.get("matcher")) or "*", "gate", m.group(1) if m else "agent-skills", "plugin hooks.json"))
+    return rows
 
 
 def live_hooks():
@@ -418,8 +431,9 @@ def unplaced_skills():
     return sorted(names - set(LIFE["skills"])), sorted(set(LIFE["skills"]) - names)
 
 
-def docs_body(hooks):
-    """Body of the Docs tab: KPIs, lifecycle map, task path, skill reference, hooks table."""
+def docs_body(hooks, standalone=False):
+    """Body of the Docs tab: KPIs, lifecycle map, task path, skill reference, hooks table.
+    standalone: the public docs site, which has no Dashboard, so it carries the harness wheel itself."""
     skills = repo_skills()
     meta = {d.name: fm for d, fm in skills}
     unmapped, _ = unplaced_skills()
@@ -429,15 +443,26 @@ def docs_body(hooks):
     h = [DOC_CSS]
     h.append(f'<div class="hero"><div><div class="eyebrow">Harness docs {esc(LIFE["version"])}</div><h1>How this harness is built</h1>'
              '<p class="sub">The Claude Code lifecycle redrawn with every skill and hook, the path a normal task takes through them, '
-             'and what loads each skill. The eight components live on the Dashboard wheel.</p></div></div>')
+             + ('and what loads each skill, around the eight components of an agent harness.' if standalone else
+                'and what loads each skill. The eight components live on the Dashboard wheel.') + '</p></div></div>')
     h.append('<div class="kpis">' + "".join(
         f'<div class="stat"><div class="n">{n}</div><div class="l"><span class="dot {c}"></span>{esc(l)}</div></div>'
-        for n, c, l in [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
-                        (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")]) + '</div>')
+        for n, c, l in ([(len(skills), "info", "skills"),
+                         (sum(1 for s_ in LIFE["skills"].values() if s_.get("tier") == "core"), "ok", "core skills"),
+                         (len(ULTIMATE), "warn", "ultimate skills"), (len({e for e, *_ in hooks}), "fail", "lifecycle events hooked")]
+                        if standalone else
+                        [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
+                         (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")])) + '</div>')
 
-    nav = [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
+    nav = ([("wheel", "Harness wheel")] if standalone else []) + [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
     h.append('<div class="grid"><nav class="side"><div class="h">Docs</div>' +
              "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in nav) + '</nav><div>')
+    if standalone:
+        wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
+                     f'<span class="mono" style="font-size:11px;color:var(--muted)">{len(pl["covered_by"].get("skills", []))} skills</span></a>'
+                     for pl in PILLARS)
+        h.append(card("wheel", "Skills", "Harness wheel", "The eight components of an agent harness; hover or tap a slice for what it covers",
+                      f'<div class="wheelwrap">{wheel_svg()}<div class="wlist">{wl}</div></div>{pillar_cards()}'))
 
     legend = ('<div class="legend">'
               '<span><i class="sw" style="background:var(--accent-soft);outline:1px solid var(--accent-text)"></i>skill</span>'
@@ -464,7 +489,11 @@ def docs_body(hooks):
         how = f'<span class="chip acc">{ult(n, "/" + n)}</span>' if inv else '<span class="chip agent">by description</span>'
         tier = f'<span class="tier {s["tier"]}">{"Core" if s["tier"] == "core" else "Optional"}</span>'
         where = " ".join(f'<span class="chip">{esc(LIFE["events"][e]["label"])}</span>' for e in s["events"])
-        rows.append(f'<tr><td class="mono">{ult(n)}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
+        # On the docs site a skill name is also a real link to its own page, so search engines can crawl it;
+        # the reader still opens it in place on a click.
+        name_ = (f'<a class="skl" data-skill="{esc(n)}" href="skills/{esc(n)}/">{ult(n) if n in ULTIMATE else esc(n)}</a>'
+                 if standalone else ult(n))
+        rows.append(f'<tr><td class="mono">{name_}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
     for n in unmapped:
         rows.append(f'<tr><td class="mono">{esc(n)}</td><td colspan="4"><span class="chip warn">not placed in assets/lifecycle.json yet</span></td></tr>')
     h.append(card("skill-reference", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act; click a name to read it",

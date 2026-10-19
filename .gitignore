@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .playwright-mcp/
+
+# environments skill
+.agents/secrets.env
+.agents/backups/
+.agents/deploy/

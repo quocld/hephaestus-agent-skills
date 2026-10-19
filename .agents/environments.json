@@ -1,0 +1,50 @@
+{
+  "$schema": "./environments.schema.json",
+  "project": "hephaestus-agent-skills",
+  "defaultEnvironment": "docs",
+  "environments": {
+    "docs": {
+      "description": "Public docs site: the harness-map --docs-only build, static HTML on Vercel, deployed with the CLI from a clean checkout of the commit.",
+      "url": "https://hephaestus-skills-docs.vercel.app",
+      "branch": "main",
+      "policy": "confirm-writes",
+      "data": {
+        "testDataAllowed": false
+      },
+      "testing": {
+        "scope": "smoke-only",
+        "rules": [
+          "Smoke: the page loads, version.json matches the deployed commit, the wheel popover and the skill reader open."
+        ]
+      },
+      "services": [
+        {
+          "name": "site",
+          "type": "vercel",
+          "runtime": "Static site from harness_map.py --docs-only: index.html, skills/<name>/, sitemap.xml, robots.txt, icon.png, version.json; no build on Vercel",
+          "access": {
+            "vercelProjectId": "prj_Aqtz9C2gXkFE0058DfeSQL4S88Cr",
+            "vercelOrgId": "team_yweEZEcfhBe9DEWQPiEOmXBX"
+          },
+          "version": "curl -fsS https://hephaestus-skills-docs.vercel.app/version.json | jq -r .sha",
+          "deploy": [
+            "git worktree add .agents/deploy/<sha> <sha>",
+            "python3 .agents/deploy/<sha>/skills/harness-map/scripts/harness_map.py --docs-only .agents/deploy/<sha>/hephaestus-skills-docs --site-url https://hephaestus-skills-docs.vercel.app",
+            "cd .agents/deploy/<sha>/hephaestus-skills-docs && npx vercel deploy --prod --yes --scope quoclds-projects"
+          ],
+          "verify": [
+            "curl -fsS -o /dev/null -w '%{http_code}' https://hephaestus-skills-docs.vercel.app/"
+          ],
+          "rollback": [
+            "npx vercel rollback --scope quoclds-projects"
+          ],
+          "logsCommand": "npx vercel logs https://hephaestus-skills-docs.vercel.app --scope quoclds-projects",
+          "notes": [
+            "Remove the deploy worktree afterwards: git worktree remove .agents/deploy/<sha>.",
+            "Google Search Console: pass the HTML-tag token with --gsc-token (or GOOGLE_SITE_VERIFICATION) in the build step, or verify the domain by DNS; the sitemap is /sitemap.xml."
+          ]
+        }
+      ]
+    }
+  }
+}
