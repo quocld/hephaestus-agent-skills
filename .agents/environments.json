@@ -1,0 +1,49 @@
+{
+  "$schema": "./environments.schema.json",
+  "project": "hephaestus-agent-skills",
+  "defaultEnvironment": "docs",
+  "environments": {
+    "docs": {
+      "description": "Public docs site: the harness-map --docs-only build, static HTML on Vercel, deployed with the CLI from a clean checkout of the commit.",
+      "url": "https://hephaestus-skills-docs.vercel.app",
+      "branch": "main",
+      "policy": "confirm-writes",
+      "data": {
+        "testDataAllowed": false
+      },
+      "testing": {
+        "scope": "smoke-only",
+        "rules": [
+          "Smoke: the page loads, version.json matches the deployed commit, the wheel popover and the skill reader open."
+        ]
+      },
+      "services": [
+        {
+          "name": "site",
+          "type": "vercel",
+          "runtime": "Static index.html and version.json from harness_map.py --docs-only; no build on Vercel",
+          "access": {
+            "vercelProjectId": "TODO(deploy): filled from .vercel/project.json after the first deploy",
+            "vercelOrgId": "TODO(deploy): filled from .vercel/project.json after the first deploy"
+          },
+          "version": "curl -fsS https://hephaestus-skills-docs.vercel.app/version.json | jq -r .sha",
+          "deploy": [
+            "git worktree add .agents/deploy/<sha> <sha>",
+            "python3 .agents/deploy/<sha>/skills/harness-map/scripts/harness_map.py --docs-only .agents/deploy/<sha>/hephaestus-skills-docs",
+            "cd .agents/deploy/<sha>/hephaestus-skills-docs && npx vercel deploy --prod --yes --scope quoclds-projects"
+          ],
+          "verify": [
+            "curl -fsS -o /dev/null -w '%{http_code}' https://hephaestus-skills-docs.vercel.app/"
+          ],
+          "rollback": [
+            "npx vercel rollback --scope quoclds-projects"
+          ],
+          "logsCommand": "npx vercel logs https://hephaestus-skills-docs.vercel.app --scope quoclds-projects",
+          "notes": [
+            "Remove the deploy worktree afterwards: git worktree remove .agents/deploy/<sha>."
+          ]
+        }
+      ]
+    }
+  }
+}
