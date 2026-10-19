@@ -327,6 +327,11 @@ def main():
         check(vj.get("trailingSlash") is True and any(h["source"] == "/install.md" for h in vj["headers"])
               and (seo / "404.html").exists() and 'noindex' in (seo / "404.html").read_text() and (seo / "llms.txt").exists() and "https://docs.example/install.md" in (seo / "llms.txt").read_text(),
               "seo: one URL per page, raw guide kept out of the index, a noindex 404, llms.txt")
+        man = json.loads((seo / "site.webmanifest").read_text()) if (seo / "site.webmanifest").exists() else {}
+        check(all((seo / f).exists() for f in ("favicon.ico", "icon-96.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png"))
+              and 'href="/favicon.ico"' in skp and "data:image/svg+xml" not in skp
+              and [i["src"] for i in man.get("icons", [])] == ["/icon-192.png", "/icon-512.png"],
+              "seo: the docs site serves a real favicon set and manifest, not the inline SVG")
         gsc = [p for p in seo.glob("google*.html")]
         check(len(gsc) == 1 and gsc[0].read_text() == f"google-site-verification: {gsc[0].name}",
               "seo: the Search Console verification file is at the site root, byte for byte")

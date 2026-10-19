@@ -987,14 +987,16 @@ def seo_head(title, desc, url, site_url, gsc_token, ld, kind="website", crumbs=(
                  f'<meta property="og:image" content="{esc(site_url)}/icon.png">',
                  '<meta property="og:image:width" content="512"><meta property="og:image:height" content="512">',
                  f'<meta property="og:image:alt" content="{SITE_NAME} logo: a hammer striking hot metal on an anvil">',
-                 f'<meta name="twitter:image" content="{esc(site_url)}/icon.png">',
-                 # Search results only show a favicon Google can fetch; the inline SVG one is for browsers.
-                 '<link rel="icon" type="image/png" sizes="512x512" href="/icon.png">']
+                 f'<meta name="twitter:image" content="{esc(site_url)}/icon.png">']
     tags += [f'<meta property="og:type" content="{kind}">', f'<meta property="og:site_name" content="{SITE_NAME}">',
              f'<meta property="og:title" content="{esc(title)}">', f'<meta property="og:description" content="{esc(desc)}">',
              '<meta name="twitter:card" content="summary">', f'<meta name="twitter:title" content="{esc(title)}">',
              f'<meta name="twitter:description" content="{esc(desc)}">',
-             '<link rel="apple-touch-icon" href="/icon.png">']
+             # Files from assets/favicon (make.py): Google needs a fetchable icon in a multiple of 48px, tabs a sharp 16px.
+             '<link rel="icon" href="/favicon.ico" sizes="48x48">',
+             '<link rel="icon" type="image/png" sizes="96x96" href="/icon-96.png">',
+             '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">',
+             '<link rel="manifest" href="/site.webmanifest">']
     if gsc_token:
         tags.append(f'<meta name="google-site-verification" content="{esc(gsc_token)}">')
     # JSON in a script tag: escape "<" so no value can close the tag.
@@ -1088,6 +1090,14 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
     icon = REPO / "assets" / "icon.png"
     if icon.exists():
         _sh.copy(icon, out_dir / "icon.png")
+    for f in (REPO / "assets" / "favicon").glob("*"):
+        if f.suffix in (".ico", ".png"):
+            _sh.copy(f, out_dir / f.name)
+    (out_dir / "site.webmanifest").write_text(json.dumps({
+        "name": f"{SITE_NAME} Docs", "short_name": SITE_NAME, "start_url": "/", "display": "standalone",
+        "background_color": "#0c0a09", "theme_color": "#0c0a09",
+        "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}, indent=2) + "\n")
     page = render_page(f"Page not found | {SITE_NAME}", SITE_NAME, "/ Docs", '<section class="card"><div class="rbody">'
                        '<h1>Page not found</h1><p>This page does not exist. <a href="/">Back to the docs</a> or '
                        '<a href="/install/">install Hephaestus Skills</a>.</p></div></section>' + onboard_source(), footer, ONBOARD_BUTTON,

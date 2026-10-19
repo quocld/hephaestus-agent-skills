@@ -211,8 +211,10 @@ def render_page(title, brand, crumb, body, footer, header_tools="", head=""):
     out = TEMPLATE.read_text()
     logo = logo_svg()
     mark = f'<span class="logo" aria-hidden="true">{logo}</span>' if logo else FALLBACK_MARK
+    # The inline SVG serves the local report; a page whose head brings its own icon files (the docs site) skips it,
+    # since browsers would prefer the SVG, which is too detailed at 16px.
     favicon = ('<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,'
-               + base64.b64encode(logo_svg("f-").encode()).decode() + '">') if logo else ""
+               + base64.b64encode(logo_svg("f-").encode()).decode() + '">') if logo and 'rel="icon"' not in head else ""
     for key, val in (("mark", mark), ("favicon", favicon), ("head", head), ("title", esc(title)), ("brand", esc(brand)), ("crumb", esc(crumb)),
                      ("header_tools", header_tools), ("footer", footer), ("body", body)):
         out = out.replace("{{" + key + "}}", val)
