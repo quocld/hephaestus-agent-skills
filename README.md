@@ -19,6 +19,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | Skill | Use it for | Needs |
 | --- | --- | --- |
 | `fresh-review` | Independent review by a fresh subagent before a PR, looped until clean. | - |
+| `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |
 | `ask-or-decide` | When to decide autonomously vs. ask, and how to ask. | - |
 | `knowledge-placement` | Where a new rule or fact belongs; keeps AGENTS.md lean. | - |
 | `flow-trace` | Trace one business lifecycle end-to-end to find one-way-door states, unhandled events, broken idempotency. | - |

@@ -15,7 +15,7 @@ A review only helps when the reviewer starts blank.
 
 1. Collect the intent: the Jira ticket, OpenSpec change, or the user's request.
    If none exists, write your best one-paragraph reading of the intent and flag it as an assumption.
-2. Identify the branch, the base (default branch or merge base), and any ignore patterns (generated files, lockfiles).
+2. Identify the branch, the base (the integration branch from `worktree-flow`, e.g. `origin/dev`), and any ignore patterns (generated files, lockfiles).
 3. Spawn a **new** subagent for every review round.
    Never resume an old reviewer, and never review in the implementer's own context.
    Pass it the intent, branch, base, and the prompt below.

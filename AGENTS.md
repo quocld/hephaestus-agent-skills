@@ -3,6 +3,10 @@
 - Never use the em dash "—". Use plain dash "-" instead
 - When writing commit messages, NEVER auto-add your agent name as co-author
 - Never manually modify CHANGELOG.md files or any files that are marked as auto-generated
+- I always run several agents in parallel on the same repo.
+  Never edit in the main checkout; do every code change in your own git worktree and branch per the `worktree-flow` skill.
+- Finished work is committed, pushed, and opened as a PR/MR into `dev` by default, without asking.
+  Never merge into, push to, or deploy staging or prod unless I say so explicitly in this conversation.
 - When making technical decisions, do not give much weight to development cost.
   Instead, prefer quality, simplicity, robustness, scalability, and long term maintainability.
 - For one-off or infrequent operational work, start with the simplest direct end-to-end path. Do not build wrappers, control planes, policy layers, custom verifiers, or automation unless the direct path exposes a concrete blocker or repeated need that justifies the added machinery.

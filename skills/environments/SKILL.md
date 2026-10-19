@@ -171,6 +171,6 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
 3. Write `.agents/environments.json` based on `templates/environments.json`, and copy `templates/environments.schema.json` next to it.
 4. Defaults: local and dev `autonomous` with testing `full`; staging `confirm-writes` with testing `non-destructive`; prod `confirm-each-step` with `allowedWithoutAsking: []`, `testDataAllowed: false`, and testing `smoke-only`.
    Writing a looser prod setting needs the user's explicit words.
-5. Add `.agents/secrets.env` and `.agents/backups/` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
+5. Add `.agents/secrets.env`, `.agents/backups/`, and `.agents/deploy/` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
 6. Validate: `npx -y ajv-cli@5.0.0 validate --spec=draft2020 -s .agents/environments.schema.json -d .agents/environments.json`.
 7. Run each remote service's `version` and `verify` once to prove the access works (on prod, ask first), and report anything that fails.

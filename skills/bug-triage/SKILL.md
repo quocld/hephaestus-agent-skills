@@ -10,8 +10,7 @@ user-invocable: true
 
 ## 0. Once per session
 
-- Work in an isolated worktree branched from the integration branch (e.g. `origin/dev`), not in a main tree that may hold other sessions' work.
-- Record the **baseline of already-failing tests** on the untouched branch, so pre-existing reds are never mistaken for yours.
+- Work in your own worktree per `worktree-flow`, including its baseline of already-failing tests.
 
 ## 1. Read the WHOLE ticket
 
@@ -61,8 +60,7 @@ An "empty screen" bug must be traced to its read endpoint before concluding anyt
 
 ## 5. Commit and deploy
 
-- Commit only your paths: `git commit -- <paths>`, then `git show --stat HEAD` to confirm; never blind `git add .`.
-- Conventional Commit with the ticket id, e.g. `fix(scope): [WEST-123] summary`.
+- Commit and open the PR/MR per `worktree-flow`.
 - Batch 2-3 bug fixes into one push when CI deploys per push, so one build carries all of them.
 
 ## 6. "Pushed" is not "deployed"
