@@ -17,10 +17,12 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    env:
-      # hooks/test.sh and test_status.sh build throwaway repos under $TMPDIR, which the runner leaves unset.
-      TMPDIR: ${{ runner.temp }}
     steps:
+      # hooks/test.sh and test_status.sh build throwaway repos under $TMPDIR, which the runner leaves unset.
+      # Set it per job through GITHUB_ENV: the runner context is not available in a job-level env block.
+      - name: TMPDIR for the throwaway test repos
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
