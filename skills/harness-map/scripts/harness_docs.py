@@ -454,10 +454,16 @@ def docs_body(hooks, standalone=False):
                         [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
                          (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")])) + '</div>')
 
-    nav = ([("wheel", "Harness wheel")] if standalone else []) + [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
+    nav = ([("onboard", "Onboard your agent"), ("wheel", "Harness wheel")] if standalone else []) + [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
     h.append('<div class="grid"><nav class="side"><div class="h">Docs</div>' +
              "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in nav) + '</nav><div>')
     if standalone:
+        prompt = (SKILL / "assets" / "onboard-prompt.md").read_text().strip()
+        h.append(f'<section class="card prompt" id="onboard"><div class="hd">{icon("Tools")}<h2>Onboard your agent</h2>'
+                 '<span class="desc">Paste into any coding agent: it installs Hephaestus Skills the way its harness supports, '
+                 'then walks you through the rest of the setup</span>'
+                 '<div class="bar"><button class="btn primary" type="button" data-copy="onboard-text">Copy prompt</button></div></div>'
+                 f'<pre id="onboard-text" class="ptext open">{esc(prompt)}</pre></section>')
         wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
                      f'<span class="mono" style="font-size:11px;color:var(--muted)">{len(pl["covered_by"].get("skills", []))} skills</span></a>'
                      for pl in PILLARS)

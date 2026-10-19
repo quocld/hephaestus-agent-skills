@@ -284,6 +284,18 @@ def main():
         check("SLACK_TOKEN" not in html_ and "notify.py" not in html_, "docs site: hooks come from the repo's hooks.json, not this machine's settings")
         check('id="wheel"' in html_ and 'data-tab="dash"' not in html_, "docs site: has the harness wheel and no Dashboard tab")
 
+    # The onboarding prompt has one source (assets/onboard-prompt.md); the README and the docs site carry it verbatim.
+    prompt = (HERE.parent / "assets" / "onboard-prompt.md").read_text().strip()
+    readme = (HERE.parents[2] / "README.md").read_text()
+    check(prompt in readme and readme.index("## Onboard your agent") < readme.index("## Install"),
+          "onboard prompt: the README carries it verbatim, before Install")
+    with tempfile.TemporaryDirectory() as tmp:
+        p_ = subprocess.run([sys.executable, str(SCRIPT), "--docs-only", tmp], capture_output=True, text=True)
+        site = (Path(tmp) / "index.html").read_text() if (Path(tmp) / "index.html").exists() else ""
+        import html as _html
+        check('id="onboard"' in site and _html.escape(prompt, quote=True) in site and site.index('id="onboard"') < site.index('id="wheel"'),
+              "onboard prompt: the docs site shows it first, with a copy button")
+
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:
         with tempfile.TemporaryDirectory() as tmp:

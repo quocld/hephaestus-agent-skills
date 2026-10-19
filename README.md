@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://hephaestus-skills-docs.vercel.app"><strong>Docs</strong></a> ·
+  <a href="#onboard-your-agent">Onboard your agent</a> ·
   <a href="#install">Install</a> ·
   <a href="#skills">Skills</a> ·
   <a href="#hooks">Hooks</a> ·
@@ -25,6 +26,23 @@ The `AGENTS.md` and skills also work in any harness that reads them (Codex, Curs
 
 **Documentation:** [hephaestus-skills-docs.vercel.app](https://hephaestus-skills-docs.vercel.app) shows the eight components of an agent harness, where every skill and hook acts in the Claude Code lifecycle, the task path, the verification loop, and each skill in full.
 Every merge to `main` publishes a new release (tag `vX.Y.Z` from the commit types) and redeploys the docs at that version (`.github/workflows/release.yml`); the site is built with `python3 skills/harness-map/scripts/harness_map.py --docs-only <dir> --site-url <url>`.
+
+## Onboard your agent
+
+Paste this into any coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot, …). It works out its own harness, installs Hephaestus Skills the way that harness supports, shows you every change first, and then walks you through the rest of the setup with `harness-map`.
+
+```text
+Install Hephaestus Skills (https://github.com/quocld/hephaestus-agent-skills) for yourself, the coding agent reading this, then help me finish the setup.
+
+1. Tell me which harness you run in (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot, or another).
+2. Claude Code: install the plugin with `claude plugin marketplace add quocld/hephaestus-agent-skills` and `claude plugin install agent-skills@quocld` (or ask me to run `/plugin marketplace add quocld/hephaestus-agent-skills` and `/plugin install agent-skills@quocld`), then tell me to start a new session. It brings the skills, the safety hooks and the global rules.
+3. Any other harness: clone the repo to `~/.hephaestus-skills` (or `git pull` it if it is already there), then wire it the way your harness loads instructions and skills:
+   - Global rules: load the clone's `AGENTS.md` as your global instructions. Add a reference to it in your global instructions file or setting; never overwrite a file that already has content.
+   - Skills: make every `skills/<name>/SKILL.md` available the way your harness loads skills. If it has no skills feature, add one line per skill (name, description, path) to your instructions and read a skill's `SKILL.md` before any task its description matches.
+   - Hooks: `hooks/` holds Claude Code hooks (no em dash in writes, ask before pushing or merging to protected branches). Wire them only if your harness has an equivalent pre-tool hook; otherwise tell me those rules stay advisory.
+4. Show me every file you will create or change outside the clone before you change it, and wait for my yes.
+5. When it is installed, run the harness-map skill (`python3 <the clone or plugin>/skills/harness-map/scripts/harness_map.py --open`), show me what is still missing, and walk me through it one step at a time.
+```
 
 ## Install
 
