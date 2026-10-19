@@ -9,7 +9,7 @@ import re
 import shlex
 from pathlib import Path
 
-from page import ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
+from page import SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -189,13 +189,18 @@ CW, CH, GAP = 7.4, 21, 27   # chip char width, chip height, chip row pitch in th
 
 
 def svg_chip(kind, lab, x, y, w, h, base):
-    """One chip; an ultimate skill gets the gradient outline and gradient bold text."""
+    """One chip; an ultimate skill gets the gradient outline and gradient bold text, and every repo skill opens
+    in the skill reader when clicked."""
     bg, fg = CHIP[kind]
     if kind == "skill" and lab in ULTIMATE:
-        return (f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="5" fill="{bg}" stroke="url(#ult-grad)" stroke-width="1.4"/>'
+        chip = (f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="5" fill="{bg}" stroke="url(#ult-grad)" stroke-width="1.4"/>'
                 f'<text x="{x + w / 2:.1f}" y="{y + base}" text-anchor="middle" class="chip-t ult-t" style="fill:url(#ult-grad)">{esc(lab)}</text>')
-    return (f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="5" fill="{bg}"/>'
-            f'<text x="{x + w / 2:.1f}" y="{y + base}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+    else:
+        chip = (f'<rect x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="5" fill="{bg}"/>'
+                f'<text x="{x + w / 2:.1f}" y="{y + base}" text-anchor="middle" class="chip-t" style="fill:{fg}">{esc(lab)}</text>')
+    if kind == "skill" and lab in SKILL_NAMES:
+        return f'<g class="skl" data-skill="{esc(lab)}" role="button" tabindex="0"><title>Read {esc(lab)}</title>{chip}</g>'
+    return chip
 
 
 def chip_line_svg(items, center, y):
@@ -462,7 +467,7 @@ def docs_body(hooks):
         rows.append(f'<tr><td class="mono">{ult(n)}</td><td>{tier}</td><td>{how}</td><td><div class="chips">{where}</div></td><td>{esc(s["when"])}</td></tr>')
     for n in unmapped:
         rows.append(f'<tr><td class="mono">{esc(n)}</td><td colspan="4"><span class="chip warn">not placed in assets/lifecycle.json yet</span></td></tr>')
-    h.append(card("skill-reference", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act",
+    h.append(card("skill-reference", "Skills", "Skill reference", f"{len(meta)} skills, how they load and where they act; click a name to read it",
                   '<div style="overflow-x:auto"><table class="t"><tr><th>Skill</th><th>Tier</th><th>Loads</th><th>Lifecycle</th><th>When</th></tr>'
                   + "".join(rows) + '</table></div>'))
 

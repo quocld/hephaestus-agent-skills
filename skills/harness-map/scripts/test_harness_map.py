@@ -4,6 +4,7 @@ and the scripts compile on the oldest python3 a fresh Mac ships (3.9). Builds th
 never touches the real ~/.claude. Usage: python3 test_harness_map.py  (exit 1 on any failure)
 """
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -236,6 +237,36 @@ def main():
         check(not (home / ".claude" / "skills" / "root-cause").exists(), "migrate: removes a skill link into another agent-skills clone")
         check(not (home / ".claude" / "CLAUDE.md").exists(), "migrate: removes the CLAUDE.md link")
         check((home / ".claude" / "agent-skills-hooks").is_symlink(), "migrate: never removes agent-skills-hooks")
+
+    # Skill reader: every repo skill's SKILL.md is in the page, rendered safely, and its name opens it everywhere.
+    with tempfile.TemporaryDirectory() as tmp:
+        home, project = Path(tmp) / "home", Path(tmp) / "project"
+        (home / ".claude").mkdir(parents=True)
+        project.mkdir()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        code, out, page = run(home, project)
+        repo = HERE.parents[2]
+        names = sorted(d.name for d in (repo / "skills").iterdir() if (d / "SKILL.md").exists())
+        check(all(f'id="skill-src-{n}"' in page for n in names), f"skill reader: all {len(names)} SKILL.md files are in the page")
+        check('data-skill="worktree-flow"' in page and '<g class="skl" data-skill="worktree-flow"' in page,
+              "skill reader: names in tables and chips in diagrams open the skill")
+        phrase = "Every task gets its own worktree and branch"
+        check(phrase in page, "skill reader: a skill's body text is readable in the page")
+        check('id="reader"' in page and "openSkill" in page, "skill reader: the reader panel and its script are mounted")
+        ids = re.findall(r'\bid="([^"]+)"', page)
+        check('class="logo"' in page and 'id="hx-hot"' in page and 'rel="icon"' in page,
+              "logo: the README logo (assets/icon.svg) is the header mark and the favicon")
+        check(len(ids) == len(set(ids)), "logo: inlining it adds no duplicate id to the page")
+        # The reader must not carry data-skill itself, or every click inside it (the close button too) reopens it.
+        check("reader.dataset.skill" not in page and 'id="reader" data-skill' not in page, "skill reader: the panel itself is not a skill link")
+    sys.path.insert(0, str(HERE))
+    try:
+        from page import render_markdown
+        bad = render_markdown("<script>alert(1)</script> [x](javascript:alert(1)) <img src=x onerror=y>")
+        check("<script" not in bad and "<img" not in bad and 'href="javascript' not in bad,
+              "skill reader: markdown is escaped before rendering (no script, img or javascript: link)")
+    except ImportError:
+        check(False, "skill reader: page.render_markdown exists")
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:

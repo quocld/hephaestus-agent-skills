@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{title}}</title>
+{{favicon}}
 <!-- Shared page template for harness-map pages (report and docs). Placeholders: title, brand, crumb, header_tools, body, footer.
      Colors follow the SpecsGraph design system v2 tokens; every color a page uses must come from :root. -->
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -167,6 +168,36 @@ background-size:200% auto;-webkit-background-clip:text;background-clip:text;colo
 .ptext{margin:0;padding:16px 18px;background:var(--code-bg);color:var(--code-text);font:12px/1.6 "Azeret Mono",ui-monospace,monospace;
 white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;border-radius:0 0 13px 13px}
 .ptext.open{max-height:none}
+.skl{cursor:pointer;border-radius:4px;outline:none}
+.skl:hover,.skl:focus-visible{text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px}
+.life g.skl{cursor:pointer}.life g.skl:hover rect,.life g.skl:focus-visible rect{stroke:var(--accent);stroke-width:1.5}
+.rscrim{position:fixed;inset:0;background:rgba(16,16,28,.32);z-index:240;animation:wpop .12s ease-out}
+.rscrim[hidden],.reader[hidden]{display:none}
+.reader{position:fixed;top:0;right:0;bottom:0;width:min(760px,100vw);z-index:250;background:var(--surface);border-left:1px solid var(--border-2);
+box-shadow:-24px 0 56px -16px rgba(16,16,40,.35);display:flex;flex-direction:column;animation:rin .16s ease-out}
+@keyframes rin{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.reader,.rscrim{animation:none}}
+.rbar{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border)}
+.rkick{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.reader .wclose.rclose{display:grid;position:static;float:none;width:30px;height:30px;place-items:center;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);color:var(--text);font-size:18px;cursor:pointer}
+.rbody{overflow:auto;padding:20px 26px 48px;outline:none}
+.rmeta{display:flex;flex-direction:column;gap:8px;padding-bottom:16px;margin-bottom:8px;border-bottom:1px solid var(--border)}
+.rtitle{margin:0;font-family:"Azeret Mono",ui-monospace,monospace;font-size:20px;font-weight:600}
+.rdesc{margin:0;color:var(--text-2);font-size:13px}.rwhen{margin:0;font-size:12.5px;color:var(--muted)}
+.rfiles{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rfiles code,.md code{font-family:"Azeret Mono",ui-monospace,monospace;font-size:12px;background:var(--surface-3);padding:1px 5px;border-radius:4px}
+.md{font-size:14px;line-height:1.65;color:var(--text-2);word-wrap:break-word}
+.md h2,.md h3,.md h4,.md h5{font-family:"Host Grotesk",Inter,sans-serif;color:var(--text);margin:22px 0 8px;line-height:1.3}
+.md h2{font-size:20px}.md h3{font-size:16px}.md h4,.md h5{font-size:14px}
+.md p{margin:0 0 10px}.md ul,.md ol{margin:0 0 10px;padding-left:20px}.md li{margin:3px 0}
+.md a{color:var(--accent-text)}.md b{color:var(--text)}
+.md pre{margin:0 0 12px;padding:12px 14px;background:var(--code-bg);color:var(--code-text);border-radius:8px;overflow:auto;font-size:12px;line-height:1.55}
+.md pre code{background:none;padding:0;color:inherit}
+.md blockquote{margin:0 0 10px;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 6px 6px 0}
+.rtable{overflow-x:auto;margin:0 0 12px}.md table{border-collapse:collapse;font-size:12.5px;width:100%}
+.md th,.md td{border:1px solid var(--border-2);padding:6px 8px;text-align:left;vertical-align:top}.md th{background:var(--surface-2);color:var(--text)}
+@media (max-width:640px){.reader{width:100vw;border-left:0}.rbody{padding:16px 16px 40px}}
+.logo{width:30px;height:30px;flex:none;display:block;filter:drop-shadow(0 1px 2px rgba(234,88,12,.35))}.logo svg{width:100%;height:100%;display:block}
 .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .tierblock{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:4px}
 .tierblock.core{border-top:3px solid var(--accent)}.tierblock.optional{border-top:3px solid var(--neutral)}
@@ -212,7 +243,7 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
 </head>
 <body>
 <header class="top"><div class="wrap">
-<div class="mark"><svg width="16" height="16" viewBox="0 0 20 20"><path d="M10 2l7 4v8l-7 4-7-4V6z" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="10" cy="10" r="2.4" fill="#fff"/></svg></div>
+{{mark}}
 <span class="brand">{{brand}}</span><span class="crumb">{{crumb}}</span><span class="sp"></span>
 {{header_tools}}
 <div class="seg" role="group" aria-label="Theme"><button data-theme-btn="light">Light</button><button data-theme-btn="system">Auto</button><button data-theme-btn="dark">Dark</button></div>
@@ -222,6 +253,11 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
 <footer>{{footer}}</footer>
 </main>
 <div class="wpop pillar" id="wpop" role="dialog" aria-live="polite" hidden></div>
+<div class="rscrim" id="rscrim" hidden></div>
+<aside class="reader" id="reader" role="dialog" aria-modal="true" aria-label="Skill" hidden>
+<div class="rbar"><span class="rkick">Skill</span><span class="sp"></span><button class="btn ghost" type="button" id="rcopy">Copy link</button><button class="wclose rclose" type="button" id="rclose" aria-label="Close">&times;</button></div>
+<div class="rbody" id="rbody" tabindex="-1"></div>
+</aside>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <linearGradient id="ult-grad" x1="0" y1="0" x2="1" y2="0" spreadMethod="repeat">
 <stop offset="0" style="stop-color:var(--u1)"/><stop offset=".17" style="stop-color:var(--u2)"/><stop offset=".34" style="stop-color:var(--u3)"/>
@@ -252,6 +288,38 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
     var el=document.getElementById(b.dataset.expand); b.textContent=el.classList.toggle('open')?'Collapse':'Expand';}});
   // Respect reduced motion for the SVG gradient too (CSS covers the HTML one).
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){document.querySelectorAll('.ult-anim').forEach(function(a){a.remove()})}
+  // Skill reader: any [data-skill] (table names, diagram chips, catalog, wheel popover) opens its SKILL.md.
+  var reader=document.getElementById('reader'), rbody=document.getElementById('rbody'), rscrim=document.getElementById('rscrim'), opener=null;
+  function openSkill(name, fromEl){
+    var src=document.getElementById('skill-src-'+name); if(!src||!reader)return false;
+    rbody.innerHTML=src.innerHTML; reader.hidden=false; rscrim.hidden=false; rbody.scrollTop=0;
+    opener=fromEl||opener; reader.dataset.open=name;   // not data-skill: that would make every click inside reopen it
+    if(location.hash!=='#skill='+name)history.replaceState(null,'','#skill='+name);
+    rbody.focus(); return true;
+  }
+  function closeSkill(){
+    if(!reader||reader.hidden)return;
+    reader.hidden=true; rscrim.hidden=true;
+    if(location.hash.indexOf('#skill=')===0)history.replaceState(null,'',location.pathname+location.search);
+    if(opener&&opener.focus)opener.focus(); opener=null;
+  }
+  if(reader){
+    document.addEventListener('click',function(e){
+      var t=e.target.closest&&e.target.closest('[data-skill]');
+      if(t&&openSkill(t.getAttribute('data-skill'),t)){e.preventDefault();e.stopPropagation();var p=document.getElementById('wpop');if(p)p.hidden=true;}
+    },true);
+    document.addEventListener('keydown',function(e){
+      var t=e.target.closest&&e.target.closest('[data-skill]');
+      if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openSkill(t.getAttribute('data-skill'),t)}
+      if(e.key==='Escape')closeSkill();
+    },true);
+    rscrim.addEventListener('click',closeSkill);
+    document.getElementById('rclose').addEventListener('click',closeSkill);
+    document.getElementById('rcopy').addEventListener('click',function(){
+      var b=this,u=location.href.split('#')[0]+'#skill='+reader.dataset.open;
+      (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy link'},1200)},function(){b.textContent=u});
+    });
+  }
   // Tabs: Dashboard and Docs share one page. The hash decides the tab: #docs, or any id inside the docs pane.
   var docsPane=document.querySelector('.pane[data-pane="docs"]');
   function setTab(t){
@@ -260,6 +328,7 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   }
   function fromHash(){
     var id=decodeURIComponent(location.hash.slice(1)), el=id&&document.getElementById(id);
+    if(id.indexOf('skill=')===0){openSkill(id.slice(6));return;}
     setTab(id==='docs'||(el&&docsPane&&docsPane.contains(el))?'docs':'dash');
     if(el)el.scrollIntoView(); else if(id==='docs')scrollTo(0,0);
   }
