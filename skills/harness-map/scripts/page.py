@@ -1,6 +1,7 @@
 """Shared paths, helpers and the page template for the harness map page (harness_map.py, with its Docs tab from harness_docs.py)."""
 from __future__ import annotations
 
+import base64
 import html
 import json
 import math
@@ -173,10 +174,32 @@ def pill(s):
     return f'<span class="pill {s}"><span class="dot {s}"></span>{LABEL[s]}</span>'
 
 
+FALLBACK_MARK = ('<span class="mark"><svg width="16" height="16" viewBox="0 0 20 20"><path d="M10 2l7 4v8l-7 4-7-4V6z" fill="none" '
+                 'stroke="#fff" stroke-width="1.8"/><circle cx="10" cy="10" r="2.4" fill="#fff"/></svg></span>')
+
+
+def logo_svg(prefix="hx-"):
+    """The repo logo (assets/icon.svg, the one the README shows), inline so the page stays one file.
+    Its ids get a prefix so they cannot clash with the page's own ids; None when the repo has no logo."""
+    try:
+        svg = (REPO / "assets" / "icon.svg").read_text()
+    except OSError:
+        return None
+    svg = re.sub(r"<\?xml[^>]*>\s*", "", svg)
+    for name in set(re.findall(r'\bid="([^"]+)"', svg)):
+        svg = svg.replace(f'id="{name}"', f'id="{prefix}{name}"').replace(f"url(#{name})", f"url(#{prefix}{name})") \
+                 .replace(f'aria-labelledby="{name}"', f'aria-labelledby="{prefix}{name}"')
+    return re.sub(r'\s(width|height)="512"', "", svg, count=2)
+
+
 def render_page(title, brand, crumb, body, footer, header_tools=""):
     """Fill assets/template.html; every page shares its header, theme switch, tokens and scripts."""
     out = TEMPLATE.read_text()
-    for key, val in (("title", esc(title)), ("brand", esc(brand)), ("crumb", esc(crumb)),
+    logo = logo_svg()
+    mark = f'<span class="logo" aria-hidden="true">{logo}</span>' if logo else FALLBACK_MARK
+    favicon = ('<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,'
+               + base64.b64encode(logo_svg("f-").encode()).decode() + '">') if logo else ""
+    for key, val in (("mark", mark), ("favicon", favicon), ("title", esc(title)), ("brand", esc(brand)), ("crumb", esc(crumb)),
                      ("header_tools", header_tools), ("footer", footer), ("body", body)):
         out = out.replace("{{" + key + "}}", val)
     return out

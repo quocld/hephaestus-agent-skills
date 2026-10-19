@@ -4,6 +4,7 @@ and the scripts compile on the oldest python3 a fresh Mac ships (3.9). Builds th
 never touches the real ~/.claude. Usage: python3 test_harness_map.py  (exit 1 on any failure)
 """
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -252,6 +253,10 @@ def main():
         phrase = "Every task gets its own worktree and branch"
         check(phrase in page, "skill reader: a skill's body text is readable in the page")
         check('id="reader"' in page and "openSkill" in page, "skill reader: the reader panel and its script are mounted")
+        ids = re.findall(r'\bid="([^"]+)"', page)
+        check('class="logo"' in page and 'id="hx-hot"' in page and 'rel="icon"' in page,
+              "logo: the README logo (assets/icon.svg) is the header mark and the favicon")
+        check(len(ids) == len(set(ids)), "logo: inlining it adds no duplicate id to the page")
         # The reader must not carry data-skill itself, or every click inside it (the close button too) reopens it.
         check("reader.dataset.skill" not in page and 'id="reader" data-skill' not in page, "skill reader: the panel itself is not a skill link")
     sys.path.insert(0, str(HERE))
