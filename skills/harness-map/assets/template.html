@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{title}}</title>
 {{favicon}}
+{{head}}
 <!-- Shared page template for harness-map pages (report and docs). Placeholders: title, brand, crumb, header_tools, body, footer.
      Colors follow the SpecsGraph design system v2 tokens; every color a page uses must come from :root. -->
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -198,6 +199,9 @@ box-shadow:-24px 0 56px -16px rgba(16,16,40,.35);display:flex;flex-direction:col
 .md th,.md td{border:1px solid var(--border-2);padding:6px 8px;text-align:left;vertical-align:top}.md th{background:var(--surface-2);color:var(--text)}
 @media (max-width:640px){.reader{width:100vw;border-left:0}.rbody{padding:16px 16px 40px}}
 .logo{width:30px;height:30px;flex:none;display:block;filter:drop-shadow(0 1px 2px rgba(234,88,12,.35))}.logo svg{width:100%;height:100%;display:block}
+.crumbs{margin:0 0 12px;font-size:13px;color:var(--muted)}.crumbs a{color:var(--accent-text);text-decoration:none}.crumbs a:hover{text-decoration:underline}
+nav.side a[aria-current="page"]{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.skillpage .card .rbody{padding:22px 26px 36px}
 .tiers{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .tierblock{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:4px}
 .tierblock.core{border-top:3px solid var(--accent)}.tierblock.optional{border-top:3px solid var(--neutral)}
@@ -329,15 +333,16 @@ footer{color:var(--muted);font-size:12px;padding:0 0 40px}
   function fromHash(){
     var id=decodeURIComponent(location.hash.slice(1)), el=id&&document.getElementById(id);
     if(id.indexOf('skill=')===0){openSkill(id.slice(6));return;}
-    setTab(id==='docs'||(el&&docsPane&&docsPane.contains(el))?'docs':'dash');
+    if(docsPane)setTab(id==='docs'||(el&&docsPane.contains(el))?'docs':'dash');
     if(el)el.scrollIntoView(); else if(id==='docs')scrollTo(0,0);
   }
   if(docsPane){
     document.querySelectorAll('button[data-tab]').forEach(function(b){b.onclick=function(){
       setTab(b.dataset.tab); history.replaceState(null,'',b.dataset.tab==='docs'?'#docs':location.pathname+location.search); scrollTo(0,0);
     }});
-    addEventListener('hashchange',fromHash); fromHash();
   }
+  // The hash also opens a skill (#skill=<name>), so it is handled on every page, with tabs or without (the docs site).
+  addEventListener('hashchange',fromHash); fromHash();
   // Harness wheel popover: hover or focus a slice or list row, tap on touch, Escape or tap outside to close.
   var pop=document.getElementById('wpop'), hideT=null, cur=null;
   function mark(id){document.querySelectorAll('[data-pillar]').forEach(function(x){x.classList.toggle('on',x.dataset.pillar===id)})}
