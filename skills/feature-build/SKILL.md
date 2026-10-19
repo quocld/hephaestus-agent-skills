@@ -93,17 +93,10 @@ Keep the rest for one batched question in step 4; do not ask gap by gap.
 
 ## 6. Verify
 
-In this order, so the evidence names the head that ships:
-
-1. Rebase on `origin/<int>` first (`worktree-flow` section 4 step 1), so nothing after this changes the head except fixes.
-2. Run the checks of `worktree-flow` section 4 step 2, plus the Verify section of each tech file loaded in step 1b.
-   Tests for each AC sit at its contract boundary and follow `root-cause` section 5; for a change to existing behavior, prove the test with the revert-only-the-change commands there.
-3. A change that matters (anything beyond copy, docs, or config): run the `fresh-review` loop.
-   It routes to `security-pass` and `flow-trace` itself when their triggers fire, so do not run either separately.
-   A copy, docs, or config-only change skips the review and goes to step 4.
-4. User-facing change: run `e2e-verify` once on the final head, with its evidence file.
-5. A fix commit lands after the evidence (an E2E failure, a late finding): it counts as a `fresh-review` round within that skill's cap, and `e2e-verify` reruns only what its own re-run rule names.
-6. Open the PR/MR per `worktree-flow`.
+1. Run `verify-loop` on the final head; it owns the order of the gates and the loop back after a red one.
+   Its requirements gate uses the numbered AC list from step 1, and its toolchain gate includes the Verify section of each tech file loaded in step 1b.
+   Tests for each AC sit at their contract boundary and follow `root-cause` section 5.
+2. Open the PR/MR per `worktree-flow`, with the `verify-loop` table in its body.
 
 ## Token discipline
 
@@ -112,7 +105,7 @@ In this order, so the evidence names the head that ships:
 - No parallel architects and no parallel reviewers; one design pass by you, one review loop by `fresh-review`.
 - Do not re-read a file an explorer already summarized unless you are about to edit it or copy its pattern.
 - Do not rerun the full suite after every commit; run the touched package's tests while building and the full checks once in step 6.
-- Run `e2e-verify` once per story; after a late fix, rerun only what its re-run rule names (step 6.5).
+- Run `e2e-verify` once per story; after a late fix, rerun only what its re-run rule names (`verify-loop` section 2).
 
 ## Report
 
@@ -121,5 +114,5 @@ In this order, also used as the PR/MR body:
 1. The story and its AC list, each with status: matches spec, design deviation (who asked), or open.
 2. Decisions made in step 2 and step 4, each with its reason, and the tech files loaded with each framework's installed version.
 3. What changed, by layer (schema, contract, server, UI).
-4. Verification: commands run, tests proven to fail without the change, `flow-trace` file, `security-pass` result if it ran, E2E evidence file and its commit.
+4. Verification: the `verify-loop` table, the `flow-trace` file and `security-pass` result if they ran, and the E2E evidence file and its commit.
 5. What is deliberately left out, open questions, and the PR/MR URL.

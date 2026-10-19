@@ -102,18 +102,18 @@ Then commit and push in small steps:
 ## 4. Done means a PR/MR into `<int>`
 
 A task is finished only when all of these hold.
-If the repo uses the no-mistakes gate, its pipeline does the rebase, checks, review, and PR/MR in steps 1-4; run it per `no-mistakes` instead of repeating them.
+If the repo uses the no-mistakes gate, run `verify-loop` first, then its pipeline per `no-mistakes` for the push, the PR/MR, and CI (`verify-loop` section 1).
 
 1. Rebased on the latest base: `git fetch origin && git rebase origin/<int>`, conflicts resolved keeping other people's work, then `git push --force-with-lease`.
-2. Checks pass: typecheck, lint, tests of the touched packages, and the project's own gates; E2E evidence (`e2e-verify`) when the change is user-facing.
-3. A change that matters has passed `fresh-review`, with `origin/<int>` as the base.
+2. `verify-loop` passed on the final head: toolchain, project checks, proof tests, `fresh-review` for any change beyond docs or config, `e2e-verify` evidence when user-facing, and requirements.
+3. Its table is in the PR/MR body, and its head equals `git rev-parse HEAD`.
 4. A PR/MR is open into `<int>` (detect GitHub or GitLab from `git remote get-url origin`):
    ```bash
    gh pr create --base <int> --head <branch> --title "<conventional title>" --body-file <file>
    glab mr create --source-branch <branch> --target-branch <int> --title "<conventional title>" --description "$(cat <file>)" --yes
    ```
    A missing or unauthenticated CLI is a blocker to report, not a reason to skip the PR/MR.
-5. The body says: the ticket or request, what changed and why, how it was verified (commands, evidence files), risks, and what is deliberately left out.
+5. The body says: the ticket or request, what changed and why, how it was verified (the `verify-loop` table, evidence files), risks, and what is deliberately left out.
 
 - Do not merge your own PR/MR unless the user asks.
 - Blocked or partly done work becomes a draft (`gh pr create --draft`, `glab mr create --draft`) whose body lists what remains.

@@ -17,18 +17,20 @@ Put each fact at the first tier that fits, not the most convenient one.
    -> A Claude Code hook registered in `~/.claude/settings.json`, its script kept in this repo's `hooks/` folder.
    The prose keeps one line naming the hook, so an agent knows why a call was blocked; prose alone gets skipped under pressure.
    A hook is a guard, so it needs the mounted-and-fails test from AGENTS.md.
-2. Does an agent need it on almost every session to operate?
+2. Is it a rule about code in one project that a diff can be checked against (a migration needs a backfill, no raw SQL in handlers)?
+   -> A project check in that project's `.agents/checks/`, per `verify-loop` section 4, which runs it before every PR/MR.
+3. Does an agent need it on almost every session to operate?
    -> `AGENTS.md`, inline, a line or two.
-3. Is it needed only in a nameable situation (a deploy, a migration, a release, a specific workflow)?
+4. Is it needed only in a nameable situation (a deploy, a migration, a release, a specific workflow)?
    -> A skill whose description states that trigger.
    Add a one-line pointer to AGENTS.md only if an always-loaded rule must name the skill.
-4. Is it product, setup, or user reference?
+5. Is it product, setup, or user reference?
    -> README or user-facing docs.
-5. Is it architecture a maintainer needs (ownership, boundaries, extension points, rationale)?
+6. Is it architecture a maintainer needs (ownership, boundaries, extension points, rationale)?
    -> Architecture docs.
-6. Is it exact mechanics (flags, commands, paths)?
+7. Is it exact mechanics (flags, commands, paths)?
    -> The script's header comment and its `--help`, not prose elsewhere.
-7. Is it task evidence (chronology, failed hypotheses, temp paths, delivery proof)?
+8. Is it task evidence (chronology, failed hypotheses, temp paths, delivery proof)?
    -> The PR description, Jira ticket, or a handoff note; distill any durable fact into its real owner first.
 
 ## One-owner rule
