@@ -153,6 +153,20 @@ def plugin_entry(installed, pid):
     return v if isinstance(v, dict) else {}
 
 
+VERSION_OVERRIDE = None   # set by harness_map.py --version
+
+
+def release_version():
+    """The plugin's release version: --version, else HARNESS_VERSION, else the newest tag reachable from HEAD
+    (v1.2.0), else "dev" (a plugin install or a clone without tags)."""
+    if VERSION_OVERRIDE:
+        return VERSION_OVERRIDE
+    if os.environ.get("HARNESS_VERSION"):
+        return os.environ["HARNESS_VERSION"]
+    code, out, _ = run(["git", "-C", str(REPO), "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], timeout=10)
+    return out.strip() if code == 0 and out.strip() else "dev"
+
+
 def short(p):
     s = str(p)
     return "~" + s[len(str(HOME)):] if s.startswith(str(HOME)) else s

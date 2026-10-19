@@ -9,7 +9,7 @@ import re
 import shlex
 from pathlib import Path
 
-from page import PILLARS, REPO, pillar_cards, wheel_svg, SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
+from page import release_version, PILLARS, REPO, pillar_cards, wheel_svg, SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -441,7 +441,7 @@ def docs_body(hooks, standalone=False):
     plugins = sorted({n for _, _, k, n, _ in hooks if k == "plugin"})
 
     h = [DOC_CSS]
-    h.append(f'<div class="hero"><div><div class="eyebrow">Harness docs {esc(LIFE["version"])}</div><h1>How this harness is built</h1>'
+    h.append(f'<div class="hero"><div><div class="eyebrow">Harness docs {esc(release_version())}</div><h1>How this harness is built</h1>'
              '<p class="sub">The Claude Code lifecycle redrawn with every skill and hook, the path a normal task takes through them, '
              + ('and what loads each skill, around the eight components of an agent harness.' if standalone else
                 'and what loads each skill. The eight components live on the Dashboard wheel.') + '</p></div></div>')

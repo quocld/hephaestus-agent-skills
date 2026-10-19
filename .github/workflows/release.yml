@@ -1,0 +1,63 @@
+# On every push to main (a merged PR): tag the next version, publish a GitHub release, and deploy the docs site
+# built at that version to Vercel. The deploy runs only when the VERCEL_TOKEN secret exists.
+name: Release and docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://hephaestus-skills-docs.vercel.app
+  VERCEL_ORG_ID: team_yweEZEcfhBe9DEWQPiEOmXBX
+  VERCEL_PROJECT_ID: prj_Aqtz9C2gXkFE0058DfeSQL4S88Cr
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      GOOGLE_SITE_VERIFICATION: ${{ secrets.GOOGLE_SITE_VERIFICATION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Next version
+        id: v
+        run: python3 .github/scripts/next_version.py | tee -a "$GITHUB_OUTPUT"
+
+      - name: Tag and publish the release
+        if: steps.v.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.v.outputs.version }}" --target "$GITHUB_SHA" \
+            --title "Hephaestus Skills ${{ steps.v.outputs.version }}" \
+            --notes "Docs: $SITE_URL" --generate-notes
+          git fetch --tags --force
+
+      - name: Build the docs site at this version
+        run: python3 skills/harness-map/scripts/harness_map.py --docs-only site --site-url "$SITE_URL"
+
+      - name: Deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
+        working-directory: site
+        run: npx --yes vercel@64.5.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+
+      - name: Verify the live site runs this commit
+        if: env.VERCEL_TOKEN != ''
+        run: |
+          for i in $(seq 1 20); do
+            live=$(curl -fsS "$SITE_URL/version.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])' || true)
+            [ "$live" = "$GITHUB_SHA" ] && { echo "live: $live"; exit 0; }
+            sleep 6
+          done
+          echo "live site serves ${live:-nothing}, expected $GITHUB_SHA"; exit 1

@@ -40,8 +40,9 @@
           ],
           "logsCommand": "npx vercel logs https://hephaestus-skills-docs.vercel.app --scope quoclds-projects",
           "notes": [
-            "Remove the deploy worktree afterwards: git worktree remove .agents/deploy/<sha>.",
-            "Google Search Console: pass the HTML-tag token with --gsc-token (or GOOGLE_SITE_VERIFICATION) in the build step, or verify the domain by DNS; the sitemap is /sitemap.xml."
+            "Every push to main runs .github/workflows/release.yml: it tags the next version (feat minor, fix and others patch, ! or BREAKING CHANGE major), publishes the GitHub release, builds the site at that version and deploys it with the VERCEL_TOKEN secret, then checks version.json equals the pushed commit.",
+            "The deploy commands here are for a manual hotfix or a run without CI; remove the deploy worktree afterwards: git worktree remove .agents/deploy/<sha>.",
+            "Google Search Console: the GOOGLE_SITE_VERIFICATION secret (CI) or --gsc-token (manual) adds the HTML-tag token; the sitemap is /sitemap.xml."
           ]
         }
       ]
