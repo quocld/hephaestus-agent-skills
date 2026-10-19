@@ -23,7 +23,7 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `knowledge-placement` | Where a new rule or fact belongs; keeps AGENTS.md lean. | - |
 | `flow-trace` | Trace one business lifecycle end-to-end to find one-way-door states, unhandled events, broken idempotency. | - |
 | `e2e-verify` | Strict "verified" definition for ACs in a real browser, with PASS/FAIL evidence files. | Playwright MCP or chrome-devtools-axi |
-| `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | `jira-touch` env |
+| `bug-triage` | Bug/QA ticket loop: read all, classify, depth by risk triggers, prove the test, verify deploy, hand back. | Jira access (MCP or API) |
 | `fe-guardrails` | React/Next rules for loading, empty, error states, form errors, and copy. | - |
 | `stow` | Save durable knowledge from a session to disk before a reset or break. | - |
 | `vision` | Draft and stress-test a project VISION.md. | node (`npx lavish-axi`) |
@@ -31,10 +31,6 @@ My agent setup: global instructions, opinions, and dev skills for Claude Code (a
 | `gnhf` | Overnight autonomous loop of small committed changes. | `gnhf` CLI |
 | `chrome-devtools-axi` | Token-efficient browser automation for E2E checks. | node (`npx chrome-devtools-axi`) |
 | `axi` | Design standards when building a CLI meant for agents. | - |
-| `spec-driven-workflow-init` | Bootstrap the OpenSpec -> BE -> FE -> verify -> archive workflow. | - |
-| `jira-touch` | Quick Jira reads/writes on VOCO, WEST, CESP. | Jira env vars |
-| `jira-worklog` | Audit and log Jira worklogs. | Jira env vars |
-| `voco-darkmode-verify` | Verify and fix dark mode on a VOCO page. | Playwright MCP |
 
 ## Install
 

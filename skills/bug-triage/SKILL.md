@@ -2,7 +2,7 @@
 name: bug-triage
 description: >
   Take a bug or QA ticket from intake to verified fix and hand-back: read the whole ticket, classify it, pick the fix depth by risk triggers (not diff size), prove the test catches the regression, verify on the deployed environment, and hand it back to the reporter.
-  Use for "fix bug X", "fix ticket WEST-123/VOCO-45", "loop qua bug Jira", "QA báo lỗi", "màn Y bị lỗi". For implementing a whole user story use the project's story/slice skill instead.
+  Use for "fix bug X", "fix ticket ABC-123", "loop qua bug Jira", "QA báo lỗi", "màn Y bị lỗi". For implementing a whole user story use the project's story/slice skill instead.
 user-invocable: true
 ---
 
@@ -20,7 +20,7 @@ user-invocable: true
 - Reopened ticket: read the **newest** attachments; they often show a different bug than last time.
 - Videos may show a legacy or reference system rather than the broken screen; check the URL in the frames.
 - Open attached files for real (images, xlsx) instead of guessing their structure.
-- Use the Jira helpers in `jira-touch` for fetching tickets, comments, and attachments.
+- Fetch tickets, comments, and attachments with whatever Jira access the session has (Atlassian MCP or the REST API).
 
 ## 2. Classify before writing any code
 
