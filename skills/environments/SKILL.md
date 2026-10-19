@@ -14,7 +14,7 @@ An agent that takes a host, branch, command, or password from memory or chat his
 ## 1. Load and maintain the registry
 
 - Read `.agents/environments.json` at the repo root, in full, before the first environment action of the session.
-- Missing, and the task needs a non-local environment: run section 7 first.
+- Missing, and the task needs a non-local environment: run section 9 first.
   Do not improvise hosts or commands in the meantime.
 - When the user states a new fact (server, account, URL, rule), put it in the registry instead of keeping it in chat.
 - Every registry change is shown as a diff and written only after a yes; it applies from the next action.
@@ -40,7 +40,7 @@ An agent that takes a host, branch, command, or password from memory or chat his
 | --- | --- | --- |
 | `autonomous` | Free | Free; report afterwards |
 | `confirm-writes` | Free | Show the whole plan, get one confirmation, run it; stop and ask on any unexpected result |
-| `confirm-each-step` | Free only for kinds in `allowedWithoutAsking`; ask for every other remote command | Section 4, every step |
+| `confirm-each-step` | Ask first, except registry commands listed in `allowedWithoutAsking` (empty by default) | Section 4, every step |
 
 - `allowedWithoutAsking` lists registry commands by name (`version`, `logs`, `verify`); any other remote command, including ad-hoc SQL, asks first.
   Local reads (git, files in the repo, `op whoami`) are always free.
@@ -65,13 +65,14 @@ Placeholders in registry commands:
 Before the first step:
 
 1. Pre-flight, read-only: capture every service's `version`, resolve `<sha>`, list pending migrations, check every rule (deploy windows, events), and create the clean deploy checkout (`git worktree add .agents/deploy/<sha> <sha>`); commands that read the local tree run from there.
-2. Prove what was tested is what ships: the tree at `<sha>` must equal the tree that passed on staging (`git diff --stat <staging-sha> <sha>` is empty).
+2. Database or data changes in the deploy: complete the section 7 checklist first.
+3. Prove what was tested is what ships: the tree at `<sha>` must equal the tree that passed on staging (`git diff --stat <staging-sha> <sha>` is empty).
    Proof that staging passed is an E2E evidence file or the user's explicit word.
-3. Present a numbered plan: services in `deployOrder` (default db before web), then each service's `deploy` items in order, one item per step.
+4. Present a numbered plan: services in `deployOrder` (default db before web), then each service's `deploy` items in order, one item per step.
    For every step, show the exact command (secrets masked), what it changes, its check, and its undo.
    Where the registry has no per-step check or undo, propose one and mark it "proposed"; the plan approval covers it.
    A step may be skipped only when the plan says why (e.g. no function changed).
-4. Get approval of the plan.
+5. Get approval of the plan.
    Approving the plan does not approve any step.
 
 For each step:
@@ -94,7 +95,59 @@ After the last step: run every `verify`; code services' `version` must print `<s
 - "Pushed" is not "deployed": a deploy is done when `version` matches the target and `verify` passes.
 - Read the section of `references/deploy-targets.md` for each service type you touch; it holds the platform traps (Supabase link state, Vercel git vs. CLI deploys, VPS release folders).
 
-## 6. Secrets and test accounts
+## 6. Testing per environment
+
+`testing.scope` says what tests may run there:
+
+| `scope` | Allowed |
+| --- | --- |
+| `full` | Any test, including destructive ones, data resets, and load tests |
+| `non-destructive` | Functional and E2E tests on records you create (with `testDataMarker`) and delete afterwards; no data resets, load or stress tests, bulk imports, or changes to other people's records |
+| `smoke-only` | Read-only flows with the listed accounts: open pages, search, view; no submit that creates or changes data, no payment, no message to a real person |
+| `none` | No tests |
+
+- Missing `testing`: `smoke-only` on a `confirm-each-step` environment, `non-destructive` elsewhere.
+  When `testing.scope` and `data.testDataAllowed` disagree, follow the stricter one.
+- `testing.rules` add project specifics (sandbox keys, QA hours, which flows make up the smoke test).
+- On `smoke-only`, list the flows you will run and get a yes before opening the browser; a failure is reported, never fixed or retried by changing data on that environment.
+- External side effects cause most testing harm: trigger payments only with test-mode keys, emails or SMS only to addresses the team owns, webhooks only to sandboxes.
+  If you cannot confirm that, do not trigger the flow; ask.
+- Changing shared settings (feature flags, admin config) counts as a data change: record the old value first and restore it when done.
+- Evidence follows the `e2e-verify` skill.
+
+## 7. Database and data changes
+
+Applies to every migration, backfill, data fix, import, bulk admin action, or manual SQL against a `confirm-writes` or `confirm-each-step` environment.
+
+Classify every statement first:
+
+| Class | Examples | Extra gate |
+| --- | --- | --- |
+| Additive | `CREATE TABLE`, nullable `ADD COLUMN`, `CREATE INDEX CONCURRENTLY` | The checklist |
+| Data-changing | `UPDATE`, `DELETE`, backfill `INSERT`, data fix scripts | Row counts and a copy of the affected rows |
+| Destructive or locking | `DROP`, `RENAME`, `ALTER ... TYPE`, `SET NOT NULL`, new FK or unique constraint on a large table, `TRUNCATE` | An expand/contract plan and a separate yes per statement |
+
+Before the deploy plan, present this checklist filled in with evidence.
+On `confirm-each-step`, any line answered "no" or "unknown" stops the deploy until the user resolves it; on `confirm-writes`, it is raised in the plan.
+
+1. **Backup**: method (point-in-time recovery or schema + data dumps), when it was taken, and proof it is usable (PITR restore point after the last change, or both dump files present and non-empty).
+   A fresh backup is the first step of the deploy, not a claim about last night.
+2. **Migration approach**: backward-compatible with the code running now and the code being deployed (expand now, contract in a later release), and the deploy order between database and code.
+3. **Tested on staging**: the same migration files ran and passed there (`git diff --stat <staging-sha> <sha> -- supabase/migrations` is empty), ideally on a realistic data volume.
+4. **Dry run**: the list of migrations about to apply equals the expected list; no surprise migration.
+5. **Data changes**: per data-changing statement, its WHERE clause, the expected row count, and where the affected rows are copied first (backup table or export).
+   Measure counts without changing anything: `BEGIN; <statement>; <count check>; ROLLBACK;` or `SELECT count(*)` with the same WHERE, each asked first on prod.
+   Never an `UPDATE` or `DELETE` without a WHERE.
+6. **Locks and duration**: tables touched, their row counts, and which statements rewrite or lock them; large tables need batching, `CONCURRENTLY`, or a maintenance window.
+7. **Rollback**: the reverse migration is written and reviewed before deploying.
+   If the change cannot be reversed and restoring the backup is the only way back, the user must accept that explicitly.
+8. **Side effects**: triggers, RLS policies, cron jobs, realtime subscriptions, and functions or webhooks that fire on changed rows (an `UPDATE` that sends customer emails).
+9. **Timing and people**: inside the allowed window, and who has been told (ask the user).
+
+Manual data fixes belong in a reviewed migration or script in the repo, not typed into a SQL console.
+Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, after the user confirms the count, the same statements with `COMMIT`.
+
+## 8. Secrets and test accounts
 
 - The registry is committed and holds no secret values; the schema rejects literals in fields named like password, token, secret, key, DB URL, or connection string.
 - A secret is a reference:
@@ -110,13 +163,13 @@ After the last step: run every `verify`; code services' `version` must print `<s
 - Pick accounts by `role` from the target environment only.
   Never log in as a real customer; on prod use only the accounts listed there.
 
-## 7. Create the registry
+## 9. Create the registry
 
 1. Draft from repo evidence first: `.env*.example` (variable names only), `.vercel/project.json`, `vercel.json`, `supabase/config.toml`, `Dockerfile`, compose files, `ecosystem.config.*`, CI workflows, deploy scripts, README.
 2. Ask the user only what the repo cannot tell, in one batch: the environment list and URLs, SSH aliases, test account roles and logins, rules such as deploy windows.
 3. Write `.agents/environments.json` based on `templates/environments.json`, and copy `templates/environments.schema.json` next to it.
-4. Defaults: local and dev `autonomous`; staging `confirm-writes`; prod `confirm-each-step` with `allowedWithoutAsking: ["version", "logs", "verify"]` and `testDataAllowed: false`.
+4. Defaults: local and dev `autonomous` with testing `full`; staging `confirm-writes` with testing `non-destructive`; prod `confirm-each-step` with `allowedWithoutAsking: []`, `testDataAllowed: false`, and testing `smoke-only`.
    Writing a looser prod setting needs the user's explicit words.
 5. Add `.agents/secrets.env` and `.agents/backups/` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
 6. Validate: `npx -y ajv-cli@5.0.0 validate --spec=draft2020 -s .agents/environments.schema.json -d .agents/environments.json`.
-7. Run each remote service's `version` and `verify` once (read-only) to prove the access works, and report anything that fails.
+7. Run each remote service's `version` and `verify` once to prove the access works (on prod, ask first), and report anything that fails.

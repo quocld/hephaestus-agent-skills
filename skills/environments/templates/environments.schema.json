@@ -143,6 +143,31 @@
           "items": {
             "type": "string"
           }
+        },
+        "testing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope"
+          ],
+          "properties": {
+            "scope": {
+              "description": "full: anything incl. destructive and load tests. non-destructive: own marked data, cleaned up. smoke-only: read-only flows with listed accounts. none: no tests.",
+              "enum": [
+                "full",
+                "non-destructive",
+                "smoke-only",
+                "none"
+              ]
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       }
     },

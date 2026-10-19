@@ -12,6 +12,9 @@
         "testDataAllowed": true,
         "testDataMarker": "[QA]"
       },
+      "testing": {
+        "scope": "full"
+      },
       "services": [
         {
           "name": "web",
@@ -67,6 +70,13 @@
       "data": {
         "testDataAllowed": true,
         "testDataMarker": "[QA]"
+      },
+      "testing": {
+        "scope": "non-destructive",
+        "rules": [
+          "Payments only with Stripe test-mode keys.",
+          "Emails and SMS only to @acme.test addresses."
+        ]
       },
       "services": [
         {
@@ -142,11 +152,7 @@
       "url": "https://app.acme.com",
       "branch": "main",
       "policy": "confirm-each-step",
-      "allowedWithoutAsking": [
-        "version",
-        "logs",
-        "verify"
-      ],
+      "allowedWithoutAsking": [],
       "rules": [
         "Deploy only a commit whose tree passed E2E on staging.",
         "No deploys on Friday after 15:00 +0700 or during a customer event; always ask the user whether an event is running.",
@@ -154,6 +160,12 @@
       ],
       "data": {
         "testDataAllowed": false
+      },
+      "testing": {
+        "scope": "smoke-only",
+        "rules": [
+          "Smoke flows: log in, open the dashboard, search a speaker. Nothing that submits a form."
+        ]
       },
       "services": [
         {
