@@ -57,6 +57,24 @@ def load_json(path):
         return None
 
 
+def load_obj(path):
+    """A JSON file that must hold an object; anything else (missing, broken, a list) reads as {}."""
+    data = load_json(path)
+    return data if isinstance(data, dict) else {}
+
+
+def _dict(x):
+    return x if isinstance(x, dict) else {}
+
+
+def _dicts(x):
+    return [i for i in x if isinstance(i, dict)] if isinstance(x, list) else []
+
+
+def _str(x, default=""):
+    return x if isinstance(x, str) else (str(x) if isinstance(x, (int, float)) and not isinstance(x, bool) else default)
+
+
 def frontmatter(path):
     """Parse the small YAML subset skills use: scalars and folded `>` blocks."""
     try:
@@ -83,14 +101,20 @@ def repo_skills():
 
 
 def strip_userinfo(url):
-    """A URL without its user:password@ part; (clean url, True when a credential was there)."""
-    clean = re.sub(r"(?<=://)[^/@\s]+@", "", url or "")
-    return clean, clean != (url or "") and ":" in (url or "").split("://", 1)[-1].split("@", 1)[0]
+    """A URL without its userinfo (everything up to the last @ before the path); (clean url, True when the userinfo
+    can be a credential: a password, or a bare user part on http(s), where it is a token rather than a login name)."""
+    url = _str(url)
+    m = re.match(r"^([a-z][a-z0-9+.-]*://)([^/\s]*)@(.*)$", url, re.I)
+    if not m:
+        return url, False
+    scheme, info, rest = m.groups()
+    secret = ":" in info or scheme.lower() in ("http://", "https://")
+    return scheme + rest, secret
 
 
 def plugin_entry(installed, pid):
     """The newest install record for a plugin id, whether the index stores a list of records or one record."""
-    v = installed.get(pid)
+    v = _dict(installed).get(pid)
     if isinstance(v, list):
         return v[-1] if v and isinstance(v[-1], dict) else {}
     return v if isinstance(v, dict) else {}

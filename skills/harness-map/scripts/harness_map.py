@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
-from page import (plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (_dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -144,14 +144,14 @@ def collect_skills():
 
 def collect_hooks(probe):
     out = []
-    settings = load_json(CLAUDE / "settings.json")
+    settings = load_obj(CLAUDE / "settings.json")
     if settings is None:
         return [check("Hooks", "settings.json", "missing",
                       f"{short(CLAUDE / 'settings.json')} missing or not valid JSON, so no hook is registered and no rule is enforced",
                       "create it with the hooks.PreToolUse entries from hooks/README.md, then run hooks/test.sh")]
-    local = load_json(CLAUDE / "settings.local.json") or {}
-    cmds = [h.get("command", "") for src in (settings, local)
-            for e in ((src.get("hooks") or {}).get("PreToolUse") or []) if isinstance(e, dict) for h in (e.get("hooks") or [])]
+    local = load_obj(CLAUDE / "settings.local.json") or {}
+    cmds = [_str(h.get("command")) for src in (settings, local)
+            for e in _dicts(_dict(src.get("hooks")).get("PreToolUse")) for h in _dicts(e.get("hooks"))]
     for script in ("no-em-dash.py", "guard-protected-branches.py"):
         src = REPO / "hooks" / script
         if not src.exists():
@@ -176,8 +176,8 @@ def collect_hooks(probe):
             out.append(check("Hooks", "hooks/test.sh probes", "fail",
                              "; ".join(fails[:4]) or (se.strip().splitlines() or ["exit " + str(code)])[-1],
                              f"bash {short(test)}"))
-    wired = settings.get("hooks") or {}
-    other = {e.get("matcher", "") or "*" for ev in wired.values() for e in (ev or []) if isinstance(e, dict)}
+    wired = _dict(settings.get("hooks"))
+    other = {_str(e.get("matcher")) or "*" for ev in wired.values() for e in _dicts(ev)}
     events = sorted(wired.keys())
     out.append(check("Hooks", "Hook events wired", "info",
                      f"{len(events)} events ({', '.join(events)}); matchers: {', '.join(sorted(other))}"))
@@ -226,13 +226,13 @@ def uses_betterstack(registry):
 
 def collect_plugins(project=None, registry=None):
     out, plugins = [], []
-    settings = load_json(CLAUDE / "settings.json") or {}
-    enabled = settings.get("enabledPlugins", {})
-    installed = (load_json(CLAUDE / "plugins" / "installed_plugins.json") or {}).get("plugins", {})
+    settings = load_obj(CLAUDE / "settings.json") or {}
+    enabled = _dict(settings.get("enabledPlugins"))
+    installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
     mcp_names = []
     for pid, on in sorted(enabled.items()):
         inst = plugin_entry(installed, pid)
-        path = Path(inst.get("installPath", ""))
+        path = Path(_str(inst.get("installPath")))
         mcp = load_json(path / ".mcp.json") or {}
         servers = sorted((mcp.get("mcpServers", mcp) or {}).keys()) if isinstance(mcp, dict) else []
         skills = sorted(p.name for p in (path / "skills").iterdir() if p.is_dir()) if (path / "skills").is_dir() else []
@@ -245,20 +245,20 @@ def collect_plugins(project=None, registry=None):
         else:
             out.append(check("Plugins & MCP", pid, "ok",
                              f"v{inst.get('version', '?')}; {len(skills)} skills; MCP: {', '.join(servers) or 'none'}"))
-    cj = load_json(HOME / ".claude.json") or {}
-    user_mcp = sorted((cj.get("mcpServers") or {}).keys())
+    cj = load_obj(HOME / ".claude.json") or {}
+    user_mcp = sorted(_dict(cj.get("mcpServers")).keys())
     mcp_names += user_mcp
     if user_mcp:
         out.append(check("Plugins & MCP", "User MCP servers", "info", ", ".join(user_mcp)))
     if project:
-        proj_mcp = sorted(set((((cj.get("projects") or {}).get(str(project)) or {}).get("mcpServers") or {}).keys())
-                          | set(((load_json(Path(project) / ".mcp.json") or {}).get("mcpServers") or {}).keys()))
+        proj_mcp = sorted(set(_dict(_dict(_dict(cj.get("projects")).get(str(project))).get("mcpServers")).keys())
+                          | set(_dict(load_obj(Path(project) / ".mcp.json").get("mcpServers")).keys()))
         mcp_names += proj_mcp
         if proj_mcp:
             out.append(check("Plugins & MCP", "Project MCP servers", "info", ", ".join(proj_mcp)))
     names = " ".join(mcp_names).lower() + " " + " ".join(enabled).lower()
     # Key names only: whether a Jira token is configured, never its value.
-    jira_env = any(k.startswith("JIRA_") for k in list((settings.get("env") or {}).keys()) + list(os.environ))
+    jira_env = any(k.startswith("JIRA_") for k in list(_dict(settings.get("env")).keys()) + list(os.environ))
     if "atlassian" in names or "jira" in names:
         out.append(check("Plugins & MCP", "Jira access", "ok", "Atlassian/Jira MCP available for bug-triage and jira-bug-hunter"))
     elif jira_env:
@@ -287,17 +287,17 @@ def collect_plugins(project=None, registry=None):
 
 def collect_hygiene():
     out = []
-    settings = load_json(CLAUDE / "settings.json") or {}
+    settings = load_obj(CLAUDE / "settings.json") or {}
 
     def literal_secrets(env):
-        return [k for k, v in (env or {}).items()
+        return [k for k, v in _dict(env).items()
                 if SECRET_KEY.search(k) and isinstance(v, str) and v and not v.startswith(("op://", "$", "${"))]
 
     # Key names only, with where they sit; values never leave this function.
     found = [f"{k} (settings.json)" for k in literal_secrets(settings.get("env"))]
-    found += [f"{k} (settings.local.json)" for k in literal_secrets((load_json(CLAUDE / "settings.local.json") or {}).get("env"))]
-    for name, srv in (((load_json(HOME / ".claude.json") or {}).get("mcpServers")) or {}).items():
-        found += [f"{k} (~/.claude.json MCP {name})" for k in literal_secrets((srv or {}).get("env"))]
+    found += [f"{k} (settings.local.json)" for k in literal_secrets((load_obj(CLAUDE / "settings.local.json") or {}).get("env"))]
+    for name, srv in _dict(load_obj(HOME / ".claude.json").get("mcpServers")).items():
+        found += [f"{k} (~/.claude.json MCP {name})" for k in literal_secrets(_dict(srv).get("env"))]
     keys = {f.split(" ", 1)[0] for f in found}
     backups = sorted(CLAUDE.glob("settings*.json.bak*"))
     leaky = [b for b in backups if any(k in b.read_text(errors="ignore") for k in keys)] if keys else []
@@ -313,9 +313,8 @@ def collect_hygiene():
         out.append(check("Settings hygiene", "settings.json backups", "info",
                          f"{len(backups)} backup files next to settings.json", "review and delete the ones you no longer need"))
     leaky = []
-    for name, m in sorted(((load_json(CLAUDE / "plugins" / "known_marketplaces.json") or {}) or {}).items()):
-        src = _dict(m).get("source") if isinstance(m, dict) else None
-        if strip_userinfo(_dict(src).get("url", ""))[1]:
+    for name, m in sorted(load_obj(CLAUDE / "plugins" / "known_marketplaces.json").items()):
+        if strip_userinfo(_dict(_dict(m).get("source")).get("url"))[1]:
             leaky.append(name)
     if leaky:
         out.append(check("Settings hygiene", "Credentials in plugin marketplace URLs", "fail",
@@ -414,14 +413,6 @@ POLICY = {"autonomous": ("ok", "Autonomous"), "confirm-writes": ("warn", "Confir
 PROD_NAMES = {"prod", "production", "live"}
 
 
-def _dict(x):
-    return x if isinstance(x, dict) else {}
-
-
-def _dicts(x):
-    return [i for i in x if isinstance(i, dict)] if isinstance(x, list) else []
-
-
 def _strs(x):
     return [str(i) for i in x if isinstance(i, (str, int, float))] if isinstance(x, list) else []
 
@@ -433,8 +424,11 @@ def normalize_env(e):
     out.update({k: _dict(e.get(k)) for k in ("data", "testing")})
     out["testing"] = dict(out["testing"], rules=_strs(out["testing"].get("rules")))
     out.update({k: _strs(e.get(k)) for k in ("rules", "deployOrder")})
-    out["accounts"] = _dicts(e.get("accounts"))
-    out["services"] = [dict(s_, access=_dict(s_.get("access"))) for s_ in _dicts(e.get("services"))]
+    out["accounts"] = [dict(a, role=_str(a.get("role"), "?"), login=_str(a.get("login"))) for a in _dicts(e.get("accounts"))]
+    out["services"] = [dict(s_, name=_str(s_.get("name"), "?"), type=_str(s_.get("type"), "?"), access=_dict(s_.get("access")))
+                       for s_ in _dicts(e.get("services"))]
+    # A URL with user:password@ (basic auth on staging) is shown without it; the literal secrets check counts it.
+    out["url"], out["_url_credential"] = strip_userinfo(out["url"])
     return out
 
 
@@ -459,7 +453,7 @@ def secret_names(project):
 
 def secret_state(ref, known):
     """(label, status) for a secret reference; the value is never read or shown."""
-    ref = (ref or {}).get("secret", "") if isinstance(ref, dict) else str(ref or "")
+    ref = _str(ref.get("secret")) if isinstance(ref, dict) else _str(ref)
     if ref.startswith("env:"):
         name = ref[4:]
         return f"env:{name}", "ok" if name in os.environ or name in known else "missing"
@@ -487,10 +481,10 @@ def env_checks(registry, project):
         if old:
             out.append(check("Project", f"{name}: logs field", "warn", f"{', '.join(old)} still use the old string `logs`; it is now `logsCommand`, and `logs` names a Better Stack source",
                              "rename logs to logsCommand in .agents/environments.json (environments skill)"))
-        refs = [a.get("password") for a in e.get("accounts", [])] + \
-               [s_.get("access", {}).get("dbUrl") for s_ in e.get("services", []) if s_.get("access", {}).get("dbUrl")]
+        refs = [a.get(k) for a in e.get("accounts", []) for k in ("password", "mfa")] + \
+               [v for s_ in e.get("services", []) for v in s_.get("access", {}).values() if isinstance(v, dict) and "secret" in v]
         states = [secret_state(r, known) for r in refs if r]
-        literal = sum(1 for _, st in states if st == "fail")
+        literal = sum(1 for _, st in states if st == "fail") + (1 if e.get("_url_credential") else 0)
         if literal:
             out.append(check("Project", f"{name}: literal secrets", "fail",
                              f"{literal} secret value(s) written into .agents/environments.json (values not shown)",

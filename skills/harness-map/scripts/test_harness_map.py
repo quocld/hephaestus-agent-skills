@@ -24,6 +24,11 @@ LEAKS = {
     "secrets.env value": "LeakSecretsFile6",
     "MCP server env literal": "LeakMcpEnv7",
     "marketplace URL credentials": "gl" + "dt-LeakMarketplace8",
+    "environment URL basic auth": "LeakEnvUrlPass9",
+    "quoted inline env in a hook": "LeakQuotedHook10",
+    "@ inside a remote password": "LeakAfterAt11",
+    "token-only marketplace URL": "gh" + "p_LeakTokenOnly12",
+    "literal mfa": "LeakMfa13",
 }
 FAILS = []
 
@@ -34,13 +39,13 @@ def check(ok, what):
         FAILS.append(what)
 
 
-def run(home, project, extra=()):
+def run(home, project, extra=(), python=None):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("JIRA_", "CLAUDE_"))}
     env["HOME"] = str(home)
     out = home / "page.html"
     if out.exists():
         out.unlink()
-    p = subprocess.run([sys.executable, str(SCRIPT), "--no-probe", "--project", str(project), "--out", str(out), *extra],
+    p = subprocess.run([python or sys.executable, str(SCRIPT), "--no-probe", "--project", str(project), "--out", str(out), *extra],
                        capture_output=True, text=True, env=env, timeout=120)
     page = out.read_text() if out.exists() else ""
     return p.returncode, p.stdout + p.stderr, page
@@ -51,23 +56,29 @@ def leaky_machine(root):
     claude = home / ".claude"
     (claude / "plugins").mkdir(parents=True)
     hook_cmd = "SLACK_TOKEN=" + LEAKS["inline env in a hook command"] + " python3 /opt/hooks/notify.py"
+    quoted = 'API_KEY="abc ' + LEAKS["quoted inline env in a hook"] + '" python3 /opt/hooks/other.py'
     (claude / "settings.json").write_text(json.dumps({
         "env": {"SLACK_TOKEN": LEAKS["settings env literal"]},
-        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": hook_cmd}]}]},
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": hook_cmd},
+                                                               {"type": "command", "command": quoted}]}]},
     }))
     (home / ".claude.json").write_text(json.dumps({"mcpServers": {"x": {"env": {"API_KEY": LEAKS["MCP server env literal"]}}}}))
     url = "https://gitlab+deploy-token-1:" + LEAKS["marketplace URL credentials"] + "@git.example.com/x.git"
-    (claude / "plugins" / "known_marketplaces.json").write_text(json.dumps({"team": {"source": {"source": "git", "url": url}}}))
+    token_only = "https://" + LEAKS["token-only marketplace URL"] + "@github.com/acme/market.git"
+    (claude / "plugins" / "known_marketplaces.json").write_text(json.dumps({
+        "team": {"source": {"source": "git", "url": url}}, "tokenonly": {"source": {"source": "git", "url": token_only}}}))
     (project / ".agents").mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(project)], check=True)
     subprocess.run(["git", "-C", str(project), "remote", "add", "origin",
-                    "https://user:" + LEAKS["git remote credentials"] + "@github.com/acme/app.git"], check=True)
+                    "https://user:" + LEAKS["git remote credentials"] + "@" + LEAKS["@ inside a remote password"]
+                    + "@github.com/acme/app.git"], check=True)
     (project / ".gitignore").write_text(".agents/secrets.env\n")
     (project / ".agents" / "secrets.env").write_text("STAGING_DB_URL=" + LEAKS["secrets.env value"] + "\n")
     (project / ".agents" / "environments.json").write_text(json.dumps({"project": "acme", "defaultEnvironment": "dev", "environments": {
-        "staging": {"policy": "confirm-writes", "url": "https://staging.acme.test", "services": [
+        "staging": {"policy": "confirm-writes", "url": "https://admin:" + LEAKS["environment URL basic auth"] + "@staging.acme.test", "services": [
             {"name": "web", "type": "vps", "access": {"dbUrl": {"secret": "env:STAGING_DB_URL"}}}],
-            "accounts": [{"role": "admin", "login": "a@acme.test", "password": LEAKS["registry literal password"]},
+            "accounts": [{"role": "admin", "login": "a@acme.test", "password": LEAKS["registry literal password"],
+                          "mfa": LEAKS["literal mfa"]},
                          {"role": "member", "login": "m@acme.test", "password": {"secret": LEAKS["registry literal secret object"]}}]}}}))
     return home, project
 
@@ -84,6 +95,25 @@ MALFORMED = {
 }
 
 
+MALFORMED_FILES = {
+    "registry secret null": (".agents/environments.json", {"environments": {"dev": {"policy": "autonomous", "services": [],
+                             "accounts": [{"role": "a", "login": "x", "password": {"secret": None}}]}}}),
+    "registry secret a number": (".agents/environments.json", {"environments": {"dev": {"policy": "autonomous", "services": [],
+                                 "accounts": [{"role": "a", "login": "x", "password": {"secret": 5}}]}}}),
+    "service name a number": (".agents/environments.json", {"environments": {"prod": {"policy": "confirm-each-step",
+                              "services": [{"name": 5, "type": "vps", "logs": "x"}]}}}),
+    "marketplaces a list": ("~/.claude/plugins/known_marketplaces.json", ["x"]),
+    "marketplace url a number": ("~/.claude/plugins/known_marketplaces.json", {"m": {"source": {"url": 5}}}),
+    "enabledPlugins null": ("~/.claude/settings.json", {"enabledPlugins": None}),
+    "plugin index null": ("~/.claude/plugins/installed_plugins.json", {"plugins": None}),
+    "settings env a list": ("~/.claude/settings.json", {"env": ["X"]}),
+    "settings a list": ("~/.claude/settings.json", ["x"]),
+    "MCP server a string": ("~/.claude.json", {"mcpServers": {"x": "y"}}),
+    "hook command null": ("~/.claude/settings.json", {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"command": None}]}]}}),
+    "hook entry hooks strings": ("~/.claude/settings.json", {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ["x"]}]}}),
+}
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -93,6 +123,9 @@ def main():
         for what, value in LEAKS.items():
             check(value not in page, f"{what}: value not in the page")
             check(value not in out, f"{what}: value not in stdout")
+        for title in ("Remote URL credentials", "Credentials in plugin marketplace URLs", "literal secrets"):
+            check(title in page, f"check fires: {title}")
+        check("tokenonly" in page, "token-only marketplace URL is reported by name")
         code, out, _ = run(home, project, ["--prompt"])
         check(all(v not in out for v in LEAKS.values()), "setup prompt holds no secret value")
         check(not any(p in out for p in (str(home), "/Users/", "Desktop")), "setup prompt holds no machine path")
@@ -102,14 +135,31 @@ def main():
             code, out, page = run(home, project)
             check(code == 0 and bool(page), f"malformed registry ({name}): no crash")
 
-        (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": None}))
+
+        for name, (rel, content) in MALFORMED_FILES.items():
+            target = home / rel[2:] if rel.startswith("~/") else project / rel
+            saved = target.read_text() if target.exists() else None
+            target.write_text(json.dumps(content))
+            code, out, page = run(home, project)
+            check(code == 0 and bool(page), f"malformed file ({name}): no crash")
+            if saved is None:
+                target.unlink()
+            else:
+                target.write_text(saved)
+
+        (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": None, "enabledPlugins": {"a@b": True}}))
         (home / ".claude" / "settings.local.json").write_text(json.dumps({"hooks": None}))
         (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {"a@b": {"installPath": "/nope"}}}))
         code, out, page = run(home, project)
-        check(code == 0 and bool(page), "hooks null and a dict plugin index: no crash")
+        check(code == 0 and bool(page), "hooks null and a dict plugin index of an enabled plugin: no crash")
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:
+        with tempfile.TemporaryDirectory() as tmp:
+            home, project = leaky_machine(Path(tmp))
+            code, out, page = run(home, project, python=old)
+            check(code == 0 and bool(page), f"runs on {old}")
+            check(all(v not in page and v not in out for v in LEAKS.values()), f"no secret value on {old}")
         p = subprocess.run([old, "-c", "import sys; print(sys.version_info[:2])"], capture_output=True, text=True)
         for f in sorted(HERE.glob("*.py")):
             r = subprocess.run([old, "-m", "py_compile", str(f)], capture_output=True, text=True)

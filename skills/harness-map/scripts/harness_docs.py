@@ -6,9 +6,10 @@ plugins. harness_map.py renders it next to the dashboard in one HTML file.
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
-from page import ULTIMATE, ult, CLAUDE, SKILL, esc, icon, load_json, plugin_entry, repo_skills
+from page import ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -24,7 +25,11 @@ def hook_source(cmd):
     if m:
         return "plugin", m.group(1)
     # Name a custom hook by its program, skipping leading NAME=value assignments, which can hold secrets.
-    words = [w for w in cmd.split() if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        words = cmd.split()
+    words = [w for w in words if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
     return "custom", (Path(words[0].strip("\"'")).name if words else "command")[:28]
 
 
@@ -32,22 +37,21 @@ def live_hooks():
     """[(event, matcher, kind, name, where)] from settings files and enabled plugins' hooks.json."""
     rows = []
     for fname in ("settings.json", "settings.local.json"):
-        for event, entries in ((load_json(CLAUDE / fname) or {}).get("hooks") or {}).items():
-            for e in entries if isinstance(entries, list) else []:
-                for h in (e.get("hooks") or []) if isinstance(e, dict) else []:
-                    kind, name = hook_source(h.get("command", ""))
-                    rows.append((event, e.get("matcher") or "*", kind, name, fname))
-    settings = load_json(CLAUDE / "settings.json") or {}
-    installed = (load_json(CLAUDE / "plugins" / "installed_plugins.json") or {}).get("plugins", {})
-    for pid, on in (settings.get("enabledPlugins") or {}).items():
+        for event, entries in _dict(load_obj(CLAUDE / fname).get("hooks")).items():
+            for e in _dicts(entries):
+                for h in _dicts(e.get("hooks")):
+                    kind, name = hook_source(_str(h.get("command")))
+                    rows.append((event, _str(e.get("matcher")) or "*", kind, name, fname))
+    settings = load_obj(CLAUDE / "settings.json")
+    installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
+    for pid, on in _dict(settings.get("enabledPlugins")).items():
         if not on:
             continue
-        path = Path(plugin_entry(installed, pid).get("installPath", ""))
-        data = load_json(path / "hooks" / "hooks.json") or {}
-        for event, entries in (data.get("hooks", data) or {}).items():
-            if isinstance(entries, list):
-                for e in entries:
-                    rows.append((event, e.get("matcher") or "*", "plugin", pid.split("@")[0], "plugin " + pid.split("@")[0]))
+        path = Path(_str(plugin_entry(installed, pid).get("installPath")))
+        data = load_obj(path / "hooks" / "hooks.json")
+        for event, entries in _dict(data.get("hooks", data)).items():
+            for e in _dicts(entries):
+                rows.append((event, _str(e.get("matcher")) or "*", "plugin", pid.split("@")[0], "plugin " + pid.split("@")[0]))
     # Settings entries that only launch a plugin's own runner duplicate the plugin row; keep one per (event, name).
     seen, out = set(), []
     for r in rows:
