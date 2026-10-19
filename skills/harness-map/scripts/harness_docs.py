@@ -425,6 +425,21 @@ def card(id_, ic, title, desc, inner):
             f'<span class="desc">{esc(desc)}</span></div>{inner}</section>')
 
 
+ONBOARD_BUTTON = '<button class="btn primary onboard-btn" type="button" data-open="onboard-src">Onboard your agent</button>'
+
+
+def onboard_source():
+    """The onboarding prompt (assets/onboard-prompt.md) as a template the header button opens in the side panel."""
+    prompt = (SKILL / "assets" / "onboard-prompt.md").read_text().strip()
+    return ('<template id="onboard-src"><div class="rmeta"><h2 class="rtitle">Onboard your agent</h2>'
+            '<p class="rdesc">Paste this into any coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot). '
+            'It takes stock of the harness you already have, installs Hephaestus Skills without overwriting anything '
+            '(a clashing skill or rule is kept and ours is forked as <code>hx-&lt;name&gt;</code>), shows you every change '
+            'first, and then walks you through the rest of the setup.</p>'
+            '<div><button class="btn primary" type="button" data-copy="onboard-text">Copy prompt</button></div></div>'
+            f'<pre id="onboard-text" class="ptext open">{esc(prompt)}</pre></template>')
+
+
 def unplaced_skills():
     """Repo skills missing from assets/lifecycle.json, and entries there with no such skill."""
     names = {d.name for d, _ in repo_skills()}
@@ -454,16 +469,10 @@ def docs_body(hooks, standalone=False):
                         [(len(skills), "info", "skills in this repo"), (len(ours), "fail", "gate hooks (this repo)"),
                          (len(plugins), "skip", "plugins with hooks"), (len({e for e, *_ in hooks}), "ok", "lifecycle events hooked")])) + '</div>')
 
-    nav = ([("onboard", "Onboard your agent"), ("wheel", "Harness wheel")] if standalone else []) + [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
+    nav = ([("wheel", "Harness wheel")] if standalone else []) + [("lifecycle", "Lifecycle map"), ("path", "Task path"), ("verification", "Verification loop"), ("skill-reference", "Skill reference"), ("hooks-wired", "Hooks wired")]
     h.append('<div class="grid"><nav class="side"><div class="h">Docs</div>' +
              "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in nav) + '</nav><div>')
     if standalone:
-        prompt = (SKILL / "assets" / "onboard-prompt.md").read_text().strip()
-        h.append(f'<section class="card prompt" id="onboard"><div class="hd">{icon("Tools")}<h2>Onboard your agent</h2>'
-                 '<span class="desc">Paste into any coding agent: it installs Hephaestus Skills the way its harness supports, '
-                 'then walks you through the rest of the setup</span>'
-                 '<div class="bar"><button class="btn primary" type="button" data-copy="onboard-text">Copy prompt</button></div></div>'
-                 f'<pre id="onboard-text" class="ptext open">{esc(prompt)}</pre></section>')
         wl = "".join(f'<a data-pillar="{pl["id"]}" tabindex="0" role="button"><span class="n">{pl["no"]}</span><span>{esc(pl["name"])}</span>'
                      f'<span class="mono" style="font-size:11px;color:var(--muted)">{len(pl["covered_by"].get("skills", []))} skills</span></a>'
                      for pl in PILLARS)
