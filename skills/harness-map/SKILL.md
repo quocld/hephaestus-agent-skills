@@ -8,7 +8,7 @@ user-invocable: true
 # harness-map
 
 Setup gaps hide in many places at once: links install.sh never made, hooks not registered, CLIs a skill needs, plugins, secrets in settings, a project without its agent block.
-This skill renders two HTML pages from one template: a live dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel) and the harness docs (the wheel's definitions, the Claude Code lifecycle with every skill and hook placed on it, the task path).
+This skill renders two HTML pages from one template: a live dashboard (what is set up, what is missing, core versus optional, the eight-component harness wheel, the project facts and every environment from `.agents/environments.json`) and the harness docs (the wheel's definitions, the Claude Code lifecycle with every skill and hook placed on it, the task path).
 
 ## 1. Generate
 
@@ -24,7 +24,7 @@ Run the dashboard for "what is missing" questions and the docs for "how does it 
 - `--no-probe` skips `hooks/test.sh` and `gh auth status` when the user wants it instant or offline.
 - The skill list comes from the checkout the script runs from, and fix commands point at the main checkout's `install.sh`.
 
-The script is read-only, never prints a secret value (only the key name), and runs nothing that builds, installs or deploys.
+The script is read-only, never prints a secret value (only the key name, and for registry secrets only whether they resolve), and runs nothing that builds, installs, deploys or reaches a remote environment.
 
 ## 2. Report
 

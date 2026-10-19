@@ -320,6 +320,7 @@ def collect_project(project):
             envs = registry.get("environments", registry) if isinstance(registry, dict) else {}
             names = list(envs.keys()) if isinstance(envs, dict) else [e.get("name", "?") for e in envs]
             out.append(check(sec, "Environment registry", "ok", "environments: " + (", ".join(names) or "none")))
+            out += env_checks(registry, p)
         gi = (p / ".gitignore").read_text() if (p / ".gitignore").exists() else ""
         if "secrets.env" not in gi:
             out.append(check(sec, "Secrets gitignored", "fail", ".agents/secrets.env is not in .gitignore", "echo '.agents/secrets.env' >> .gitignore"))
@@ -352,6 +353,147 @@ def collect_project(project):
     out.append(check(sec, "Playwright config", "ok" if pw else "info",
                      ", ".join(short(x) for x in pw[:3]) if pw else "none found; e2e-verify drives the browser ad hoc"))
     return out, registry
+
+
+# ---------------------------------------------------------------- environments
+
+POLICY = {"autonomous": ("ok", "Autonomous"), "confirm-writes": ("warn", "Confirm writes"),
+          "confirm-each-step": ("fail", "Confirm each step")}
+PROD_NAMES = {"prod", "production", "live"}
+
+
+def env_map(registry):
+    envs = (registry or {}).get("environments", {}) if isinstance(registry, dict) else {}
+    return envs if isinstance(envs, dict) else {e.get("name", f"env{i}"): e for i, e in enumerate(envs)}
+
+
+def secret_names(project):
+    """Names (never values) defined in .agents/secrets.env."""
+    f = Path(project) / ".agents" / "secrets.env"
+    if not f.exists():
+        return set()
+    return {ln.split("=", 1)[0].removeprefix("export ").strip() for ln in f.read_text().splitlines()
+            if "=" in ln and not ln.lstrip().startswith("#")}
+
+
+def secret_state(ref, known):
+    """(label, status) for a secret reference; the value is never read or shown."""
+    ref = (ref or {}).get("secret", "") if isinstance(ref, dict) else str(ref or "")
+    if ref.startswith("env:"):
+        name = ref[4:]
+        return f"env:{name}", "ok" if name in os.environ or name in known else "missing"
+    if ref.startswith("op://"):
+        return "1Password", "info"
+    return (ref or "no secret"), ("info" if ref else "missing")
+
+
+def env_checks(registry, project):
+    """Registry rules worth flagging: prod without step-by-step policy, no version command, unresolved secrets."""
+    out, known = [], secret_names(project)
+    for name, e in env_map(registry).items():
+        policy = e.get("policy", "")
+        if (name.lower() in PROD_NAMES or e.get("branch") in ("main", "master")) and policy != "confirm-each-step" and name != "dev":
+            out.append(check("Project", f"{name}: policy", "fail", f"policy is '{policy or 'unset'}'; prod must be confirm-each-step",
+                             "set policy to confirm-each-step in .agents/environments.json"))
+        # Version status matters where code is deployed; an autonomous (local dev) environment runs the working tree.
+        remote = [s_ for s_ in e.get("services", []) if s_.get("type") != "local" and policy != "autonomous"]
+        if remote and not all(s_.get("version") for s_ in remote):
+            miss = ", ".join(s_.get("name", "?") for s_ in remote if not s_.get("version"))
+            out.append(check("Project", f"{name}: version command", "warn", f"no version command for {miss}; what runs there is unknown",
+                             "add the version endpoint per the environments skill (references/version-endpoint.md)"))
+        refs = [a.get("password") for a in e.get("accounts", [])] + \
+               [s_.get("access", {}).get("dbUrl") for s_ in e.get("services", []) if s_.get("access", {}).get("dbUrl")]
+        unresolved = [lab for lab, st in (secret_state(r, known) for r in refs if r) if st == "missing"]
+        if unresolved:
+            out.append(check("Project", f"{name}: secrets", "warn", "not set in the shell or .agents/secrets.env: " + ", ".join(unresolved),
+                             "add them to .agents/secrets.env (gitignored); never commit values"))
+    return out
+
+
+def project_facts(project):
+    """The project-init block's bullets as (key, value) pairs."""
+    f = Path(project) / "AGENTS.md"
+    text = f.read_text() if f.exists() else ""
+    m = re.search(r"project-init:start -->(.*?)<!-- project-init:end", text, re.S)
+    facts = []
+    for ln in (m.group(1).splitlines() if m else []):
+        kv = re.match(r"^- ([^:]{2,40}):\s*(.+)$", ln.strip())
+        if kv:
+            facts.append((kv.group(1), kv.group(2)))
+    return facts
+
+
+def inline_code(text):
+    return re.sub(r"`([^`]+)`", r'<code>\1</code>', esc(text))
+
+
+def env_panel(project, registry):
+    if not project:
+        return ""
+    known = secret_names(project)
+    _, remote, _ = run(["git", "-C", str(project), "remote", "get-url", "origin"])
+    _, branch, _ = run(["git", "-C", str(project), "branch", "--show-current"])
+    platform = "GitHub" if "github" in remote else "GitLab" if "gitlab" in remote else "no remote"
+    head = [("Repository", short(project)), ("Remote", (remote.strip() or "none") + f" ({platform})"),
+            ("Current branch", branch.strip() or "detached")]
+    facts = project_facts(project)
+    kv = "".join(f'<div class="kv"><span>{esc(k)}</span><b>{inline_code(v)}</b></div>' for k, v in head + facts)
+    block = (kv if facts else kv + '<div class="kvempty">No project-init block yet: integration branch, tracker, commands, '
+             'sources of truth and E2E setup will show here. <code>run the project-init skill</code></div>')
+
+    envs = env_map(registry)
+    if not envs:
+        ghost = "".join(f'<div class="env ghost"><div class="eh"><b>{n}</b><span class="pill skip">{p_}</span></div>'
+                        f'<div class="gl"></div><div class="gl s"></div><div class="gl"></div><div class="gl s"></div></div>'
+                        for n, p_ in (("dev", "Autonomous"), ("staging", "Confirm writes"), ("prod", "Confirm each step")))
+        envhtml = (f'<div class="envempty"><div class="envs">{ghost}</div><div class="eo"><b>No environment registry yet</b>'
+                   '<p>Each environment will show its URL, branch, policy, services with deploy, verify, rollback and version commands, '
+                   'test accounts (secret references only) and rules. Deploy, SSH and test-account skills ask every time until it exists.</p>'
+                   '<code>run the environments skill (create section) -> .agents/environments.json</code></div></div>')
+    else:
+        cards_ = []
+        default = registry.get("defaultEnvironment")
+        for name, e in envs.items():
+            st, word = POLICY.get(e.get("policy", ""), ("skip", e.get("policy", "no policy")))
+            url = e.get("url", "")
+            link = f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(url)}</a>' if url.startswith("http") else esc(url or "no URL")
+            svc = []
+            for s_ in e.get("services", []):
+                acc = s_.get("access", {})
+                where = acc.get("ssh") or acc.get("vercelProjectId") or acc.get("supabaseProjectRef") or acc.get("composeProject") or ""
+                flags = "".join(f'<span class="chip {"" if s_.get(k) else "warn"}">{k}{"" if s_.get(k) else " missing"}</span>'
+                                for k in ("deploy", "verify", "rollback", "version")
+                                if (s_.get("type") != "local" and e.get("policy") != "autonomous") or k in ("deploy", "verify"))
+                runtime = f'<div class="sr">{esc(s_["runtime"])}</div>' if s_.get("runtime") else ""
+                place = f'<span class="mono">{esc(where)}</span>' if where else ""
+                svc.append(f'<li><div class="sn"><b>{esc(s_.get("name", "?"))}</b><span class="chip">{esc(s_.get("type", "?"))}</span>'
+                           f'{place}</div>{runtime}<div class="chips">{flags}</div></li>')
+            accs = []
+            for a in e.get("accounts", []):
+                lab, sst = secret_state(a.get("password"), known)
+                accs.append(f'<li><span class="chip acc">{esc(a.get("role", "?"))}</span><span class="mono">{esc(a.get("login", ""))}</span>'
+                            f'<span class="pill {sst}">{esc(lab)}{" set" if sst == "ok" else " missing" if sst == "missing" else ""}</span></li>')
+            data = e.get("data", {})
+            testing = e.get("testing", {})
+            rules = e.get("rules", []) + testing.get("rules", [])
+            meta = [("Branch", f'<code>{esc(e.get("branch", "?"))}</code>'),
+                    ("Testing", esc(testing.get("scope", "not set"))),
+                    ("Test data", ("allowed, marker " + f'<code>{esc(data.get("testDataMarker", "none"))}</code>') if data.get("testDataAllowed") else "not allowed")]
+            if e.get("deployOrder"):
+                meta.append(("Deploy order", " -> ".join(esc(x) for x in e["deployOrder"])))
+            cards_.append(
+                f'<div class="env" data-p="{st}"><div class="eh"><b>{esc(name)}</b>{"<span class=chip>default</span>" if name == default else ""}'
+                f'<span class="sp"></span><span class="pill {st}">{esc(word)}</span></div>'
+                f'<div class="eu">{link}</div><p class="ed">{esc(e.get("description", ""))}</p>'
+                + "".join(f'<div class="kv"><span>{k}</span><b>{v}</b></div>' for k, v in meta)
+                + f'<div class="lbl3">Services</div><ul class="svc">{"".join(svc) or "<li>none</li>"}</ul>'
+                + f'<div class="lbl3">Test accounts</div><ul class="acc">{"".join(accs) or "<li class=none>none</li>"}</ul>'
+                + (f'<div class="lbl3">Rules</div><ul class="rules">{"".join(f"<li>{esc(r)}</li>" for r in rules)}</ul>' if rules else "")
+                + '</div>')
+        envhtml = f'<div class="envs">{"".join(cards_)}</div>'
+    return (f'<section class="card" id="envs"><div class="hd">{icon("Project")}<h2>Project & environments</h2>'
+            f'<span class="desc">From the project-init block and .agents/environments.json; secret values are never read</span></div>'
+            f'<div class="facts">{block}</div>{envhtml}</section>')
 
 
 # ---------------------------------------------------------------- render
@@ -478,7 +620,7 @@ def pillar_status(checks):
     return status, related, alerts
 
 
-def render(checks, cards, plugins, project, probe):
+def render(checks, cards, plugins, project, probe, registry=None):
     by_sec = {}
     for c in checks:
         by_sec.setdefault(c["section"], []).append(c)
@@ -508,7 +650,7 @@ def render(checks, cards, plugins, project, probe):
              f'{pillar_cards(pst, prel, {c["name"]: c["installed"] for c in cards}, palert)}</section>')
     h.append(f'<div class="tiers" id="overview">{tier_block("core", checks, by_sec, actions)}{tier_block("optional", checks, by_sec, actions)}</div>')
 
-    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a>'
+    h.append('<div class="grid"><nav class="side"><div class="h">Overview</div><a href="#wheel">Harness wheel</a><a href="#overview">Core and optional</a><a href="#envs">Project & environments</a>'
              f'<a href="#todo">Fix first<span class="c">{len(actions)}</span></a><div class="h">Checks</div>')
     for sec in ORDER:
         if sec in by_sec:
@@ -518,6 +660,7 @@ def render(checks, cards, plugins, project, probe):
     h.append('<a href="#catalog">Skill catalog</a></nav><div>')
 
 
+    h.append(env_panel(project, registry))
     h.append(f'<section class="card" id="todo"><div class="hd">{icon("Tools")}<h2>Fix first</h2><span class="desc">Core gaps first, then optional ones</span></div>')
     if actions:
         for tier in ("core", "optional"):
@@ -629,7 +772,7 @@ def main():
     for c in checks:
         c["tier"] = tier_of(c)
 
-    page, score, count, actions = render(checks, cards, plugins, project, probe)
+    page, score, count, actions = render(checks, cards, plugins, project, probe, registry)
     out = Path(a.out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page)
