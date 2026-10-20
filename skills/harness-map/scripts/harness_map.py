@@ -1037,13 +1037,37 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
 SITE_NAME = "Hephaestus Skills"
 SITE_DESC = ("Hephaestus Skills, a Claude Code plugin: 25 agent skills, safety hooks and global rules, "
              "with the lifecycle map, task path and every skill in full.")
+REPO_URL = "https://github.com/quocld/hephaestus-agent-skills"
+AUTHOR = {"name": "Ryan Le", "login": "quocld", "url": "https://github.com/quocld"}
+# Repo files the docs site publishes as pages of their own: (slug, source, title, description). The repo file is the
+# one source; the page only renders it, and every page's footer links to all of them.
+REPO_PAGES = [
+    ("license", "LICENSE", "License", f"{SITE_NAME} is open source under the MIT License; adapted parts keep their upstream licenses."),
+    ("privacy", "policies/privacy.md", "Privacy policy", f"What the {SITE_NAME} docs site and plugin collect: no accounts, no analytics, no telemetry."),
+    ("terms", "policies/terms.md", "Terms of use", f"Terms for the {SITE_NAME} docs site and plugin: MIT License, no warranty, you review what your agent does."),
+    ("contributing", "CONTRIBUTING.md", "Contributing", f"How to propose a change to {SITE_NAME}: issues, pull requests, commit style and the checks CI runs."),
+    ("code-of-conduct", "CODE_OF_CONDUCT.md", "Code of conduct", f"The {SITE_NAME} code of conduct, based on the Contributor Covenant 2.1, and how to report a problem."),
+]
+GITHUB_ICON = ('<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 '
+               '3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15'
+               '-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82'
+               '-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92'
+               '.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 '
+               '8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>')
+HEADER_GITHUB = f'<a class="btn ghost ghlink" href="{REPO_URL}" rel="noopener" aria-label="{SITE_NAME} on GitHub">{GITHUB_ICON}<span>GitHub</span></a>'
 
 
-def seo_head(title, desc, url, site_url, gsc_token, ld):
-    """Search and sharing metadata for one page of the docs site: description, canonical, Open Graph, Twitter,
-    JSON-LD, and the Google Search Console verification tag when a token is given."""
+def author_ld():
+    return {"@type": "Person", "name": AUTHOR["name"], "alternateName": AUTHOR["login"], "url": AUTHOR["url"], "sameAs": [AUTHOR["url"]]}
+
+
+def seo_head(title, desc, url, site_url, gsc_token, ld, og_type="website", crumbs=None):
+    """Search and sharing metadata for one page of the docs site: description, author, license, canonical, Open Graph,
+    Twitter, JSON-LD (the page, plus a breadcrumb trail for any page below the home page), and the Google Search
+    Console verification tag when a token is given. crumbs: [(name, url)] from the home page down to this page."""
     tags = [f'<meta name="description" content="{esc(desc)}">', '<meta name="robots" content="index,follow">',
-            '<meta name="theme-color" content="#0c0a09">']
+            f'<meta name="author" content="{esc(AUTHOR["name"])}">', '<meta name="theme-color" content="#0c0a09">',
+            '<link rel="author" href="/about/">', '<link rel="license" href="/license/">']
     if site_url:
         tags += [f'<link rel="canonical" href="{esc(url)}">',
                  f'<meta property="og:url" content="{esc(url)}">',
@@ -1051,27 +1075,68 @@ def seo_head(title, desc, url, site_url, gsc_token, ld):
                  '<meta property="og:image:width" content="512"><meta property="og:image:height" content="512">',
                  f'<meta property="og:image:alt" content="{SITE_NAME} logo: a hammer striking hot metal on an anvil">',
                  f'<meta name="twitter:image" content="{esc(site_url)}/icon.png">']
-    tags += ['<meta property="og:type" content="website">', f'<meta property="og:site_name" content="{SITE_NAME}">',
+    tags += [f'<meta property="og:type" content="{esc(og_type)}">', f'<meta property="og:site_name" content="{SITE_NAME}">',
+             '<meta property="og:locale" content="en_US">',
              f'<meta property="og:title" content="{esc(title)}">', f'<meta property="og:description" content="{esc(desc)}">',
              '<meta name="twitter:card" content="summary">', f'<meta name="twitter:title" content="{esc(title)}">',
              f'<meta name="twitter:description" content="{esc(desc)}">',
              '<link rel="apple-touch-icon" href="/icon.png">']
     if gsc_token:
         tags.append(f'<meta name="google-site-verification" content="{esc(gsc_token)}">')
+    ld = dict(ld, author=author_ld(), inLanguage="en")
+    if site_url:
+        ld["license"] = f"{site_url}/license/"
+    graph = [ld]
+    if crumbs and site_url:
+        graph.append({"@type": "BreadcrumbList", "itemListElement": [
+            {"@type": "ListItem", "position": i, "name": n, "item": u} for i, (n, u) in enumerate(crumbs, 1)]})
+    data = {"@context": "https://schema.org", "@graph": [{k: v for k, v in g.items() if k != "@context"} for g in graph]}
     # JSON in a script tag: escape "<" so no value can close the tag.
-    tags.append('<script type="application/ld+json">' + json.dumps(ld, ensure_ascii=False).replace("<", "\\u003c") + '</script>')
+    tags.append('<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False).replace("<", "\\u003c") + '</script>')
     return "\n".join(tags)
 
 
 def short_desc(text, limit=155):
     text = re.sub(r"\s+", " ", text or "").strip()
-    return text if len(text) <= limit else text[:limit - 1].rsplit(" ", 1)[0] + "\u2026"
+    return text if len(text) <= limit else text[:limit - 1].rsplit(" ", 1)[0] + "…"
+
+
+def site_footer(version, sha):
+    """The footer of every docs page: author, the repo, the release, and the license, policy and contributing pages."""
+    links = "".join(f'<a href="/{slug}/">{esc(title)}</a>' for slug, _, title, _ in REPO_PAGES)
+    return (f'<div class="sitefoot"><div class="byline">Built by <a href="/about/" rel="author">{esc(AUTHOR["name"])}</a> '
+            f'(<a href="{AUTHOR["url"]}" rel="noopener">@{esc(AUTHOR["login"])}</a>) · '
+            f'<a href="{REPO_URL}" rel="noopener">Source on GitHub</a> · MIT License</div>'
+            f'<nav class="footlinks" aria-label="Site">{links}<a href="/about/">About</a>'
+            f'<a href="{REPO_URL}/issues" rel="noopener">Issues</a></nav>'
+            f'<div>{SITE_NAME} <a href="{REPO_URL}/releases/tag/{esc(version)}" rel="noopener">{esc(version)}</a>, commit '
+            f'<a class="mono" href="{REPO_URL}/commit/{esc(sha)}" rel="noopener">{esc(sha[:12])}</a>. '
+            'Generated by <span class="mono">harness_map.py --docs-only</span> from the repo alone.</div></div>')
+
+
+def repo_markdown(md):
+    """Repo-relative links in a repo Markdown file, made absolute for the site: a file the site publishes as a page
+    links to that page, anything else to the file on GitHub."""
+    pages = {src: f"/{slug}/" for slug, src, _, _ in REPO_PAGES}
+    def fix(m):
+        target = m.group(2)
+        if re.match(r"[a-z]+:|#|/", target):
+            return m.group(0)
+        path = target.lstrip("./").rstrip("/")
+        dest = pages.get(path) or f"{REPO_URL}/{'tree' if target.endswith('/') else 'blob'}/main/{path}"
+        return f"[{m.group(1)}]({SITE_URL_PLACEHOLDER}{dest})" if dest.startswith("/") else f"[{m.group(1)}]({dest})"
+    return re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", fix, md)
+
+
+# render_markdown links only http(s) URLs; site pages get this prefix, swapped back to "" after rendering.
+SITE_URL_PLACEHOLDER = "https://site.invalid"
 
 
 def write_docs_site(out_dir, site_url=None, gsc_token=None):
     """The public docs site: no checks, no settings, no paths or host names, so it can be published as is.
     index.html, one crawlable page per skill under skills/<name>/, the install guide the onboarding prompt points at
-    (install.md for agents, install/ for people), sitemap.xml, robots.txt, icon.png, version.json."""
+    (install.md for agents, install/ for people), the about page, the license, policy and contributing pages
+    (REPO_PAGES), 404.html, sitemap.xml, robots.txt, icon.png, version.json."""
     from harness_docs import ONBOARD_BUTTON, onboard_source, repo_hooks
     from page import render_markdown, repo_skills, skill_doc
     import shutil as _sh
@@ -1081,60 +1146,115 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
     code, when, _ = run(["git", "-C", str(REPO), "log", "-1", "--format=%cI"])
     lastmod = when.strip()[:10] if code == 0 and when.strip() else dt.date.today().isoformat()
     version = release_version()
-    footer = (f'{SITE_NAME} {esc(version)}, commit <span class="mono">{esc(sha[:12])}</span>. '
-              'Generated by <span class="mono">harness_map.py --docs-only</span> from the repo alone.')
+    footer = site_footer(version, sha)
+    tools = ONBOARD_BUTTON + HEADER_GITHUB
     out_dir.mkdir(parents=True, exist_ok=True)
     home = f"{site_url}/" if site_url else ""
+    urls = []
+
+    def md_html(md):
+        """A repo Markdown file as page content: its "# " title becomes the page's one h1, the rest the article."""
+        m = re.match(r"#\s+(.+)\n", md)
+        title_ = f'<div class="rmeta"><h1 class="ptitle">{esc(m.group(1).strip())}</h1></div>' if m else ""
+        html_ = title_ + '<article class="md">' + render_markdown(repo_markdown(md[m.end():] if m else md)) + "</article>"
+        return re.sub(rf'href="{re.escape(SITE_URL_PLACEHOLDER)}(/[^"]*)" target="_blank" rel="noopener"', r'href="\1"', html_)
+
+    def emit(path, title, crumb, desc, body, ld, og_type="website", crumbs=None):
+        """Write one page at <path>/index.html ("" is the home page) and list it in the sitemap."""
+        url = f"{site_url}/{path}/" if site_url and path else home
+        if site_url:
+            ld = dict(ld, url=url)
+        trail = [(f"{SITE_NAME} Docs", home)] + [(n, f"{site_url}/{p}/") for n, p in (crumbs or [])] if path else None
+        page = render_page(title, SITE_NAME, crumb, body, footer, tools,
+                           head=seo_head(title, desc, url, site_url, gsc_token, ld, og_type, trail))
+        (out_dir / path).mkdir(parents=True, exist_ok=True)
+        (out_dir / path / "index.html").write_text(page)
+        urls.append(url)
+
+    def doc_page(path, title, crumb, desc, side, crumbs_html, content, ld, og_type="website", crumbs=None):
+        """A page in the docs layout: side navigation, breadcrumbs, one card of content."""
+        body = (f'<div class="grid skillpage"><nav class="side">{side}</nav>'
+                f'<div><p class="crumbs">{crumbs_html}</p><section class="card"><div class="rbody">{content}</div></section></div></div>'
+                + onboard_source())
+        emit(path, f"{title} | {SITE_NAME}", crumb, desc, body, ld, og_type, crumbs)
 
     title = f"{SITE_NAME} Docs: agent skills for Claude Code"
-    ld = {"@context": "https://schema.org", "@type": "WebSite", "name": f"{SITE_NAME} Docs", "description": SITE_DESC}
-    if site_url:
-        ld["url"] = home
+    ld = {"@type": "WebSite", "name": f"{SITE_NAME} Docs", "description": SITE_DESC, "publisher": author_ld(),
+          "sameAs": [REPO_URL]}
     body = docs_body(repo_hooks(), standalone=True) + skill_sources() + onboard_source()
-    page = render_page(title, SITE_NAME, "/ Docs", body, footer, ONBOARD_BUTTON,
-                       head=seo_head(title, SITE_DESC, home, site_url, gsc_token, ld))
-    (out_dir / "index.html").write_text(page)
+    emit("", title, "/ Docs", SITE_DESC, body, ld)
+    site_ld = {"@type": "WebSite", "name": f"{SITE_NAME} Docs", **({"url": home} if site_url else {})}
 
-    urls = [home]
     skills = repo_skills()
     for d, fm in skills:
-        nav = "".join(f'<a href="../{esc(n.name)}/"' + (' aria-current="page"' if n.name == d.name else "") + f'>{esc(n.name)}</a>'
+        nav = "".join(f'<a href="/skills/{esc(n.name)}/"' + (' aria-current="page"' if n.name == d.name else "") + f'>{esc(n.name)}</a>'
                       for n, _ in skills)
         doc = skill_doc(d, fm, title_tag="h1")
         if not doc:
             continue
         desc = short_desc(fm.get("description", "")) or f"The {d.name} agent skill of {SITE_NAME}."
-        ptitle = f"{d.name} skill | {SITE_NAME}"
-        url = f"{site_url}/skills/{d.name}/" if site_url else ""
-        ld = {"@context": "https://schema.org", "@type": "TechArticle", "headline": f"{d.name} skill",
-              "description": desc, "isPartOf": {"@type": "WebSite", "name": f"{SITE_NAME} Docs"}}
-        if site_url:
-            ld.update({"url": url, "isPartOf": {"@type": "WebSite", "name": f"{SITE_NAME} Docs", "url": home}})
-        body = (f'<div class="grid skillpage"><nav class="side"><div class="h">Skills</div><a href="../../">All docs</a>{nav}</nav>'
-                f'<div><p class="crumbs"><a href="../../">Docs</a> / <a href="../../#skill-reference">Skills</a> / {esc(d.name)}</p>'
-                f'<section class="card"><div class="rbody">{doc[0]}{doc[1]}</div></section></div></div>' + onboard_source())
-        page = render_page(ptitle, SITE_NAME, f"/ Docs / {d.name}", body, footer, ONBOARD_BUTTON,
-                           head=seo_head(ptitle, desc, url, site_url, gsc_token, ld))
-        (out_dir / "skills" / d.name).mkdir(parents=True, exist_ok=True)
-        (out_dir / "skills" / d.name / "index.html").write_text(page)
-        urls.append(url)
+        src = f"{REPO_URL}/blob/main/skills/{d.name}/SKILL.md"
+        source = (f'<p class="srclinks"><a href="{REPO_URL}/tree/main/skills/{esc(d.name)}" rel="noopener">{GITHUB_ICON} View {esc(d.name)} on GitHub</a>'
+                  f'<a href="{src}" rel="noopener">SKILL.md source</a><a href="{REPO_URL}/edit/main/skills/{esc(d.name)}/SKILL.md" rel="noopener">Suggest an edit</a></p>')
+        ld = {"@type": "TechArticle", "headline": f"{d.name} skill", "description": desc, "isPartOf": site_ld,
+              "dateModified": lastmod, "isBasedOn": src}
+        doc_page(f"skills/{d.name}", f"{d.name} skill", f"/ Docs / {d.name}", desc,
+                 f'<div class="h">Skills</div><a href="/">All docs</a>{nav}',
+                 f'<a href="/">Docs</a> / <a href="/#skill-reference">Skills</a> / {esc(d.name)}',
+                 doc[0] + source + doc[1], ld, "article", [(d.name, f"skills/{d.name}")])
 
     guide = (SKILL / "assets" / "install-guide.md").read_text()
     (out_dir / "install.md").write_text(guide)
-    gtitle, gdesc = f"Install {SITE_NAME} | {SITE_NAME}", f"How a coding agent installs {SITE_NAME} without overwriting the harness it already has."
-    url = f"{site_url}/install/" if site_url else ""
-    ld = {"@context": "https://schema.org", "@type": "HowTo", "name": f"Install {SITE_NAME}", "description": gdesc}
-    if site_url:
-        ld["url"] = url
-    body = ('<div class="grid skillpage"><nav class="side"><div class="h">Install</div><a href="../">All docs</a>'
-            '<a href="../install.md">install.md (for agents)</a></nav>'
-            f'<div><p class="crumbs"><a href="../">Docs</a> / Install</p>'
-            f'<section class="card"><div class="rbody">{render_markdown(guide)}</div></section></div></div>' + onboard_source())
-    page = render_page(gtitle, SITE_NAME, "/ Docs / Install", body, footer, ONBOARD_BUTTON,
-                       head=seo_head(gtitle, gdesc, url, site_url, gsc_token, ld))
-    (out_dir / "install").mkdir(parents=True, exist_ok=True)
-    (out_dir / "install" / "index.html").write_text(page)
-    urls.append(url)
+    gdesc = f"How a coding agent installs {SITE_NAME} without overwriting the harness it already has."
+    doc_page("install", f"Install {SITE_NAME}", "/ Docs / Install", gdesc,
+             '<div class="h">Install</div><a href="/">All docs</a><a href="/install.md">install.md (for agents)</a>'
+             f'<a href="{REPO_URL}/blob/main/skills/harness-map/assets/install-guide.md" rel="noopener">Source on GitHub</a>',
+             '<a href="/">Docs</a> / Install', md_html(guide),
+             {"@type": "HowTo", "name": f"Install {SITE_NAME}", "description": gdesc, "isPartOf": site_ld},
+             crumbs=[("Install", "install")])
+
+    def side_for(cur):
+        """The side navigation of the project pages, with the current one marked."""
+        items = [(s_, t) for s_, _, t, _ in REPO_PAGES] + [("about", "About")]
+        return ('<div class="h">Project</div><a href="/">All docs</a>'
+                + "".join(f'<a href="/{s_}/"' + (' aria-current="page"' if s_ == cur else "") + f'>{esc(t)}</a>' for s_, t in items)
+                + f'<a href="{REPO_URL}" rel="noopener">GitHub</a>')
+
+    about_desc = f"{SITE_NAME} is built and maintained by {AUTHOR['name']} (@{AUTHOR['login']}) on GitHub."
+    about = (f'<div class="profile"><img src="{AUTHOR["url"]}.png?size=160" width="80" height="80" alt="{esc(AUTHOR["name"])} on GitHub" loading="lazy">'
+             f'<div><h1 class="ptitle">{esc(AUTHOR["name"])}</h1><p class="rdesc"><a href="{AUTHOR["url"]}" rel="me noopener">{GITHUB_ICON} @{esc(AUTHOR["login"])} on GitHub</a></p></div></div>'
+             f'<article class="md"><p>{esc(AUTHOR["name"])} builds and maintains {SITE_NAME}: a Claude Code plugin with global agent rules, agent skills for the '
+             'whole development loop, and safety hooks, made for teams that run several AI coding agents in parallel on one repository.</p>'
+             '<h2>The project</h2><ul>'
+             f'<li>Source code, issues and releases: <a href="{REPO_URL}" rel="noopener">github.com/quocld/hephaestus-agent-skills</a></li>'
+             f'<li>Releases and changelog: <a href="{REPO_URL}/releases" rel="noopener">GitHub releases</a></li>'
+             '<li>License: <a href="/license/">MIT</a>; adapted parts keep their upstream licenses</li>'
+             '<li>Contribute: <a href="/contributing/">contributing guide</a> and <a href="/code-of-conduct/">code of conduct</a></li>'
+             '<li>Policies: <a href="/privacy/">privacy policy</a> and <a href="/terms/">terms of use</a></li></ul></article>')
+    doc_page("about", f"About {AUTHOR['name']}", "/ Docs / About", about_desc, side_for("about"), '<a href="/">Docs</a> / About', about,
+             {"@type": "ProfilePage", "name": f"About {AUTHOR['name']}", "description": about_desc, "isPartOf": site_ld,
+              "mainEntity": author_ld()}, "profile", [("About", "about")])
+
+    for slug, src, ptitle, desc in REPO_PAGES:
+        text = (REPO / src).read_text()
+        if src.endswith(".md"):
+            content = md_html(text)
+        else:
+            sources = (REPO / "SOURCES.md").read_text().split("\n", 1)[1]
+            content = (f'<div class="rmeta"><h1 class="ptitle">{esc(ptitle)}</h1></div><article class="md"><p>{SITE_NAME} is released '
+                       f'under the MIT License below. <a href="{REPO_URL}/blob/main/{src}" rel="noopener">View it on GitHub</a>.</p>'
+                       f'<pre class="license">{esc(text)}</pre></article>' + md_html("## Third-party sources\n\n" + sources))
+        content += f'<p class="srclinks"><a href="{REPO_URL}/blob/main/{src}" rel="noopener">{GITHUB_ICON} {esc(src)} on GitHub</a><a href="{REPO_URL}/commits/main/{src}" rel="noopener">History</a></p>'
+        doc_page(slug, ptitle, f"/ Docs / {ptitle}", desc, side_for(slug), f'<a href="/">Docs</a> / {esc(ptitle)}', content,
+                 {"@type": "WebPage", "name": ptitle, "description": desc, "isPartOf": site_ld, "dateModified": lastmod},
+                 crumbs=[(ptitle, slug)])
+
+    nf = render_page(f"Page not found | {SITE_NAME}", SITE_NAME, "/ Docs / Not found",
+                     '<section class="card notfound"><div class="rbody"><div class="rmeta"><h1 class="ptitle">Page not found</h1></div>'
+                     '<p class="md">This page does not exist, or it moved. Try the <a href="/">docs home</a>, the '
+                     '<a href="/#skill-reference">skill reference</a>, or the <a href="/install/">install guide</a>.</p></div></section>'
+                     + onboard_source(), footer, tools, head='<meta name="robots" content="noindex">')
+    (out_dir / "404.html").write_text(nf)
 
     icon = REPO / "assets" / "icon.png"
     if icon.exists():
@@ -1146,7 +1266,8 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
         (out_dir / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?>\n'
                                              f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>\n')
     (out_dir / "version.json").write_text(json.dumps({"sha": sha, "version": version}) + "\n")
-    print(f"Docs site {version}: {out_dir / 'index.html'} + {len(urls) - 2} skill pages + install guide (commit {sha[:12]})"
+    print(f"Docs site {version}: {out_dir / 'index.html'} + {len(skills)} skill pages + install guide + about, "
+          f"{len(REPO_PAGES)} project pages and 404 (commit {sha[:12]})"
           + ("" if site_url else "; no --site-url, so no canonical links or sitemap"))
     return 0
 

@@ -269,6 +269,9 @@ def main():
         bad = render_markdown("<script>alert(1)</script> [x](javascript:alert(1)) <img src=x onerror=y>")
         check("<script" not in bad and "<img" not in bad and 'href="javascript' not in bad,
               "skill reader: markdown is escaped before rendering (no script, img or javascript: link)")
+        fenced = render_markdown("- Wait for it:\n\n  ```ts\n  const x = 1;\n  ```\n- next")
+        check("<pre><code>const x = 1;</code></pre>" in fenced and "```" not in fenced,
+              "skill reader: a fenced block inside a list item renders as code, without the item's indent")
     except ImportError:
         check(False, "skill reader: page.render_markdown exists")
 
@@ -320,6 +323,49 @@ def main():
               "install guide: the docs site serves it raw at install.md and as a page at install/")
         check('data-open="onboard-src"' in site and 'id="onboard-src"' in site and _html.escape(prompt, quote=True) in site
               and 'data-open="onboard-src"' in skill_page, "onboard prompt: a header button on every docs page opens it")
+
+    # Every page of the public site is indexable, credits the author, links back to the repo, and reaches the license,
+    # policy and contributing pages; no internal link is broken.
+    with tempfile.TemporaryDirectory() as tmp:
+        url = "https://docs.example.test"
+        p_ = subprocess.run([sys.executable, str(SCRIPT), "--docs-only", tmp, "--site-url", url], capture_output=True, text=True)
+        site = Path(tmp)
+        locs = re.findall(r"<loc>([^<]+)</loc>", (site / "sitemap.xml").read_text()) if (site / "sitemap.xml").exists() else []
+        pages = {u: site / u[len(url) + 1:] / "index.html" for u in locs}
+        check(p_.returncode == 0 and bool(locs) and all(f.exists() for f in pages.values()), "docs site: every sitemap URL is a page")
+        repo_slugs = ("license", "privacy", "terms", "contributing", "code-of-conduct", "about", "install")
+        check(all(f"{url}/{s}/" in locs for s in repo_slugs) and sum("/skills/" in u for u in locs) == len(list((HERE.parents[1]).glob("*/SKILL.md"))),
+              "docs site: the sitemap lists the license, policy, contributing, about and install pages and every skill")
+        bad_seo, bad_links, internal = [], [], set()
+        for u, f in pages.items():
+            h = f.read_text()
+            ld_ = re.search(r'<script type="application/ld\+json">(.*?)</script>', h, re.S)
+            graph = json.loads(ld_.group(1)).get("@graph", []) if ld_ else []
+            ok = (f'<link rel="canonical" href="{u}">' in h and '<meta name="description"' in h and '<meta name="author" content="Ryan Le">' in h
+                  and bool(graph) and graph[0].get("author", {}).get("url") == "https://github.com/quocld"
+                  and (u == f"{url}/" or any(g.get("@type") == "BreadcrumbList" for g in graph)))
+            if not ok:
+                bad_seo.append(u)
+            if not all(f'href="/{s}/"' in h for s in ("license", "privacy", "terms", "contributing", "code-of-conduct", "about")) \
+                    or 'href="https://github.com/quocld/hephaestus-agent-skills"' not in h or 'class="btn ghost ghlink"' not in h:
+                bad_links.append(u)
+            internal |= set(re.findall(r'href="(/[^"#?]*)', h))
+        check(not bad_seo, f"docs site: every page has canonical, description, author and JSON-LD with breadcrumbs ({bad_seo[:3]})")
+        check(not bad_links, f"docs site: every page has the GitHub header link and the footer links ({bad_links[:3]})")
+        broken = sorted(i for i in internal if not ((site / i.lstrip("/") / "index.html").exists() or (site / i.lstrip("/")).is_file()))
+        check(not broken, f"docs site: every internal link resolves to a page or file ({broken[:5]})")
+        skill_html = (site / "skills" / "root-cause" / "index.html").read_text()
+        check("https://github.com/quocld/hephaestus-agent-skills/tree/main/skills/root-cause" in skill_html,
+              "docs site: a skill page links to its source on GitHub")
+        lic = (site / "license" / "index.html").read_text()
+        check("MIT License" in lic and "Permission is hereby granted" in lic and "Third-party sources" in lic,
+              "docs site: the license page renders LICENSE and the third-party sources")
+        contrib = (site / "contributing" / "index.html").read_text()
+        check('href="/code-of-conduct/"' in contrib and "](" not in contrib and "site.invalid" not in contrib,
+              "docs site: repo-relative Markdown links become site links")
+        nf = (site / "404.html").read_text() if (site / "404.html").exists() else ""
+        check('content="noindex"' in nf and f"{url}/404" not in " ".join(locs), "docs site: 404.html exists, noindex and out of the sitemap")
+    check((HERE.parents[2] / "LICENSE").read_text().startswith("MIT License"), "repo: LICENSE is the MIT License")
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:

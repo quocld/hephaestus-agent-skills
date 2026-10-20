@@ -113,6 +113,7 @@ Details and tests: [`hooks/README.md`](hooks/README.md).
 | `.claude-plugin/` | Plugin manifest and the marketplace that serves it from this repo. |
 | `assets/` | Logo (`icon.svg`, `icon.png`). |
 | `SOURCES.md`, `LICENSES/` | Upstream sources and their licenses. |
+| `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `policies/` | MIT license, contributing guide, code of conduct, privacy policy and terms; the docs site publishes each as a page (`REPO_PAGES` in `harness_map.py`). |
 
 ## Adding a skill
 
@@ -130,3 +131,8 @@ Run `python3 .github/scripts/check_skill_refs.py` after renaming a skill or renu
 ## Author
 
 **Ryan Le** ([@quocld](https://github.com/quocld))
+
+## License
+
+[MIT](LICENSE). Parts adapted from other projects keep their own licenses; see [`SOURCES.md`](SOURCES.md).
+Contributions are welcome: read [`CONTRIBUTING.md`](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).

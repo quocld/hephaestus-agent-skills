@@ -239,6 +239,18 @@ nav.side a[aria-current="page"]{background:var(--accent-soft);color:var(--accent
 .flow .lbl{font-size:10.5px;fill:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .empty{padding:28px 18px;color:var(--muted);text-align:center}
 footer{color:var(--muted);font-size:12px;padding:0 0 40px}
+footer a{color:var(--text-2);text-decoration:none}footer a:hover{color:var(--accent-text);text-decoration:underline}
+.sitefoot{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:18px}
+.footlinks{display:flex;flex-wrap:wrap;gap:4px 16px}
+.ghlink{display:inline-flex;align-items:center;gap:6px}
+.srclinks{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 18px;font-size:13px}
+.srclinks a{display:inline-flex;align-items:center;gap:6px;color:var(--accent-text);text-decoration:none}.srclinks a:hover{text-decoration:underline}
+.profile{display:flex;align-items:center;gap:16px;padding-bottom:16px;margin-bottom:8px;border-bottom:1px solid var(--border)}.profile img{border-radius:50%;border:1px solid var(--border-2)}
+.profile .rdesc a{display:inline-flex;align-items:center;gap:6px;color:var(--accent-text);text-decoration:none}.profile .rdesc a:hover{text-decoration:underline}
+.ptitle{margin:0;font-family:"Host Grotesk",Inter,sans-serif;font-size:28px;font-weight:600;letter-spacing:-.01em;color:var(--text)}
+.md pre.license{white-space:pre-wrap;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+.notfound{margin:32px 0}
+@media (max-width:640px){.ghlink span{display:none}}
 .seg button,.brand{white-space:nowrap}
 .wpop .wclose{display:none}
 @media (hover:none){.wpop{left:8px!important;right:8px;top:auto!important;bottom:8px;width:auto;max-height:60vh}
