@@ -16,6 +16,7 @@ Run `git fetch origin --prune`.
 Not there but the `dev` environment has a `branch`: use that (legacy) and say once that `integrationBranch` should be recorded.
 Neither: stop and ask which branch PRs/MRs go into, showing your guess (`dev` when `git ls-remote --exit-code --heads origin refs/heads/dev` succeeds, else the remote default branch); never assume it, not `dev`, `main`, `master`, or a staging or prod branch.
 Record the answer as `integrationBranch` (a registry may hold only `project`, `integrationBranch` and an empty `environments`) in its own PR/MR into that branch, with the user's yes per `environments` section 1.
+When the `harness-map` setup batch (its section 3), `project-init` section 2 or `environments` section 10 already got that answer in this run, use it as `<int>` without asking again, and record `integrationBranch` in that skill's own PR/MR, not a separate one.
 `main` is fine as `<int>` only when the user chose it.
 
 ## 1. Start or resume: one task = one worktree = one branch

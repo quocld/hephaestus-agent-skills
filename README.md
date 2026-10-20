@@ -31,10 +31,10 @@ Every merge to `main` publishes a new release (tag `vX.Y.Z` from the commit type
 Paste this one line into any coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot, …):
 
 ```text
-Read https://hephaestus-skills-docs.vercel.app/install.md and follow it to install Hephaestus Skills for yourself, then help me finish the setup.
+Read https://hephaestus-skills-docs.vercel.app/install.md and follow it to install Hephaestus Skills for yourself, then finish the whole setup for this machine and this project in the same run: ask me every decision in one message, then do it all.
 ```
 
-The agent reads the [install guide](https://hephaestus-skills-docs.vercel.app/install/) (source: [`skills/harness-map/assets/install-guide.md`](skills/harness-map/assets/install-guide.md)): it takes stock of what this machine and project already have, installs Hephaestus Skills without overwriting anything (a clashing skill or rule is kept, and ours is forked next to it as `hx-<name>`), shows you every change first, and then walks you through the rest with `harness-map`.
+The agent reads the [install guide](https://hephaestus-skills-docs.vercel.app/install/) (source: [`skills/harness-map/assets/install-guide.md`](skills/harness-map/assets/install-guide.md)): it takes stock of what this machine and project already have, installs Hephaestus Skills without overwriting anything (a clashing skill or rule is kept, and ours is forked next to it as `hx-<name>`), asks every open decision in one message, and then finishes the setup with `harness-map`, project and environments included, in the same run.
 
 <details>
 <summary><b>Or install by hand</b> in Claude Code, instead of the prompt (not both)</summary>
@@ -44,7 +44,7 @@ The agent reads the [install guide](https://hephaestus-skills-docs.vercel.app/in
 /plugin install agent-skills@quocld
 ```
 
-Restart the session, then ask Claude to **"finish my harness setup"**: the `harness-map` skill checks tools, logins and project setup and asks for what is missing.
+Restart the session, then ask Claude to **"finish my harness setup"**: the `harness-map` skill checks tools, logins and project setup, asks for what is missing in one message, and finishes the rest.
 
 </details>
 

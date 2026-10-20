@@ -445,7 +445,7 @@ def onboard_source():
             '<p class="rdesc">Paste this one line into any coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot). '
             'It reads the install guide, takes stock of the harness you already have, installs Hephaestus Skills without '
             'overwriting anything (a clashing skill or rule is kept and ours is forked as <code>hx-&lt;name&gt;</code>), '
-            'shows you every change first, and then walks you through the rest of the setup.</p>'
+            'asks every open decision in one message, and then finishes the setup, project and environments included, in the same run.</p>'
             '<div class="bar"><button class="btn primary" type="button" data-copy="onboard-text">Copy prompt</button>'
             '<a class="btn ghost" href="/install/">Read the install guide</a></div></div>'
             f'<pre id="onboard-text" class="ptext open">{esc(prompt)}</pre></template>')

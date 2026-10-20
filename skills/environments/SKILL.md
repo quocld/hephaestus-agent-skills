@@ -180,12 +180,16 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
 
 ## 10. Create the registry
 
-1. Draft from repo evidence first: `.env*.example` (variable names only), `.vercel/project.json`, `vercel.json`, `supabase/config.toml`, `Dockerfile`, compose files, `ecosystem.config.*`, CI workflows, deploy scripts, README.
-2. Ask the user only what the repo cannot tell, in one batch, your drafts shown; it always starts with these, unless the registry already records them or the calling skill (`project-init` section 2) asked them in this run:
+1. Draft from repo evidence first: existing environment docs (`.claude/environments*.md`, `docs/**/environments*.md`, environment notes in `AGENTS.md`, `CLAUDE.md` or README), `.env*.example` (variable names only), `.vercel/project.json`, `vercel.json`, `supabase/config.toml`, `Dockerfile`, compose files, `ecosystem.config.*`, CI workflows, deploy scripts.
+   An existing environment doc is a source to import, not a question: take its environments, URLs, branches, SSH aliases, policies or rules, and account roles and logins into the draft.
+   A secret value in it is never copied: it becomes an `env:` reference, and moving and rotating it is waiting on the user.
+   Leave the doc in place; the report lists what was imported from which file and proposes deleting it or replacing its body with a pointer to `.agents/environments.json`, so the two cannot drift.
+2. Ask the user only what the repo cannot tell, in one batch, your drafts shown; it always starts with these, unless the registry already records them or a calling skill asked them in this run (`project-init` section 2, or the `harness-map` setup batch in its section 3, whose answers are taken as given):
    - Which branch PRs/MRs go into (`integrationBranch`, `worktree-flow` section 0), never assumed.
    - Which environments exist: local or dev, staging, prod, and any other, each with its URL and the branch it deploys from.
    Then SSH aliases, test account roles and logins, rules such as deploy windows.
 3. Write `.agents/environments.json` based on `templates/environments.json`, with `integrationBranch` set, and copy `templates/environments.schema.json` next to it.
+   When a calling skill's batch showed the drafted environments and the user answered it, that answer is the yes of section 1 for creating the registry; only later changes need their own diff and yes.
    An environment the user does not know yet is left out and reported, never invented; `environments` may stay empty while only `integrationBranch` is known.
    A standard one the user says the project does not have (dev, staging or prod) goes in `absentEnvironments`, so `harness-map` stops asking for it.
 4. Defaults: local and dev `autonomous` with testing `full`; staging `confirm-writes` with testing `non-destructive`; prod `confirm-each-step` with `allowedWithoutAsking: []`, `testDataAllowed: false`, and testing `smoke-only`.
@@ -205,4 +209,5 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
    `harness-map` shows each name that is still empty or absent as missing on its environment's card.
 6. Validate: `npx -y ajv-cli@5.0.0 validate --spec=draft2020 -s .agents/environments.schema.json -d .agents/environments.json`.
 7. A service without a version endpoint gets one per `references/version-endpoint.md`, shipped as a normal PR/MR.
-8. Run each remote service's `version` and `verify` once to prove the access works (on prod, ask first), and report anything that fails.
+8. Run each remote service's `version` and `verify` once to prove the access works, and report anything that fails.
+   On prod, run them only after a yes: the calling skill's batch answer (the Environments row of `harness-map` section 3) when there is one, else ask; a no leaves the command under waiting on the user.

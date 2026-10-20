@@ -18,8 +18,9 @@ SKILLS_DIR = REPO / "skills"
 TEMPLATE = SKILL / "assets" / "template.html"
 
 # Ranked by how much each status blocks work; drives sorting and scores.
-RANK = {"fail": 0, "missing": 1, "warn": 2, "ok": 3, "info": 4, "skip": 5}
-LABEL = {"fail": "Failing", "missing": "Missing", "warn": "Attention", "ok": "OK", "info": "Info", "skip": "Skipped"}
+# pending: done in an open PR/MR that only the user merges; not done, but not a gap to fix either.
+RANK = {"fail": 0, "missing": 1, "warn": 2, "pending": 3, "ok": 4, "info": 5, "skip": 6}
+LABEL = {"fail": "Failing", "missing": "Missing", "warn": "Attention", "pending": "Pending", "ok": "OK", "info": "Info", "skip": "Skipped"}
 
 ICONS = {
     "Global instructions": '<path d="M4 4h12v12H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 8h6M7 11h4" stroke="currentColor" stroke-width="1.6"/>',

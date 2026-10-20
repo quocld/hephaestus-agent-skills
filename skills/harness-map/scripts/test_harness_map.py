@@ -302,6 +302,11 @@ def main():
         code, out, page = run(home, project)
         check("worktree-flow: name clash" in page and "hx-worktree-flow" in page, "existing harness: a different same-name project skill is a clash, with the fork fix")
         check("root-cause: duplicate copy" in page and "root-cause: name clash" not in page, "existing harness: an identical copy is only a duplicate")
+        (project / ".claude" / "skills" / "hx-worktree-flow").mkdir()
+        (project / ".claude" / "skills" / "hx-worktree-flow" / "SKILL.md").write_text("---\nname: hx-worktree-flow\ndescription: fork\n---\n")
+        code, out, page = run(home, project)
+        check("worktree-flow: name clash:" not in out and "worktree-flow: name clash settled" in page,
+              "existing harness: theirs kept and ours forked as hx-worktree-flow is settled, not a core gap")
 
     # The onboarding prompt has one source (assets/onboard-prompt.md); the README and the docs site carry it verbatim.
     # It stays one line that points at the install guide, which the docs site publishes as is.
@@ -507,6 +512,176 @@ def main():
     prompt_text = hm.setup_prompt()
     check("which branch PRs go into" in prompt_text and "never assume dev or main" in prompt_text and "staging, prod" in prompt_text,
           "setup prompt: always asks the integration branch and which environments exist")
+    check("one message" in prompt_text and "one step at a time" not in prompt_text and "once for that step" not in prompt_text
+          and "core 100%" in prompt_text and "waiting on you" in prompt_text.lower() and "stop after the report" in prompt_text,
+          "setup prompt: one question batch up front, no stop after the report, done only at core 100% plus a waiting-on-you list")
+
+    # Project files that project-init already wrote, in its open PR or already merged on origin, are not reported missing;
+    # a branch alone, with no PR/MR that gh confirms, does not hide the gap.
+    def gitrepo(tmp):
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        git = lambda *a: subprocess.run(["git", *a], check=True, capture_output=True, env=env)
+        origin, project = Path(tmp) / "origin.git", Path(tmp) / "project"
+        git("init", "-q", "--bare", "-b", "main", str(origin))
+        git("clone", "-q", str(origin), str(project))
+        git("-C", str(project), "commit", "-q", "--allow-empty", "-m", "init")
+        git("-C", str(project), "push", "-q", "origin", "HEAD:main")
+        git("-C", str(project), "remote", "set-head", "origin", "main")
+        return git, project
+
+    def setup_branch(git, project, branch, registry_text, base="main"):
+        """project-init's branch: AGENTS.md with the block, the registry, .gitignore; pushed, then back on base."""
+        git("-C", str(project), "switch", "-q", "-c", branch)
+        (project / "AGENTS.md").write_text("# P\n<!-- project-init:start -->\n- Tracker: none\n<!-- project-init:end -->\n")
+        (project / ".agents").mkdir(exist_ok=True)
+        (project / ".agents" / "environments.json").write_text(registry_text)
+        (project / ".gitignore").write_text(".agents/secrets.env\n")
+        git("-C", str(project), "add", "-A")
+        git("-C", str(project), "commit", "-q", "-m", "project-init")
+        git("-C", str(project), "push", "-q", "origin", branch)
+        git("-C", str(project), "switch", "-q", base)
+
+    def with_gh(bin_, prs, fn):
+        """Run fn() with a fake gh on PATH whose `pr list` prints prs."""
+        bin_.mkdir(exist_ok=True)
+        (bin_ / "gh").write_text("#!/bin/sh\n[ \"$1 $2\" = \"pr list\" ] || exit 1\necho '" + json.dumps(prs) + "'\n")
+        (bin_ / "gh").chmod(0o755)
+        saved = os.environ["PATH"]
+        os.environ["PATH"] = str(bin_) + os.pathsep + saved
+        try:
+            return fn()
+        finally:
+            os.environ["PATH"] = saved
+
+    reg_text = json.dumps({"project": "p", "integrationBranch": "main",
+                           "environments": {"staging": {"branch": "main", "policy": "confirm-writes", "url": "https://s.test"}}})
+    pr42 = [{"number": 42, "url": "https://example.test/pr/42", "headRefName": "chore/project-init",
+             "files": [{"path": "AGENTS.md"}, {"path": ".agents/environments.json"}, {"path": ".gitignore"},
+                       {"path": ".claude/skills/hx-flow-trace/SKILL.md"}]}]
+    project_titles = ("Project AGENTS.md", "Environment registry")
+    with tempfile.TemporaryDirectory() as tmp:
+        git, project = gitrepo(tmp)
+        bin_ = Path(tmp) / "bin"
+        rows = lambda probe=False: {c["title"]: c for c in hm.collect_project(project, probe)[0]}
+        bare = rows()
+        a = bare.get("Project AGENTS.md", {})
+        check(a.get("status") == "missing" and "project facts from project-init; the plugin's global rules load separately" in a.get("detail", "")
+              and "no project AGENTS.md" not in a.get("detail", ""),
+              "AGENTS.md row: says it holds the project facts and that the plugin's global rules load separately")
+        setup_branch(git, project, "chore/project-init", reg_text)
+        nogh = rows()
+        check(all(nogh[t]["status"] == "missing" and "branch origin/chore/project-init has it" in nogh[t]["detail"] for t in project_titles)
+              and nogh["Integration branch"]["status"] == "missing",
+              "branch without a PR/MR gh confirms (no gh): the rows stay gaps in Fix first, with the branch as a hint")
+        empty = with_gh(bin_, [], lambda: rows(probe=True))
+        check(all(empty[t]["status"] == "missing" for t in project_titles), "gh lists no PR for that branch: the rows stay missing")
+        gh = with_gh(bin_, pr42, lambda: rows(probe=True))
+        check(all(gh[t]["status"] == "pending" and "PR #42" in gh[t]["detail"] and "merge it to finish" in gh[t]["detail"] for t in project_titles),
+              "open PR seen by gh: AGENTS.md and the registry are pending with the PR number")
+        check(gh["Integration branch"]["status"] == "pending" and gh["Integration branch"]["detail"].startswith("main, recorded in PR #42"),
+              "pending registry: the integration row names the recorded branch and the PR")
+        banner = hm.integration_banner(project, None, gh["Integration branch"])
+        check('data-s="pending"' in banner and "Pending merge" in banner and '<code class="ibb">main</code>' in banner
+              and 'aria-label="waiting on merge"' in banner,
+              "pending registry: the integration banner agrees with the row, shows the branch and announces waiting on merge")
+        checks_ = list(gh.values())
+        for c in checks_:
+            c["tier"] = hm.tier_of(c)
+        check(not any(c["status"] == "pending" for c in hm.group_actions(checks_)), "pending rows are not Fix first gaps")
+        check(hm.readiness([hm.check("Project", "a", "ok"), hm.check("Project", "b", "pending")]) == 50,
+              "readiness: a pending row counts as not done")
+        tb_rows = [hm.check("Project", "a", "ok"), hm.check("Project", "b", "pending")]
+        for c in tb_rows:
+            c["tier"] = "core"
+        tb = hm.tier_block("core", tb_rows, {"Project": tb_rows}, [])
+        check("All set" not in tb and "1 waiting on merge" in tb and 'class="pending"' in tb,
+              "tier panel: a pending row shows waiting on merge with its own bar segment, never All set below 100%")
+
+        # The project kept its own flow-trace: ours forked as hx-flow-trace settles the clash, wherever the fork is.
+        saved_claude = hm.CLAUDE
+        hm.CLAUDE = Path(tmp) / "home" / ".claude"
+        try:
+            theirs = project / ".claude" / "skills" / "flow-trace"
+            theirs.mkdir(parents=True)
+            (theirs / "SKILL.md").write_text("---\nname: flow-trace\ndescription: theirs\n---\nother text\n")
+            git("-C", str(project), "add", ".claude")
+            git("-C", str(project), "commit", "-q", "-m", "their skill")
+            git("-C", str(project), "push", "-q", "origin", "HEAD:main")
+            clash = lambda probe=False: {c["title"]: c for c in hm.collect_skills(project, hm.Refs(project, probe))[0]
+                                         if c["title"].startswith("flow-trace: ")}
+            check(clash().get("flow-trace: name clash", {}).get("status") == "warn", "clash: a different project skill with our name is a warn")
+            git("-C", str(project), "switch", "-q", "chore/project-init")
+            (project / ".claude" / "skills" / "hx-flow-trace").mkdir(parents=True)
+            (project / ".claude" / "skills" / "hx-flow-trace" / "SKILL.md").write_text("fork\n")
+            git("-C", str(project), "add", ".claude")
+            git("-C", str(project), "commit", "-q", "-m", "fork")
+            git("-C", str(project), "push", "-q", "origin", "chore/project-init")
+            git("-C", str(project), "switch", "-q", "main")
+            in_pr = with_gh(bin_, pr42, lambda: clash(probe=True))
+            check(in_pr.get("flow-trace: name clash settled", {}).get("status") == "pending" and "PR #42" in in_pr["flow-trace: name clash settled"]["detail"],
+                  "clash: the hx- fork in the open setup PR is pending, not a core warn")
+            (project / ".claude" / "skills" / "hx-flow-trace").mkdir(parents=True)
+            (project / ".claude" / "skills" / "hx-flow-trace" / "SKILL.md").write_text("fork\n")
+            here = clash()
+            check("flow-trace: name clash" not in here and here.get("flow-trace: name clash settled", {}).get("status") == "info",
+                  "clash: ours forked as hx-flow-trace next to theirs is the user's recorded choice, not a core gap")
+            shutil.rmtree(project / ".claude" / "skills" / "hx-flow-trace")
+            git("-C", str(project), "switch", "-q", "-c", "chore/switch")
+            git("-C", str(project), "rm", "-q", "-r", ".claude/skills/flow-trace")
+            git("-C", str(project), "commit", "-q", "-m", "switch to theirs")
+            git("-C", str(project), "push", "-q", "origin", "HEAD:main")
+            git("-C", str(project), "switch", "-q", "main")
+            git("-C", str(project), "fetch", "-q", "origin")
+            sw = clash()
+            check(sw.get("flow-trace: name clash settled", {}).get("status") == "info" and "pull to get it" in sw["flow-trace: name clash settled"]["detail"],
+                  "clash: the project's copy deleted on origin/main (switch to ours) says pull to get it")
+        finally:
+            hm.CLAUDE = saved_claude
+
+        git("-C", str(project), "push", "-q", "-f", "origin", "chore/project-init:main")
+        git("-C", str(project), "fetch", "-q", "origin")
+        merged = rows()
+        check(all(merged[t]["status"] == "info" and "on origin/main, pull to get it" in merged[t]["detail"] for t in project_titles),
+              "merged but not pulled: AGENTS.md and the registry say on origin/main, pull to get it")
+        check(merged["Integration branch"]["status"] == "ok" and "Secrets gitignored" not in merged,
+              "merged but not pulled: the registry is read as origin/main has it")
+
+    # The merge target is not guessed from the missing registry: a stale origin/dev, or no origin/HEAD at all, still
+    # finds the copy merged on origin/main, with gh and without.
+    for case in ("stale dev", "no origin/HEAD"):
+        with tempfile.TemporaryDirectory() as tmp:
+            git, project = gitrepo(tmp)
+            if case == "stale dev":
+                git("-C", str(project), "push", "-q", "origin", "HEAD:dev")
+            setup_branch(git, project, "chore/project-init", reg_text)
+            git("-C", str(project), "push", "-q", "origin", "chore/project-init:main")
+            git("-C", str(project), "push", "-q", "origin", "--delete", "chore/project-init")
+            git("-C", str(project), "fetch", "-q", "--prune", "origin")
+            if case == "no origin/HEAD":
+                git("-C", str(project), "remote", "set-head", "origin", "--delete")
+            for label, got in (("no gh", lambda: hm.collect_project(project, False)[0]),
+                               ("gh, no PRs", lambda: with_gh(Path(tmp) / "bin", [], lambda: hm.collect_project(project, True)[0]))):
+                r = {c["title"]: c for c in got()}
+                check(all(r[t]["status"] == "info" and "on origin/main, pull to get it" in r[t]["detail"] for t in project_titles)
+                      and r["Integration branch"]["status"] == "ok",
+                      f"{case}, {label}: the copy merged on origin/main says pull to get it, and its integration branch is used")
+
+    # A registry merged on origin that is not valid JSON is a fail row, not a reassuring "pull to get it".
+    with tempfile.TemporaryDirectory() as tmp:
+        git, project = gitrepo(tmp)
+        setup_branch(git, project, "chore/project-init", "{bad")
+        git("-C", str(project), "push", "-q", "origin", "chore/project-init:main")
+        git("-C", str(project), "fetch", "-q", "origin")
+        r = {c["title"]: c for c in hm.collect_project(project, False)[0]}
+        check(r["Environment registry"]["status"] == "fail" and "not valid JSON" in r["Environment registry"]["detail"]
+              and "origin/main" in r["Environment registry"]["detail"],
+              "malformed registry on origin: a fail row naming origin/main, not info")
+    tpl = (HERE.parent / "assets" / "template.html").read_text()
+    check(".pill.pending{" in tpl and ".dot.pending{" in tpl and ".mk.pending{" in tpl and ".tbar i.pending{" in tpl
+          and hm.LABEL.get("pending") == "Pending", "pending status: the page styles its pill, dot, mark and bar segment")
+    check("and stop" not in hm.setup_prompt() and "install.md" in hm.setup_prompt(),
+          "setup prompt: a missing skill sends the agent to the install guide and on, never to a stop")
+
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:

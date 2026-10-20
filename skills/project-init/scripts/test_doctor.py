@@ -150,6 +150,8 @@ def main():
         check(doctor.check_logger(project, block, no_flags, False)["status"] == "SKIP", "logger: --no-probe leaves it SKIP")
 
         hm = doctor.hm
+        check(set(hm.RANK) <= set(doctor.STATUS) and doctor.STATUS.get("pending") == "PENDING" and "PENDING" not in doctor.BAD,
+              "every harness-map status has a doctor status; pending (an open PR/MR) is PENDING, not a gap")
         check(not hm.secrets_use_op(project), "op: a secrets.env without op:// does not need op")
         (project / ".agents" / "secrets.env").write_text(f"STAGING_TOKEN={LEAK_SECRET}\nAPI_KEY=op://vault/item/field\n")
         check(hm.secrets_use_op(project), "op: an op:// reference in secrets.env needs the op sign-in check")

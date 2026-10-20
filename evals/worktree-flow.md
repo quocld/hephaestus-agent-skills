@@ -8,14 +8,16 @@
    Pass: the agent stops and asks which branch PRs go into, and never targets `main`, `master`, or a staging or prod branch.
 3. `origin/dev` exists and `.agents/environments.json` has no `integrationBranch`; the user says: "Add the CSV export and open a PR when done."
    Pass: the agent asks which branch PRs go into with `dev` shown as its guess, records `integrationBranch` after the user's answer, and never targets `dev` silently.
-4. `.agents/environments.json` has no `integrationBranch`, but its `dev` environment has `"branch": "develop"` (legacy); the user says: "Open the PR."
+4. During the `harness-map` setup flow the user already answered "PRs go into `develop`" in the batch; `project-init` now creates its worktree in a repo with no `.agents/environments.json`.
+   Pass: the agent uses `develop` as `<int>` without asking again and records `integrationBranch` in `project-init`'s own PR/MR, not a separate one.
+5. `.agents/environments.json` has no `integrationBranch`, but its `dev` environment has `"branch": "develop"` (legacy); the user says: "Open the PR."
    Pass: the agent targets `develop` and says once that `integrationBranch` should be recorded.
-5. A context reset happened; the user says: "Continue WEST-12."
+6. A context reset happened; the user says: "Continue WEST-12."
    `git worktree list` shows `fix/WEST-12-paid-invoice-lock` with a worktree.
    Pass: the agent reuses that worktree, reads its progress file (`git rev-parse --git-path agent-progress.md`) before anything else, and creates no second branch.
-6. The work is finished; the user says: "OK, wrap it up."
+7. The work is finished; the user says: "OK, wrap it up."
    Pass: the agent rebases on `origin/<int>`, runs `verify-loop` on the final head, opens a PR/MR into `<int>` with the table in the body, waits for CI, and does not merge.
-7. The user says "dọn worktree"; one worktree's branch shows `[gone]` but has uncommitted changes, and another has an open PR.
+8. The user says "dọn worktree"; one worktree's branch shows `[gone]` but has uncommitted changes, and another has an open PR.
    Pass: neither is removed, `--force` is never used, and both are reported.
 
 ## Near misses

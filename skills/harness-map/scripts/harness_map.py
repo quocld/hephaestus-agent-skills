@@ -126,7 +126,7 @@ def collect_global():
 
 
 def skill_clashes(project):
-    """{name: [(where, same_text)]} for repo skills whose name another skill already uses: the user's own skills
+    """{name: [(where, same_text, folder)]} for repo skills whose name another skill already uses: the user's own skills
     (not links into agent-skills), the project's .claude/skills, or another enabled plugin. Two skills with one name
     both load by description, so the agent follows whichever it happens to pick."""
     places = [("~/.claude/skills", CLAUDE / "skills")]
@@ -149,11 +149,33 @@ def skill_clashes(project):
                 same = (other / "SKILL.md").read_text(errors="replace") == ours
             except OSError:
                 same = False
-            out.setdefault(d.name, []).append((where, same))
+            out.setdefault(d.name, []).append((where, same, base))
     return out
 
 
-def collect_skills(project=None):
+def clash_decision(name, where, base, project, refs):
+    """How a different same-name skill was settled, per place: ("ok", text) for the user's recorded choice (ours forked
+    next to it as hx-<name>, which keeps theirs), ("info", text) or ("pending", text) when that choice, or the switch to
+    ours (theirs deleted), is merged on origin or in an open PR/MR, else None: still a clash to decide."""
+    fork = f"hx-{name}/SKILL.md"
+    in_project = bool(project) and base == Path(project) / ".claude" / "skills"
+    homes = [base] if in_project or base == CLAUDE / "skills" else [CLAUDE / "skills"]   # a plugin's clash: fork in ~/.claude/skills
+    if any((h / fork).exists() for h in homes):
+        return "ok", f"kept the existing {name} in {where}; ours is forked as hx-{name} (the user's choice)"
+    if not (in_project and refs):
+        return None
+    found = refs.find(f".claude/skills/{fork}")
+    if found and found[0] in ("origin", "pending"):
+        return ("info", f"ours forked as hx-{name} on {found[1]}, pull to get it") if found[0] == "origin" else \
+            ("pending", f"ours forked as hx-{name} in {found[1]}: merge it to finish")
+    gone = refs.gone(f".claude/skills/{name}/SKILL.md")
+    if gone:
+        return ("info", f"switched to ours: the project's copy is deleted on {gone[1]}, pull to get it") if gone[0] == "origin" else \
+            ("pending", f"switched to ours: {gone[1]} deletes the project's copy: merge it to finish")
+    return None
+
+
+def collect_skills(project=None, refs=None):
     checks, cards = [], []
     readme = (REPO / "README.md").read_text() if (REPO / "README.md").exists() else ""
     for d in sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()):
@@ -223,15 +245,24 @@ def collect_skills(project=None):
         checks.append(check("Skills", "Other user skills", "info",
                             f"{len(foreign)} skills in ~/.claude/skills not from this repo: " + ", ".join(foreign)))
     for name, hits in skill_clashes(project).items():
-        differ = [w for w, same in hits if not same]
-        if differ:
-            checks.append(check("Skills", f"{name}: name clash", "warn",
-                                "another skill named " + name + " is active in " + ", ".join(differ)
-                                + "; both load by description, so the agent follows either one",
-                                f"keep the existing {name} and fork ours as hx-{name} (the onboarding prompt does this), or remove one of them"))
-        else:
+        differ = [(w, base) for w, same, base in hits if not same]
+        if not differ:
             checks.append(check("Skills", f"{name}: duplicate copy", "info",
-                                "an identical copy is also in " + ", ".join(w for w, _ in hits) + "; it loads twice"))
+                                "an identical copy is also in " + ", ".join(w for w, _, _ in hits) + "; it loads twice"))
+            continue
+        decided = [clash_decision(name, w, base, project, refs) for w, base in differ]
+        open_ = [w for (w, _), d in zip(differ, decided) if d is None]
+        if open_:
+            checks.append(check("Skills", f"{name}: name clash", "warn",
+                                "another skill named " + name + " is active in " + ", ".join(open_)
+                                + "; both load by description, so the agent follows either one",
+                                f"keep the existing {name} and fork ours next to it as hx-{name} (in a project: in the setup PR/MR), "
+                                "or remove one of them"))
+            continue
+        status = "pending" if any(d[0] == "pending" for d in decided) else "info"
+        checks.append(check("Skills", f"{name}: name clash settled", status, "; ".join(d[1] for d in decided),
+                            "merge it (the user's call), then git pull" if status == "pending" else
+                            "git pull" if any(d[0] == "info" for d in decided) else ""))
     return checks, cards
 
 
@@ -534,63 +565,233 @@ def integration_check(p, registry, probe=False, deep=False):
                  "push that branch, or correct integrationBranch in .agents/environments.json with the user's answer")
 
 
-def collect_project(project, probe=False, deep=False):
-    """deep (the project-init doctor only) asks origin itself for the integration branch instead of the fetched refs."""
+AGENTS_TITLE = "Project AGENTS.md"
+AGENTS_WHAT = "project facts from project-init; the plugin's global rules load separately"
+REGISTRY_REL = ".agents/environments.json"
+
+
+def has_block(text):
+    return text.count("project-init:start") == text.count("project-init:end") == 1
+
+
+def git_text(p, ref, rel):
+    """The file at <ref>:<rel>, or None when that ref does not have it."""
+    code, so, _ = run(["git", "-C", str(p), "show", f"{ref}:{rel}"])
+    return so if code == 0 else None
+
+
+def open_prs(p, probe):
+    """[(number, url, head branch, changed paths)] of the repo's open PRs from gh, or None when gh cannot tell
+    (no probe, no gh, not logged in, not a GitHub repo): nothing is then called pending."""
+    if not (probe and shutil.which("gh")):
+        return None
+    code, so, _ = run(["gh", "pr", "list", "--state", "open", "--limit", "50", "--json", "number,url,headRefName,files"],
+                      cwd=str(p), timeout=30)
+    try:
+        data = json.loads(so) if code == 0 else None
+    except ValueError:
+        data = None
+    if not isinstance(data, list):
+        return None
+    return [(pr.get("number"), _str(pr.get("url")), _str(pr.get("headRefName")),
+             {_str(x.get("path")) for x in _dicts(pr.get("files"))}) for pr in _dicts(data)]
+
+
+class Refs:
+    """What origin already holds for one project, asked lazily and once per run. merged(): the refs a merge lands on
+    (origin/<int>, the remote default, origin/main, origin/master), where a file only means this checkout is behind.
+    prs(): the open PRs/MRs from gh, the only source that makes a row pending. Without gh, another fetched branch that
+    has the file is only a hint on a row that stays a gap, since nothing says that branch has an open PR/MR."""
+
+    def __init__(self, p, probe, registry=None):
+        self.p, self.probe = Path(p), probe
+        self.adopt(registry)
+        self._prs, self._asked = None, False
+
+    def adopt(self, registry):
+        """The integration branch from a registry; a guess only while none is recorded."""
+        self.int_ = integration_branch(registry)[0]
+        self.guessed = not self.int_
+        if self.guessed:
+            self.int_ = integration_guess(self.p)
+        self._merged = None
+
+    def remote_refs(self):
+        return [r for r in run(["git", "-C", str(self.p), "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)",
+                                "refs/remotes/origin"])[1].split() if r not in ("origin", "origin/HEAD")]
+
+    def merged(self):
+        if self._merged is None:
+            names = [self.int_] if self.int_ else []
+            code, head, _ = run(["git", "-C", str(self.p), "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])
+            if code == 0 and head.strip():
+                names.append(head.strip().split("/", 1)[-1])
+            elif self.probe:   # no origin/HEAD in this clone: ask origin for its default branch
+                code, so, _ = run(["git", "-C", str(self.p), "ls-remote", "--symref", "origin", "HEAD"], timeout=20, env=git_batch_env())
+                m = re.search(r"^ref: refs/heads/(\S+)\s+HEAD", so, re.M) if code == 0 else None
+                if m:
+                    names.append(m.group(1))
+            have = set(self.remote_refs())
+            self._merged = [f"origin/{b}" for b in dict.fromkeys(names + ["main", "master"]) if f"origin/{b}" in have]
+        return self._merged
+
+    def prs(self):
+        if not self._asked:
+            self._prs, self._asked = open_prs(self.p, self.probe), True
+        return self._prs
+
+    def pr_label(self, num, url):
+        return f"PR #{num}" + (f" ({url})" if url else "")
+
+    def find(self, rel, want=lambda text: True):
+        """Where a file missing from the working tree exists: ("origin", <merged ref>, text), ("pending", "PR #n", text
+        or None), ("branch", <other ref>, text) without gh, or None. want() tells a usable copy from a stub."""
+        for ref in self.merged():
+            text = git_text(self.p, ref, rel)
+            if text is not None and want(text):
+                return "origin", ref, text
+        prs = self.prs()
+        if prs is not None:
+            for num, url, head, files in prs:
+                if rel in files:
+                    text = git_text(self.p, f"origin/{head}", rel) if head else None
+                    if text is None or want(text):
+                        return "pending", self.pr_label(num, url), text
+            return None
+        skip = set(self.merged())
+        for ref in self.remote_refs()[:200]:
+            if ref in skip:
+                continue
+            text = git_text(self.p, ref, rel)
+            if text is not None and want(text):
+                return "branch", ref, text
+        return None
+
+    def gone(self, rel):
+        """Where a tracked file still in the working tree was deleted: ("origin", <merged ref>) when a merged ref's history
+        has it and its tip does not, ("pending", "PR #n") when an open PR/MR deletes it, else None."""
+        for ref in self.merged():
+            touched = run(["git", "-C", str(self.p), "log", "-1", "--format=%H", ref, "--", rel])[1].strip()
+            if touched and git_text(self.p, ref, rel) is None:
+                return "origin", ref
+        for num, url, head, files in self.prs() or []:
+            if rel in files and head and git_text(self.p, f"origin/{head}", rel) is None:
+                return "pending", self.pr_label(num, url)
+        return None
+
+
+def elsewhere_row(sec, title, found, status, detail, fix):
+    """The row for a file the working tree lacks, given where Refs.find saw it; status, detail, fix: the row without it."""
+    kind, where = found[0], found[1]
+    if kind == "origin":
+        return check(sec, title, "info", f"on {where}, pull to get it: this checkout is behind", "git pull")
+    if kind == "pending":
+        return check(sec, title, "pending", f"in {where}: merge it to finish", "merge it (the user's call), then git pull")
+    return check(sec, title, status, f"{detail}; branch {where} has it: if that branch has an open PR/MR, merge it",
+                 f"merge {where.split('/', 1)[-1]} if it is the setup PR/MR, else {fix}")
+
+
+def registry_rows(sec, registry, where=""):
+    """The Environment registry row for a registry read from the working tree (where="") or from origin (where=<ref>)."""
+    on = f"on {where}, pull to get it: " if where else ""
+    fix_at = f"fix it on {where}, " if where else ""
+    if registry is None:
+        return check(sec, "Environment registry", "fail", f"{on}.agents/environments.json is not valid JSON",
+                     f"{fix_at}fix the JSON, then validate per the environments skill")
+    names = list(env_map(registry))
+    if names:
+        return check(sec, "Environment registry", "info" if where else "ok", f"{on}environments: " + ", ".join(names),
+                     "git pull" if where else "")
+    if isinstance(registry, dict) and registry.get("environments") == {}:   # valid: only project facts such as integrationBranch so far
+        return check(sec, "Environment registry", "missing", f"{on}no environment recorded yet; deploy/SSH skills will ask every time",
+                     "run the environments skill (create section), which asks which environments exist")
+    return check(sec, "Environment registry", "fail", f"{on}no environment object found under `environments`; the registry shape is invalid",
+                 f"{fix_at}fix it per the environments skill's schema (templates/environments.schema.json)")
+
+
+def collect_project(project, probe=False, deep=False, refs=None):
+    """deep (the project-init doctor only) asks origin itself for the integration branch instead of the fetched refs.
+    A project file missing from the working tree but already merged on origin is info (pull to get it), and one in an
+    open PR/MR that gh confirms is pending (merge it), not missing: project-init's own PR is the usual reason."""
     sec = "Project"
     out, registry = [], None
     if not project:
         return [check(sec, "Project", "skip", "no git project given (--project)")], None
     p = Path(project)
     out.append(check(sec, "Repository", "info", short(p)))
-    agents = p / "AGENTS.md"
-    if not agents.exists():
-        out.append(check(sec, "AGENTS.md", "missing", "no project AGENTS.md", "run the project-init skill"))
-        text = ""
+    reg = p / ".agents" / "environments.json"
+    local_reg = load_json(reg) if reg.exists() else None
+    refs = refs or Refs(p, probe, local_reg)
+
+    # The registry first: a merged copy on origin also names the real integration branch for the other rows.
+    gi = (p / ".gitignore").read_text() if (p / ".gitignore").exists() else ""
+    pending_reg, reg_row = None, None
+    if reg.exists():
+        registry = local_reg
+        reg_row = registry_rows(sec, registry)
     else:
-        text = agents.read_text()
-        starts, ends = text.count("project-init:start"), text.count("project-init:end")
-        if starts == ends == 1:
-            out.append(check(sec, "project-init block", "ok", "one start and one end marker"))
-        elif starts == ends == 0:
-            out.append(check(sec, "project-init block", "missing", "AGENTS.md has no project-init block", "run the project-init skill"))
+        found = refs.find(REGISTRY_REL)
+        if found and found[0] == "origin":
+            try:
+                registry = json.loads(found[2])
+            except ValueError:
+                registry = None
+            reg_row = registry_rows(sec, registry, found[1])
+            if registry is not None:
+                if refs.guessed:
+                    refs.adopt(registry)
+                gi += "\n" + (git_text(p, found[1], ".gitignore") or "")
         else:
-            out.append(check(sec, "project-init block", "fail", f"{starts} start / {ends} end markers", "fix the markers by hand, then re-run project-init"))
+            missing = ("missing", "no .agents/environments.json; deploy/SSH skills will ask every time", "run the environments skill (create section)")
+            if found:
+                pending_reg = found if found[0] == "pending" else None
+                reg_row = elsewhere_row(sec, "Environment registry", found, *missing)
+            else:
+                reg_row = check(sec, "Environment registry", *missing)
+
+    agents = p / "AGENTS.md"
+    text = agents.read_text() if agents.exists() else ""
+    starts, ends = text.count("project-init:start"), text.count("project-init:end")
+    if starts == ends == 1:
+        out.append(check(sec, "project-init block", "ok", "one start and one end marker"))
+    elif starts or ends:
+        out.append(check(sec, "project-init block", "fail", f"{starts} start / {ends} end markers", "fix the markers by hand, then re-run project-init"))
+    else:
+        title = "project-init block" if agents.exists() else AGENTS_TITLE
+        missing = ("missing", "AGENTS.md has no project-init block" if agents.exists() else f"none in this repo yet ({AGENTS_WHAT})",
+                   "run the project-init skill")
+        found = refs.find("AGENTS.md", has_block)
+        out.append(elsewhere_row(sec, title, found, *missing) if found else check(sec, title, *missing))
     claude_md = p / "CLAUDE.md"
     if claude_md.exists() and "@AGENTS.md" in claude_md.read_text():
         out.append(check(sec, "CLAUDE.md imports AGENTS.md", "ok", "CLAUDE.md contains @AGENTS.md"))
     elif agents.exists():
         out.append(check(sec, "CLAUDE.md imports AGENTS.md", "warn", "Claude Code will not read AGENTS.md", "echo '@AGENTS.md' > CLAUDE.md"))
 
-    reg = p / ".agents" / "environments.json"
-    if reg.exists():
-        registry = load_json(reg)
-        if registry is None:
-            out.append(check(sec, "Environment registry", "fail", ".agents/environments.json is not valid JSON", "fix the JSON, then validate per the environments skill"))
-        else:
-            names = list(env_map(registry))
-            if names:
-                out.append(check(sec, "Environment registry", "ok", "environments: " + ", ".join(names)))
-            elif isinstance(registry, dict) and registry.get("environments") == {}:   # valid: only project facts such as integrationBranch so far
-                out.append(check(sec, "Environment registry", "missing", "no environment recorded yet; deploy/SSH skills will ask every time",
-                                 "run the environments skill (create section), which asks which environments exist"))
-            else:
-                out.append(check(sec, "Environment registry", "fail", "no environment object found under `environments`; the registry shape is invalid",
-                                 "fix it per the environments skill's schema (templates/environments.schema.json)"))
-            out += env_checks(registry, p)
-        gi = (p / ".gitignore").read_text() if (p / ".gitignore").exists() else ""
-        if "secrets.env" not in gi:
-            out.append(check(sec, "Secrets gitignored", "fail", ".agents/secrets.env is not in .gitignore", "echo '.agents/secrets.env' >> .gitignore"))
-    else:
-        out.append(check(sec, "Environment registry", "missing", "no .agents/environments.json; deploy/SSH skills will ask every time", "run the environments skill (create section)"))
+    out.append(reg_row)
+    if registry is not None:
+        out += env_checks(registry, p)
+    if (reg.exists() or registry is not None) and "secrets.env" not in gi:
+        out.append(check(sec, "Secrets gitignored", "fail", ".agents/secrets.env is not in .gitignore", "echo '.agents/secrets.env' >> .gitignore"))
 
     todos = []
     for f in (agents, reg):
-        if f.exists():
-            todos += [f"{f.name}:{i}" for i, ln in enumerate(f.read_text().splitlines(), 1) if "TODO(" in ln]
+        if f.exists() and "TODO(" in f.read_text():
+            todos.append(f.name)
     if todos:
         out.append(check(sec, "Open TODO(owner)", "warn", ", ".join(todos), "answer them and re-run project-init"))
 
-    out.append(integration_check(p, registry, probe, deep))
+    ib = integration_check(p, registry, probe, deep)
+    if pending_reg and ib["status"] == "missing" and not integration_branch(registry)[1]:
+        text = pending_reg[2]
+        try:
+            named = integration_branch(json.loads(text))[0] if text else None
+        except ValueError:
+            named = None
+        ib = check(sec, "Integration branch", "pending", (f"{named}, recorded" if named else "recorded")
+                   + f" in {pending_reg[1]}: merge it to finish", "merge it (the user's call), then git pull")
+        ib["branch"] = named   # the banner shows it
+    out.append(ib)
 
     _, url, _ = run(["git", "-C", str(p), "remote", "get-url", "origin"])
     if strip_userinfo(url.strip())[1]:
@@ -881,7 +1082,8 @@ MARK = {
     "info": '<circle cx="8" cy="8" r="1.6" fill="currentColor"/>',
 }
 MARK["warn"] = MARK["fail"]
-MARK_WORD = {"ok": "done", "missing": "missing", "fail": "wrong", "warn": "attention", "info": "not checked"}
+MARK["pending"] = '<path d="M8 4.8V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
+MARK_WORD = {"ok": "done", "missing": "missing", "fail": "wrong", "warn": "attention", "info": "not checked", "pending": "waiting on merge"}
 
 
 def mark(status, size=16):
@@ -950,11 +1152,14 @@ def absent_card(slot):
 IB_TEXT = {"ok": "Recorded", "warn": "Check", "missing": "Not recorded", "fail": "Unreachable"}
 
 
-def integration_banner(project, registry):
-    """The branch every PR goes into, as recorded (worktree-flow section 0), legacy, or not recorded yet."""
-    c = integration_check(project, registry)
+def integration_banner(project, registry, row=None):
+    """The branch every PR goes into, as recorded (worktree-flow section 0), legacy, or not recorded yet.
+    row: the page's own Integration branch row, so a branch recorded only in an open PR/MR shows as pending here too."""
+    c = row if row and row["status"] == "pending" else integration_check(project, registry)
     cand, how = integration_branch(registry)
-    if cand and how == "recorded" and c["status"] != "ok":
+    if c["status"] == "pending":
+        word, st, cand = "Pending merge", "pending", c.get("branch")
+    elif cand and how == "recorded" and c["status"] != "ok":
         word, st = "Recorded, not on origin", "warn"
     elif how == "legacy":
         word, st = "Legacy: not recorded", "missing"
@@ -962,17 +1167,17 @@ def integration_banner(project, registry):
         word, st = "Invalid", "fail"
     else:
         word, st = IB_TEXT.get(c["status"], c["status"]), c["status"]
-    guess = None if cand or how == "invalid" else integration_guess(project)
+    guess = None if cand or how == "invalid" or st == "pending" else integration_guess(project)
     # Nothing recorded: the box shows the drafted answer to the question, not the pill's words again.
     shown = (f'<code class="ibb">{esc(cand)}</code>' if cand else
              f'<span class="ibb none" title="likely answer, not recorded">{esc(guess)}?</span>' if guess else
              '<span class="ibb none" title="asked on the next run">?</span>')
     return (f'<div class="ib" data-s="{st}">{mark(st, 22)}<div class="ibm"><div class="ibl">Integration branch '
-            f'<span class="pill {"ok" if st == "ok" else "warn" if st == "warn" else "fail"}">{esc(word)}</span></div>'
+            f'<span class="pill {st if st in ("ok", "warn", "pending") else "fail"}">{esc(word)}</span></div>'
             f'<div class="ibv">{shown}<span class="ibd">{esc(c["detail"] if cand else c["detail"].replace("not recorded; ", "", 1))}</span></div>{fix_html(c["fix"]) if st != "ok" else ""}</div></div>')
 
 
-def env_panel(project, registry):
+def env_panel(project, registry, ib_row=None):
     if not project:
         return ""
     known = secret_names(project)
@@ -1046,7 +1251,7 @@ def env_panel(project, registry):
                     '<code>run the environments skill (create section) -> .agents/environments.json</code></div>')
     return (f'<section class="card" id="envs"><div class="hd">{icon("Project")}<h2>Project & environments</h2>'
             f'<span class="desc">From the project-init block and .agents/environments.json; secret values are never shown</span></div>'
-            f'{integration_banner(project, registry)}<div class="facts">{block}</div>{envhtml}</section>')
+            f'{integration_banner(project, registry, ib_row)}<div class="facts">{block}</div>{envhtml}</section>')
 
 
 # ---------------------------------------------------------------- render
@@ -1090,8 +1295,9 @@ def tier_of(c):
 
 
 def readiness(checks):
-    """Percent ready; every skill row together weighs 3 checks so 20 skills do not drown the rest."""
-    scored = [c for c in checks if c["status"] in ("ok", "warn", "fail", "missing")]
+    """Percent ready; every skill row together weighs 3 checks so 20 skills do not drown the rest. A pending row (in an
+    open PR/MR) counts as not done until it is merged."""
+    scored = [c for c in checks if c["status"] in ("ok", "warn", "fail", "missing", "pending")]
     n_skill = sum(1 for c in scored if c["group"] == "skill") or 1
     weight = lambda c: 3 / n_skill if c["group"] == "skill" else 1
     value = {"ok": 1, "warn": 0.5}
@@ -1136,18 +1342,22 @@ def tier_block(tier, checks, by_sec, actions):
     gaps = sum(1 for c in actions if c["tier"] == tier)
     rows = []
     for sec in ORDER:
-        items = [c for c in by_sec.get(sec, []) if c["tier"] == tier and c["status"] in ("ok", "warn", "fail", "missing")]
+        items = [c for c in by_sec.get(sec, []) if c["tier"] == tier and c["status"] in ("ok", "warn", "fail", "missing", "pending")]
         if not items:
             continue
         ok = sum(1 for c in items if c["status"] == "ok")
         bad = sum(1 for c in items if c["status"] in ("fail", "missing"))
-        warn = len(items) - ok - bad
-        st = "ok" if ok == len(items) else "fail" if bad else "warn"
+        pend = sum(1 for c in items if c["status"] == "pending")
+        warn = len(items) - ok - bad - pend
+        st = "ok" if ok == len(items) else "fail" if bad else "warn" if warn else "pending"
         seg = lambda n, cls: f'<i class="{cls}" style="flex:{n}"></i>' if n else ""
         rows.append(f'<a class="trow" href="#{slug(sec)}"><span class="dot {st}"></span><span class="tn">{esc(sec)}</span>'
-                    f'<span class="tbar">{seg(ok, "ok")}{seg(warn, "warn")}{seg(bad, "bad")}</span>'
+                    f'<span class="tbar">{seg(ok, "ok")}{seg(pend, "pending")}{seg(warn, "warn")}{seg(bad, "bad")}</span>'
                     f'<span class="tc">{ok}/{len(items)}</span></a>')
+    pending = sum(1 for c in mine if c["status"] == "pending")
+    # Pending rows are not gaps to fix, but the tier is not done until they are merged, so "All set" waits for them.
     status = (f'<span class="pill {"fail" if tier == "core" else "warn"}">{gaps} to fix</span>' if gaps else
+              f'<span class="pill pending">{pending} waiting on merge</span>' if pending else
               '<span class="pill ok">All set</span>' if tier == "core" else '<span class="pill info">As needed</span>')
     return (f'<div class="tierblock {tier}" data-t="{tier}"><div class="th">{ring(readiness(mine), "", 72)}<div>'
             f'<div class="tt2">{tier_chip(tier)}{status}</div><b>{title}</b><p>{text}</p></div></div>{"".join(rows)}</div>')
@@ -1176,17 +1386,17 @@ def pillar_status(checks):
     return status, related, alerts
 
 
-SETUP_PROMPT = """Check my agent harness and finish setting it up, one step at a time, with the harness-map skill's setup flow (section 3 of its SKILL.md).
-If the harness-map skill is not available, tell me to install the agent-skills plugin first (/plugin marketplace add quocld/hephaestus-agent-skills, then /plugin install agent-skills@quocld) and stop.
+SETUP_PROMPT = """Check my agent harness and finish setting it up in this run, with the harness-map skill's setup flow (section 3 of its SKILL.md). This is a setup request: do not stop after the report.
+If the harness-map skill is not installed, follow https://hephaestus-skills-docs.vercel.app/install.md, which clones, checks and installs it, and continue this setup in the same run.
 
 1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
-2. Go through the gaps in order: this machine first (install, hooks, secrets, tools and logins), then this project (project-init, then environments), core before optional.
-3. Check everything you can yourself. When a step needs something only I know or a decision from me, ask me once for that step, with your best guess shown, then apply it. project-init and environments ask their own questions.
-   Until .agents/environments.json records them, project-init must ask me which branch PRs go into (never assume dev or main) and environments must ask which environments exist (local or dev, staging, prod, any other, each with its URL); do not skip those questions or ask them twice.
-4. After each step, regenerate the page and open it again so I can see the progress.
-5. Repeat until no core gap is left, then show me the optional gaps and ask which ones I want.
+2. Draft every decision the whole setup needs, from the machine and the repo: the plugin install, each name clash (keep mine, fork yours as hx-<name>, or switch), deleting a legacy hook entry, which branch PRs go into (never assume dev or main), which environments exist (local or dev, staging, prod, any other, each with its URL, drafted from env docs such as .claude/environments*.md, .env*.example, .vercel, supabase, CI and deploy scripts), the tracker, test account roles and logins, whether to run the version and verify probe on prod once (default no), and which optional items I want.
+3. Ask me all of it in one message, your drafted answers shown, then do everything without asking again; project-init and environments take those answers instead of asking their own.
+4. Run project-init and environments for this repo in the same run; if this is not a git repo, say so and skip only those two.
+5. After each step, regenerate the page and open it again so I can see the progress.
+6. You are done only when a final run shows core 100%, except what only I can do (moving or rotating a secret, a login, filling .agents/secrets.env, merging the setup PR) and changes I declined in the batch. End with those as "Waiting on you" and "Declined", each with its exact command, and show that every core gap left on the page is in one of them.
 
-Ask before installing a plugin or editing ~/.claude/settings.json. Never read, print, move or delete a secret value or its backups; tell me what to do and I do it. Give me the `! <command>` for any login, and carry on with the next step while I do it."""
+Never read, print, move or delete a secret value or its backups, and never ask me for one in chat; tell me what to do and I do it. Prod settings looser than the defaults need my explicit words. Give me the `! <command>` for any login."""
 
 
 SETUP_PILL = '<span class="pill fail">Setup</span>'
@@ -1245,7 +1455,7 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
     h.append('<a href="#catalog">Skill catalog</a></nav><div>')
 
 
-    h.append(env_panel(project, registry))
+    h.append(env_panel(project, registry, next((c for c in checks if c["section"] == "Project" and c["title"] == "Integration branch"), None)))
     h.append(f'<section class="card" id="todo"><div class="hd">{icon("Tools")}<h2>Fix first</h2><span class="desc">Core gaps first, then optional ones</span></div>')
     if actions:
         for tier in ("core", "optional"):
@@ -1267,7 +1477,7 @@ def render(checks, cards, plugins, project, probe, registry=None, opt=0):
             continue
         rows = sorted(by_sec[sec], key=lambda c: (c["tier"] != "core", RANK[c["status"]]))
         h.append(f'<section class="card" id="{slug(sec)}"><div class="hd">{icon(sec)}<h2>{esc(sec)}</h2><span class="desc">{esc(DESCS[sec])}</span><div class="bar">')
-        for s in ("fail", "missing", "warn", "ok"):
+        for s in ("fail", "missing", "warn", "pending", "ok"):
             n = sum(1 for c in rows if c["status"] == s)
             if n:
                 h.append(f'<span class="pill {s}">{n} {LABEL[s]}</span>')
@@ -1604,10 +1814,11 @@ def main():
     probe = not a.no_probe
 
     checks = collect_global()
-    sk, cards = collect_skills(project)
+    refs = Refs(project, probe, load_json(project / ".agents" / "environments.json")) if project else None
+    sk, cards = collect_skills(project, refs)
     checks += sk
     checks += collect_hooks(probe, project)
-    pc, registry = collect_project(project, probe)
+    pc, registry = collect_project(project, probe, refs=refs)
     tc, _ = collect_tools(probe, registry, project)
     checks += tc
     plc, plugins = collect_plugins(project, registry, probe)
@@ -1625,9 +1836,15 @@ def main():
         print(setup_prompt())
         return
     print(f"Harness map: {out}  (tabs: Dashboard, Docs)")
-    print(f"Core ready {score}%  optional ready {opt}%  ok {count['ok']}  attention {count['warn']}  missing/failing {count['missing'] + count['fail']}")
+    print(f"Core ready {score}%  optional ready {opt}%  ok {count['ok']}  attention {count['warn']}  missing/failing {count['missing'] + count['fail']}"
+          + (f"  pending {count['pending']}" if count["pending"] else ""))
     for i, c in enumerate(actions, 1):
         print(f"{i:>2}. [{c['tier']}] [{LABEL[c['status']]}] {c['section']} / {c['title']}: {c['detail']}" + (f"\n    fix: {c['fix']}" if c["fix"] else ""))
+    pending = [c for c in checks if c["status"] == "pending"]
+    if pending:
+        print("Waiting on a merge (pending, not a gap to fix):")
+        for c in pending:
+            print(f"  - [{c['tier']}] {c['section']} / {c['title']}: {c['detail']}")
     unmapped, stale = unplaced_skills()
     if unmapped:
         print("Not placed in assets/lifecycle.json: " + ", ".join(unmapped))
