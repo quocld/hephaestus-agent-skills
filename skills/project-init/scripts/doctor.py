@@ -76,10 +76,10 @@ PROJECT_ROWS_DROPPED = {"Repository", "Project checks (verify-loop)", "Playwrigh
 
 
 def machine_rows(project, registry, probe, manager):
-    hm.PLUGIN_ID, hm.PLUGIN_DIR = hm.agent_skills_plugin(project)
+    hm.set_plugin(project)
     # The platform's own CLI login only: a GitLab project needs glab, not gh (glab rows appear only for GitLab).
     gitlab = "gitlab" in run(["git", "-C", str(project), "remote", "get-url", "origin"])[1].lower()
-    out = [from_hm(c) for c in hm.collect_global()]
+    out = [from_hm(c) for c in hm.collect_global(project)]
     out += [from_hm(c) for c in hm.collect_hooks(probe, project) if c["status"] != "info"]
     reg_text = json.dumps(registry or {}).lower()
     for c in hm.collect_tools(probe, registry, project)[0]:

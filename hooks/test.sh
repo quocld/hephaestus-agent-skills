@@ -540,8 +540,9 @@ if project:
 enabled = {}
 for s in sources:
     enabled.update(s.get("enabledPlugins") or {})
-if any(k.startswith("agent-skills@") and v for k, v in enabled.items()):
-    print("ok   agent-skills plugin enabled, its hooks.json registers the gates")
+# hephaestus@quocld, or agent-skills@quocld, its id before the rename.
+if any(k.split("@")[0] in ("hephaestus", "agent-skills") and v for k, v in enabled.items()):
+    print("ok   hephaestus plugin enabled, its hooks.json registers the gates")
     sys.exit(0)
 
 entries = []
@@ -558,7 +559,7 @@ for script, tool in want:
     print(("ok   " if hit else "FAIL ") + f"legacy settings: PreToolUse matcher with {tool} runs agent-skills-hooks/{script}")
     bad |= not hit
 if bad:
-    print("     install the agent-skills plugin (README) instead of registering the hooks by hand")
+    print("     install the hephaestus plugin (README) instead of registering the hooks by hand")
 sys.exit(bad)
 PY
 fi

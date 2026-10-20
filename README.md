@@ -41,7 +41,7 @@ The agent reads the [install guide](https://hephaestus-skills-docs.vercel.app/in
 
 ```text
 /plugin marketplace add quocld/hephaestus-agent-skills
-/plugin install agent-skills@quocld
+/plugin install hephaestus@quocld
 ```
 
 Restart the session, then ask Claude to **"finish my harness setup"**: the `harness-map` skill checks tools, logins and project setup, asks for what is missing in one message, and finishes the rest.
@@ -51,15 +51,16 @@ Restart the session, then ask Claude to **"finish my harness setup"**: the `harn
 ### Update
 
 ```sh
-claude plugin marketplace update quocld && claude plugin update agent-skills@quocld
+claude plugin marketplace update quocld && claude plugin update hephaestus@quocld
 ```
 
+Installed before the rename as `agent-skills@quocld`: `/plugin uninstall agent-skills@quocld`, then `/plugin install hephaestus@quocld`, and rename that key under `enabledPlugins` in any project's `.claude/settings.json`; `harness-map` flags the old id.
 Try a local checkout for one session: `claude --plugin-dir <path-to-checkout>`.
 Coming from the old `install.sh` symlinks: run `python3 migrate-to-plugin.py` (`--dry-run` to preview), then `hooks/test.sh`.
 
 ## Skills
 
-Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also picks them up on its own from their descriptions.
+Skills are namespaced, for example `/hephaestus:worktree-flow`; Claude also picks them up on its own from their descriptions.
 
 | Skill | Use it for | Needs |
 | --- | --- | --- |

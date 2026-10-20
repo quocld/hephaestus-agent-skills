@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Move a machine from the old install.sh links to the agent-skills plugin.
+"""Move a machine from the old install.sh links to the hephaestus plugin.
 
 The plugin now delivers the skills and the global rules, so the links install.sh made would load them twice.
-This removes only symlinks whose target is a file of an agent-skills checkout (any clone or worktree, found by
+This removes only symlinks whose target is a file of a checkout of this repo (any clone or worktree, found by
 what the target folder holds, never by where this script runs); real files are never touched.
 ~/.claude/agent-skills-hooks is never removed here: any user or project settings file may still call it, and a
 hook command whose script is gone exits 2, which Claude Code treats as "block this tool call".
@@ -20,9 +20,10 @@ DRY = "--dry-run" in sys.argv
 
 
 def is_agent_skills_dir(d):
-    """An agent-skills checkout or plugin folder: its manifest says so, or it has the repo's shape."""
+    """A checkout or plugin folder of this repo: its manifest names the plugin (hephaestus, or agent-skills before the
+    rename), or it has the repo's shape."""
     try:
-        if json.loads((d / ".claude-plugin" / "plugin.json").read_text()).get("name") == "agent-skills":
+        if json.loads((d / ".claude-plugin" / "plugin.json").read_text()).get("name") in ("hephaestus", "agent-skills"):
             return True
     except (OSError, ValueError, AttributeError):
         pass
@@ -30,7 +31,7 @@ def is_agent_skills_dir(d):
 
 
 def ours(link, rel):
-    """True when link is a symlink to <an agent-skills checkout>/<rel>, comparing path parts, not text."""
+    """True when link is a symlink to <a checkout of this repo>/<rel>, comparing path parts, not text."""
     if not link.is_symlink():
         return False
     target = Path(os.path.realpath(link))
@@ -63,7 +64,10 @@ def main():
     print()
     print("Install the plugin in Claude Code, if you have not yet:")
     print("  /plugin marketplace add quocld/hephaestus-agent-skills")
-    print("  /plugin install agent-skills@quocld")
+    print("  /plugin install hephaestus@quocld")
+    print("Installed under its old name agent-skills@quocld? Replace it (a project that enables it in .claude/settings.json")
+    print("renames that enabledPlugins key to hephaestus@quocld):")
+    print("  /plugin uninstall agent-skills@quocld")
 
 
 if __name__ == "__main__":

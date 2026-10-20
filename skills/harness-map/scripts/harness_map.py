@@ -18,7 +18,7 @@ from pathlib import Path
 
 from harness_docs import LIFE, docs_body, live_hooks, unplaced_skills
 import page as page_mod
-from page import (release_version, skill_sources, links_into_agent_skills, _dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
+from page import (release_version, skill_sources, links_into_agent_skills, is_our_plugin, OUR_PLUGIN, PLUGIN_NAME, MACHINE, _dict, _dicts, _str, load_obj, plugin_entry, strip_userinfo, ULTIMATE, ult, CLAUDE, HOME, LABEL, MAIN, PILLARS, RANK, REPO, SKILL, SKILLS_DIR, WHEEL_WORD, esc, frontmatter, icon,
                   load_json, pill, pillar_cards, render_page, run, short, slug, wheel_svg)
 
 SKILL_TIER = {n: s["tier"] for n, s in (load_json(SKILL / "assets" / "lifecycle.json") or {}).get("skills", {}).items()}
@@ -71,63 +71,178 @@ def same_repo(a, b):
 
 # ---------------------------------------------------------------- collectors
 
-INSTALL_FIX = "/plugin marketplace add quocld/hephaestus-agent-skills, then /plugin install agent-skills@quocld"
-MIGRATE_FIX = "python3 migrate-to-plugin.py (from the agent-skills plugin folder or any clone)"
+INSTALL_FIX = f"/plugin marketplace add quocld/hephaestus-agent-skills, then /plugin install {OUR_PLUGIN}"
+MIGRATE_FIX = "python3 migrate-to-plugin.py (from the hephaestus plugin folder or any clone)"
 LEGACY = [("~/.claude/CLAUDE.md -> AGENTS.md", CLAUDE / "CLAUDE.md", "AGENTS.md"),
           ("~/OPINIONS.md -> OPINIONS.md", HOME / "OPINIONS.md", "OPINIONS.md"),
           ("~/.claude/agent-skills-hooks -> hooks/", CLAUDE / "agent-skills-hooks", "hooks")]
 
 
-def agent_skills_plugin(project=None):
-    """(plugin id, install folder) when the agent-skills plugin is enabled for this project, else (None, None).
-    Enablement merges user, project and project-local settings (later wins); the install record follows its scope."""
+def enabled_plugins(project=None):
+    """{plugin id: value} from user, project and project-local settings merged (later wins), as Claude Code reads them."""
     sources = [CLAUDE / "settings.json"]
     if project:
         sources += [Path(project) / ".claude" / "settings.json", Path(project) / ".claude" / "settings.local.json"]
     enabled = {}
     for f in sources:
         enabled.update(_dict(load_obj(f).get("enabledPlugins")))
+    return enabled
+
+
+def plugin_ids(project=None):
+    """{plugin id: (enabled, installed)} for this plugin under its current or legacy name (agent-skills@quocld before the
+    rename): every id enabled for this project (merged enabledPlugins) or installed for the user or for this project.
+    Only an id both enabled and installed runs; an enabled id with no install record is a stale key Claude Code skips."""
     installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
-    for pid, on in enabled.items():
-        if on is True and pid.split("@")[0] == "agent-skills":
-            records = _dicts(installed.get(pid)) or [plugin_entry(installed, pid)]
-            here = [r for r in records if r.get("scope") in ("project", "local") and _str(r.get("projectPath")) == str(project)]
-            rec = (here or [r for r in records if r.get("scope", "user") == "user"] or records)[-1]
-            path = Path(_str(rec.get("installPath"))) if rec.get("installPath") else None
-            return pid, (path if path and path.is_dir() else None)
+    enabled = enabled_plugins(project)
+    out = {}
+    for pid in sorted(set(enabled) | set(installed)):
+        if not is_our_plugin(pid):
+            continue
+        records = (_dicts(installed.get(pid)) or [plugin_entry(installed, pid)]) if pid in installed else []
+        inst = any(r.get("scope", "user") == "user" or (project and _str(r.get("projectPath")) == str(project)) for r in records)
+        on = enabled.get(pid) is True
+        if on or inst:
+            out[pid] = (on, inst)
+    return out
+
+
+def is_current(pid):
+    return pid.split("@")[0] == PLUGIN_NAME
+
+
+def our_plugin(project=None, ids=None):
+    """(plugin id, install folder) of this plugin enabled for this project, the current name before a legacy one, else
+    (None, None). A legacy id counts only with an install record; the current id is reported even without one (a missing
+    install to fix). The install record follows its scope."""
+    ids = plugin_ids(project) if ids is None else ids
+    installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
+    live = [p for p, (on, inst) in ids.items() if on and (inst or is_current(p))]
+    for pid in sorted(live, key=lambda p: (not is_current(p), not ids[p][1], p)):
+        if not ids[pid][1]:
+            return pid, None
+        records = _dicts(installed.get(pid)) or [plugin_entry(installed, pid)]
+        here = [r for r in records if r.get("scope") in ("project", "local") and _str(r.get("projectPath")) == str(project)]
+        rec = (here or [r for r in records if r.get("scope", "user") == "user"] or records)[-1]
+        path = Path(_str(rec.get("installPath"))) if rec.get("installPath") else None
+        return pid, (path if path and path.is_dir() else None)
     return None, None
 
 
-PLUGIN_ID, PLUGIN_DIR = None, None   # set in main() once the project is known
+PLUGIN_ID, PLUGIN_DIR, PLUGIN_IDS = None, None, {}   # set by set_plugin() once the project is known
+
+
+def set_plugin(project=None):
+    global PLUGIN_ID, PLUGIN_DIR, PLUGIN_IDS
+    PLUGIN_IDS = plugin_ids(project)
+    PLUGIN_ID, PLUGIN_DIR = our_plugin(project, PLUGIN_IDS)
+
+
+def running(pid):
+    """Enabled for this project and installed: Claude Code loads its skills and hooks."""
+    on, inst = PLUGIN_IDS.get(pid, (False, False))
+    return on and inst
+
+
+def key_files(pid, project):
+    """The settings files whose enabledPlugins holds this id, as (label, how to rename or drop it)."""
+    out = [] if pid not in _dict(load_obj(CLAUDE / "settings.json").get("enabledPlugins")) else [
+        ("~/.claude/settings.json", f"remove the enabledPlugins key {pid} from ~/.claude/settings.json")]
+    has = lambda name: bool(project) and pid in _dict(load_obj(Path(project) / ".claude" / name).get("enabledPlugins"))
+    if has("settings.json"):
+        out.append((".claude/settings.json",
+                    f"in the setup PR/MR, rename the enabledPlugins key {pid} to {OUR_PLUGIN} in .claude/settings.json"))
+    if has("settings.local.json"):
+        out.append((".claude/settings.local.json",
+                    f"rename the enabledPlugins key {pid} to {OUR_PLUGIN} in .claude/settings.local.json (gitignored, on this machine)"))
+    return out
+
+
+def legacy_fix(pid, project, cmd):
+    """The runnable part first (/plugin commands), then the project's enabledPlugins renames as hints after "; ", which
+    fix_html shows as separate lines so Copy never takes prose. User settings follow /plugin uninstall on their own."""
+    return "; ".join([cmd] + [how for label, how in key_files(pid, project) if label != "~/.claude/settings.json"])
+
+
+def stale_key_row(sec, pid, project, refs):
+    """An enabledPlugins key for a legacy id nothing is installed under (mid-setup: uninstalled, the rename still in the
+    setup PR/MR). Claude Code skips it; only the key rename is left, pending while an open PR/MR holds it."""
+    files = key_files(pid, project)
+    title = f"Stale enabledPlugins key {pid}"
+    detail = (f"{', '.join(label for label, _ in files)} still enables {pid}, the plugin's name before the rename, but "
+              f"nothing is installed under it, so Claude Code skips it; it runs no hook and loads no skill")
+    fix = "; ".join(how for _, how in files)
+    if [label for label, _ in files] == [".claude/settings.json"] and refs:
+        def renamed(text):
+            try:
+                keys = _dict(_dict(json.loads(text)).get("enabledPlugins"))
+            except ValueError:
+                return False
+            return pid not in keys and OUR_PLUGIN in keys
+        found = refs.find(".claude/settings.json", renamed)
+        if found:
+            return elsewhere_row(sec, title, found, "warn", detail, fix)
+    return check(sec, title, "warn", detail, fix)
 
 
 def is_ours(link, rel):
-    """A symlink to <rel> in any agent-skills checkout (the old install.sh links)."""
+    """A symlink to <rel> in any checkout of this repo (the old install.sh links)."""
     return links_into_agent_skills(link, rel)
 
 
-def collect_global():
+def collect_global(project=None, refs=None):
     sec = "Global instructions"
+    out = []
+    current = sorted(p for p in PLUGIN_IDS if is_current(p))
+    cur_run = next((c for c in current if running(c)), None)
+    cur_off = next((c for c in current if PLUGIN_IDS[c] == (False, True)), None)   # installed but disabled
+    for pid in sorted(p for p in PLUGIN_IDS if not is_current(p)):
+        on, inst = PLUGIN_IDS[pid]
+        if not inst:
+            out.append(stale_key_row(sec, pid, project, refs))
+            continue
+        before = f"{pid} is the plugin's name before the rename"
+        if cur_run and on:
+            out.append(check(sec, f"Plugin installed twice: {cur_run} and {pid}", "fail",
+                             f"{before}, enabled next to {cur_run}: every gate hook runs twice and every skill loads twice",
+                             legacy_fix(pid, project, f"/plugin uninstall {pid}")))
+        elif cur_run:
+            out.append(check(sec, f"Plugin installed twice: {cur_run} and {pid}", "warn",
+                             f"{before}, installed but disabled next to {cur_run}; enabling it would run every gate hook twice",
+                             legacy_fix(pid, project, f"/plugin uninstall {pid}")))
+        elif cur_off and on:
+            out.append(check(sec, f"Legacy plugin id {pid}", "warn",
+                             f"{before} and the only live copy: {cur_off} is installed but disabled; the marketplace now ships "
+                             f"it as {OUR_PLUGIN}, so {pid} gets no updates",
+                             legacy_fix(pid, project, f"/plugin enable {cur_off}, then /plugin uninstall {pid}")))
+        else:
+            out.append(check(sec, f"Legacy plugin id {pid}", "warn",
+                             f"{pid} ({'enabled' if on else 'installed but disabled'}) is this plugin under its name before the "
+                             f"rename to {PLUGIN_NAME}; it still works, but the marketplace now ships it as {OUR_PLUGIN}, so it gets no updates",
+                             legacy_fix(pid, project, f"/plugin uninstall {pid}, then /plugin install {OUR_PLUGIN}")))
     if PLUGIN_ID:
-        out = [check(sec, "agent-skills plugin", "ok" if PLUGIN_DIR else "fail",
-                     f"{PLUGIN_ID} enabled; skills, gate hooks and the global rules (AGENTS.md at session start) come from it"
-                     if PLUGIN_DIR else f"{PLUGIN_ID} is enabled but its install folder is missing",
-                     "" if PLUGIN_DIR else f"claude plugin install {PLUGIN_ID}")]
+        out.insert(0, check(sec, "Hephaestus plugin", "ok" if PLUGIN_DIR else "fail",
+                            f"{PLUGIN_ID} enabled; skills, gate hooks and the global rules (AGENTS.md at session start) come from it"
+                            if PLUGIN_DIR else f"{PLUGIN_ID} is enabled but its install folder is missing",
+                            "" if PLUGIN_DIR else f"claude plugin install {OUR_PLUGIN}"))
         legacy = [title for title, link, src in LEGACY if is_ours(link, src)]
         if legacy:
             out.append(check(sec, "Legacy install.sh links", "warn",
                              "still linked next to the plugin, so the rules or skills load twice: " + ", ".join(legacy), MIGRATE_FIX))
         return out
+    if cur_off:
+        return [check(sec, "Hephaestus plugin", "missing", f"{cur_off} is installed but disabled: no skills, gate hooks or "
+                      "global rules from this repo reach Claude Code", f"/plugin enable {cur_off}")] + out
     legacy_ok = all(is_ours(link, src) for _, link, src in LEGACY[:1])
-    return [check(sec, "agent-skills plugin", "warn" if legacy_ok else "missing",
+    return [check(sec, "Hephaestus plugin", "warn" if legacy_ok else "missing",
                   "not installed; running from the old install.sh links instead" if legacy_ok else
                   "not installed: no skills, gate hooks or global rules from this repo reach Claude Code",
-                  INSTALL_FIX)]
+                  INSTALL_FIX)] + out
 
 
 def skill_clashes(project):
     """{name: [(where, same_text, folder)]} for repo skills whose name another skill already uses: the user's own skills
-    (not links into agent-skills), the project's .claude/skills, or another enabled plugin. Two skills with one name
+    (not links into a checkout of this repo), the project's .claude/skills, or another enabled plugin. Two skills with one name
     both load by description, so the agent follows whichever it happens to pick."""
     places = [("~/.claude/skills", CLAUDE / "skills")]
     if project:
@@ -135,7 +250,7 @@ def skill_clashes(project):
     settings = load_obj(CLAUDE / "settings.json")
     installed = _dict(load_obj(CLAUDE / "plugins" / "installed_plugins.json").get("plugins"))
     for pid, on in _dict(settings.get("enabledPlugins")).items():
-        if (on is True or isinstance(on, list)) and pid.split("@")[0] != "agent-skills":
+        if (on is True or isinstance(on, list)) and not is_our_plugin(pid):
             root = Path(_str(plugin_entry(installed, pid).get("installPath")))
             places.append((f"plugin {pid.split('@')[0]}", root / "skills"))
     out = {}
@@ -205,7 +320,7 @@ def collect_skills(project=None, refs=None):
         if in_plugin and linked:
             lc = check("Skills", name, "warn", f"loaded twice: from {PLUGIN_ID} and from the legacy link {short(dst)}", MIGRATE_FIX)
         elif in_plugin:
-            lc = check("Skills", name, "ok", f"from {PLUGIN_ID} as /agent-skills:{name}")
+            lc = check("Skills", name, "ok", f"from {PLUGIN_ID} as /{PLUGIN_ID.split('@')[0]}:{name}")
         elif linked:
             lc = check("Skills", name, "ok", f"legacy link {short(dst)}")
         elif PLUGIN_DIR:
@@ -266,7 +381,7 @@ def collect_skills(project=None, refs=None):
     return checks, cards
 
 
-def collect_hooks(probe, project):
+def collect_hooks(probe, project=None):
     out = []
     settings = load_json(CLAUDE / "settings.json")
     if not isinstance(settings, dict):
@@ -277,13 +392,17 @@ def collect_hooks(probe, project):
     cmds = [_str(h.get("command")) for src in (settings, local)
             for e in _dicts(_dict(src.get("hooks")).get("PreToolUse")) for h in _dicts(e.get("hooks"))]
     plugin_hooks = (PLUGIN_DIR / "hooks" / "hooks.json").read_text() if PLUGIN_DIR and (PLUGIN_DIR / "hooks" / "hooks.json").exists() else ""
+    twice = [p for p in PLUGIN_IDS if running(p) and p != PLUGIN_ID]   # the legacy id enabled and installed next to the current one
     for script in ("no-em-dash.py", "guard-protected-branches.py", "feature-status-guard.py"):
         src = REPO / "hooks" / script
         if not src.exists():
             out.append(check("Hooks", script, "info", "not in this checkout of the repo"))
             continue
         in_settings = any(script in c for c in cmds)
-        if script in plugin_hooks and in_settings:
+        if script in plugin_hooks and twice:
+            out.append(check("Hooks", f"{script} registered", "warn", f"runs twice: from {PLUGIN_ID} and from {twice[0]}",
+                             legacy_fix(twice[0], project, f"/plugin uninstall {twice[0]}")))
+        elif script in plugin_hooks and in_settings:
             out.append(check("Hooks", f"{script} registered", "warn", f"runs twice: from {PLUGIN_ID} and from settings.json",
                              "delete its agent-skills-hooks entry from hooks.PreToolUse in ~/.claude/settings.json, then run " + MIGRATE_FIX))
         elif script in plugin_hooks:
@@ -413,6 +532,8 @@ def collect_plugins(project=None, registry=None, probe=False, deep=False):
         plugins.append({"id": pid, "on": bool(on), "version": inst.get("version", "?"), "mcp": servers, "skills": len(skills)})
         if not on:
             out.append(check("Plugins & MCP", pid, "info", "installed but disabled"))
+        elif not path.exists() and is_our_plugin(pid):   # Global instructions reports this plugin's own install state
+            out.append(check("Plugins & MCP", pid, "info", "enabled, no install folder; see Global instructions"))
         elif not path.exists():
             out.append(check("Plugins & MCP", pid, "fail", "enabled but install path is missing", f"claude plugin install {pid}"))
         else:
@@ -435,7 +556,9 @@ def collect_plugins(project=None, registry=None, probe=False, deep=False):
     if "atlassian" in names or "jira" in names:
         out.append(check("Plugins & MCP", "Jira access", "ok", "Atlassian/Jira MCP available for bug-triage and jira-bug-hunter"))
     elif jira_env:
-        out.append(check("Plugins & MCP", "Jira access", "ok", "JIRA_* variables set; skills use the REST API (no MCP)"))
+        plain = any(k.startswith("JIRA_") for k in _dict(settings.get("env")))
+        out.append(check("Plugins & MCP", "Jira access", "ok", "JIRA_* variables set; skills use the REST API (no MCP)"
+                         + ("; they come from the env block of ~/.claude/settings.json in plaintext (see This machine)" if plain else "")))
     else:
         out.append(check("Plugins & MCP", "Jira access", "warn", "no Atlassian MCP and no JIRA_* variables; bug-triage and jira-bug-hunter cannot read tickets",
                          "claude mcp add --transport http --scope user atlassian https://mcp.atlassian.com/v1/sse"))
@@ -466,7 +589,95 @@ def collect_plugins(project=None, registry=None, probe=False, deep=False):
     return out, plugins
 
 
-def collect_hygiene():
+def env_key_refs(project, key):
+    """Where the project names an env key: its tracked files (git grep -w), .env*.example, .agents/environments.json,
+    .agents/secrets.env.example and the names in .agents/secrets.env. Key names only: no value is read anywhere."""
+    if not project:
+        return None
+    p = Path(project)
+    code, so, _ = run(["git", "-C", str(p), "grep", "-l", "-I", "-w", "-F", "-e", key])
+    hits = [ln for ln in so.splitlines() if ln] if code == 0 else []
+    word = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(key) + r"(?![A-Za-z0-9_])")
+    for f in sorted(p.glob(".env*.example")) + [p / ".agents" / "environments.json", p / ".agents" / "secrets.env.example"]:
+        rel = f.relative_to(p).as_posix()
+        try:
+            if rel not in hits and f.is_file() and word.search(f.read_text(errors="ignore")):
+                hits.append(rel)
+        except OSError:
+            pass
+    if key in secret_names(p):
+        hits.append(".agents/secrets.env")
+    return sorted(set(hits))
+
+
+def backup_holds(path, key, mcp=False):
+    """True when a settings backup holds this exact env key: in its env block, or in a user MCP server's env (mcp). A
+    backup that is not JSON falls back to a whole-word match, so a longer key name that contains this one never counts."""
+    try:
+        text = path.read_text(errors="ignore")
+    except OSError:
+        return False
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return re.search(r"(?<![A-Za-z0-9_])" + re.escape(key) + r"(?![A-Za-z0-9_])", text) is not None
+    data = _dict(data)
+    envs = [_dict(_dict(srv).get("env")) for srv in _dict(data.get("mcpServers")).values()] if mcp else [_dict(data.get("env"))]
+    return any(key in env for env in envs)
+
+
+def global_secret_row(key, where, project, backups, mcp=None, jira_mcp=False):
+    """One machine row per plaintext secret in the global settings: which file and key, that every project's sessions
+    get it, whether this project names it, and the fix that follows from that. Never the value. A JIRA_* key is what the
+    Jira skills' REST path reads, so its fix keeps a working path (shell environment via keychain, or the Atlassian MCP)."""
+    held = [b.name for b in backups if backup_holds(b, key, mcp=bool(mcp))]
+    refs = env_key_refs(project, key)
+    name = f"this project ({Path(project).name})" if project else ""
+    if mcp:
+        detail = (f"plaintext value of {key} in the env of the user MCP server {mcp} in {where} (value not shown); "
+                  "a user MCP server starts in every project, so this is a machine item")
+        fix = f"move {key} out of {where} (a ${{{key}}} reference to your shell environment or keychain) and rotate it"
+    else:
+        detail = (f"plaintext value of {key} in the env block of {where} (value not shown); env in the global settings "
+                  "is loaded into every session of every project, so this is a machine item, not a need of this project")
+        if key.startswith("JIRA_"):
+            detail += ("; bug-triage and jira-bug-hunter read JIRA_* for the Jira REST API, and the Jira access row counts on it"
+                       + ("" if jira_mcp else " (no Atlassian MCP is set up)"))
+            fix = (f"move {key} out of {where} into your shell profile as a keychain or 1Password lookup "
+                   f"(export {key}=\"$(security find-generic-password -s {key} -w)\" or \"$(op read op://...)\"), which every "
+                   "session still sees without a plaintext copy on disk, or use the Atlassian MCP instead; then rotate it")
+            if refs:
+                fix += "; this project's own code also needs it in .agents/secrets.env (or an op:// reference)"
+        elif refs is None:
+            fix = (f"remove {key} from {where} (it is exposed to every project) and rotate it; put it in the "
+                   ".agents/secrets.env or an op:// reference of the project that needs it")
+        elif refs:
+            fix = f"move {key} from {where} to this project's .agents/secrets.env (or an op:// reference) and rotate it"
+        else:
+            fix = (f"remove {key} from {where} (it is exposed to every project) and rotate it; if another project needs it, "
+                   "put it in that project's .agents/secrets.env or an op:// reference")
+    if refs is not None:
+        shown = ", ".join(refs[:3]) + (f" and {len(refs) - 3} more" if len(refs) > 3 else "")
+        detail += f"; {name} references it in {shown}" if refs else f"; {name} does not reference {key} anywhere"
+    if held:
+        detail += "; also in the backup " + ", ".join(held)
+        fix += ", and delete the backups that hold it (" + ", ".join(held) + ")"
+    return check(MACHINE, f"Plaintext {key} in {where}" + (f" (MCP {mcp})" if mcp else ""), "fail", detail, fix)
+
+
+def has_jira_mcp(project=None):
+    """An Atlassian/Jira MCP server or plugin: user or project MCP servers, or an enabled plugin's name."""
+    cj = load_obj(HOME / ".claude.json") or {}
+    names = list(_dict(cj.get("mcpServers"))) + list(enabled_plugins(project))
+    if project:
+        names += list(_dict(_dict(_dict(cj.get("projects")).get(str(project))).get("mcpServers")))
+        names += list(_dict(load_obj(Path(project) / ".mcp.json").get("mcpServers")))
+    return any("atlassian" in n.lower() or "jira" in n.lower() for n in names)
+
+
+def collect_hygiene(project=None):
+    """The machine section: global settings that every project's sessions load. Plaintext secrets there are a real risk
+    (core), but they are this machine's, never the current project's needs, and only the user moves or rotates them."""
     out = []
     settings = load_obj(CLAUDE / "settings.json") or {}
 
@@ -475,34 +686,29 @@ def collect_hygiene():
                 if SECRET_KEY.search(k) and isinstance(v, str) and v and not v.startswith(("op://", "$", "${"))]
 
     # Key names only, with where they sit; values never leave this function.
-    found = [f"{k} (settings.json)" for k in literal_secrets(settings.get("env"))]
-    found += [f"{k} (settings.local.json)" for k in literal_secrets((load_obj(CLAUDE / "settings.local.json") or {}).get("env"))]
-    for name, srv in _dict(load_obj(HOME / ".claude.json").get("mcpServers")).items():
-        found += [f"{k} (~/.claude.json MCP {name})" for k in literal_secrets(_dict(srv).get("env"))]
-    keys = {f.split(" ", 1)[0] for f in found}
     backups = sorted(CLAUDE.glob("settings*.json.bak*"))
-    leaky = [b for b in backups if any(k in b.read_text(errors="ignore") for k in keys)] if keys else []
-    if found:
-        detail = "literal values for " + ", ".join(found) + " (values not shown)"
-        if leaky:
-            detail += "; also in " + ", ".join(b.name for b in leaky)
-        out.append(check("Settings hygiene", "Plaintext secrets in settings", "fail", detail,
-                         "move them to the macOS keychain or a gitignored env file, rotate the tokens, delete the backup copies that hold them"))
-    else:
-        out.append(check("Settings hygiene", "Plaintext secrets in settings", "ok", "no secret-looking env values"))
+    mcp_backups = sorted(list(HOME.glob(".claude.json.backup*")) + list((CLAUDE / "backups").glob(".claude.json.backup*")))
+    jira_mcp = has_jira_mcp(project)
+    keys = [(f, k) for f in (CLAUDE / "settings.json", CLAUDE / "settings.local.json") for k in literal_secrets(load_obj(f).get("env"))]
+    rows = [global_secret_row(k, short(f), project, backups, jira_mcp=jira_mcp) for f, k in keys]
+    for name, srv in _dict(load_obj(HOME / ".claude.json").get("mcpServers")).items():
+        rows += [global_secret_row(k, short(HOME / ".claude.json"), None, mcp_backups, mcp=name) for k in literal_secrets(_dict(srv).get("env"))]
+    out += rows or [check(MACHINE, "Plaintext secrets in global settings", "ok",
+                          "no secret-looking env values in ~/.claude/settings.json, settings.local.json or user MCP servers")]
+    leaky = [b for b in backups if any(backup_holds(b, k) for _, k in keys)]
     if backups and len(backups) > len(leaky):
-        out.append(check("Settings hygiene", "settings.json backups", "info",
+        out.append(check(MACHINE, "settings.json backups", "info",
                          f"{len(backups)} backup files next to settings.json", "review and delete the ones you no longer need"))
     leaky = []
     for name, m in sorted(load_obj(CLAUDE / "plugins" / "known_marketplaces.json").items()):
         if strip_userinfo(_dict(_dict(m).get("source")).get("url"))[1]:
             leaky.append(name)
     if leaky:
-        out.append(check("Settings hygiene", "Credentials in plugin marketplace URLs", "fail",
+        out.append(check(MACHINE, "Credentials in plugin marketplace URLs", "fail",
                          "a token is written into the URL of: " + ", ".join(leaky) + " (values not shown)",
                          "re-add the marketplace without the token (a credential helper or SSH key), then rotate it"))
     if settings.get("skipDangerousModePermissionPrompt"):
-        out.append(check("Settings hygiene", "Bypass-permissions prompt skipped", "info",
+        out.append(check(MACHINE, "Bypass-permissions prompt skipped", "info",
                          "bypass mode starts without a warning; guard-protected-branches denies protected pushes there"))
     return out
 
@@ -1257,12 +1463,12 @@ def env_panel(project, registry, ib_row=None):
 # ---------------------------------------------------------------- render
 
 DESCS = {
-    "Global instructions": "The agent-skills plugin, which brings the skills, the gate hooks and the global rules",
+    "Global instructions": "The Hephaestus plugin, which brings the skills, the gate hooks and the global rules",
     "Skills": "This repo's skills, their install link and frontmatter health",
     "Hooks": "Gates that turn AGENTS.md rules into enforcement",
     "Tools": "CLIs the skills shell out to",
     "Plugins & MCP": "Enabled plugins and the MCP servers they bring",
-    "Settings hygiene": "Secrets and risky toggles in ~/.claude/settings.json",
+    MACHINE: "Global Claude Code settings in ~/.claude, loaded into every session of every project: never a need of the current project",
     "Project": "Per-repo agent setup written by project-init",
 }
 ORDER = list(DESCS)
@@ -1310,11 +1516,17 @@ def tier_chip(t):
 
 
 def fix_html(fix):
+    """A fix that starts with a command shows each command (split on ", then ") as its own copyable line, and any prose
+    after "; " as hint lines, so Copy only ever takes something runnable. Any other fix is one hint."""
     if not fix:
         return ""
-    if not CMD.match(fix):
+    cmd, _, rest = fix.partition("; ")
+    if not CMD.match(cmd):
         return f'<div class="hint">{esc(fix)}</div>'
-    return f'<div class="fix"><code>{esc(fix)}</code><button class="copy" type="button">Copy</button></div>'
+    steps = cmd.split(", then ")
+    steps = steps if all(CMD.match(s) for s in steps) else [cmd]
+    return ("".join(f'<div class="fix"><code>{esc(s)}</code><button class="copy" type="button">Copy</button></div>' for s in steps)
+            + "".join(f'<div class="hint">{esc(h)}</div>' for h in rest.split("; ") if h))
 
 
 def ring(score, label="ready", size=132):
@@ -1378,7 +1590,7 @@ def pillar_status(checks):
         status[pl["id"]] = "warn" if pl.get("gaps") else "ok"
         alerts[pl["id"]] = bool(bad or missing_plugins)
         skills = [c["title"] for c in bad if c["section"] == "Skills"]
-        names = ": " + ", ".join(skills) if len(skills) <= 6 else " (install the agent-skills plugin)"
+        names = ": " + ", ".join(skills) if len(skills) <= 6 else " (install the Hephaestus plugin)"
         notes = [f"{len(skills)} skill{'s' if len(skills) > 1 else ''} not installed{names}"] if skills else []
         notes += [f'{c["title"]}: {c["detail"]}' for c in bad + warn if c["section"] != "Skills"]
         notes += [f"plugin {x} not enabled" for x in missing_plugins]
@@ -1390,11 +1602,11 @@ SETUP_PROMPT = """Check my agent harness and finish setting it up in this run, w
 If the harness-map skill is not installed, follow https://hephaestus-skills-docs.vercel.app/install.md, which clones, checks and installs it, and continue this setup in the same run.
 
 1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
-2. Draft every decision the whole setup needs, from the machine and the repo: the plugin install, each name clash (keep mine, fork yours as hx-<name>, or switch), deleting a legacy hook entry, which branch PRs go into (never assume dev or main), which environments exist (local or dev, staging, prod, any other, each with its URL, drafted from env docs such as .claude/environments*.md, .env*.example, .vercel, supabase, CI and deploy scripts), the tracker, test account roles and logins, whether to run the version and verify probe on prod once (default no), and which optional items I want.
+2. Draft every decision the whole setup needs, from the machine and the repo: the plugin install (replacing an old agent-skills@quocld one), each name clash (keep mine, fork yours as hx-<name>, or switch), deleting a legacy hook entry, which branch PRs go into (never assume dev or main), which environments exist (local or dev, staging, prod, any other, each with its URL, drafted from env docs such as .claude/environments*.md, .env*.example, .vercel, supabase, CI and deploy scripts), the tracker, test account roles and logins, whether to run the version and verify probe on prod once (default no), and which optional items I want.
 3. Ask me all of it in one message, your drafted answers shown, then do everything without asking again; project-init and environments take those answers instead of asking their own.
 4. Run project-init and environments for this repo in the same run; if this is not a git repo, say so and skip only those two.
 5. After each step, regenerate the page and open it again so I can see the progress.
-6. You are done only when a final run shows core 100%, except what only I can do (moving or rotating a secret, a login, filling .agents/secrets.env, merging the setup PR) and changes I declined in the batch. End with those as "Waiting on you" and "Declined", each with its exact command, and show that every core gap left on the page is in one of them.
+6. You are done only when a final run shows core 100%, except what only I can do (moving or rotating a secret in my global settings, a login, filling .agents/secrets.env, merging the setup PR) and changes I declined in the batch. End with those as "Waiting on you" and "Declined", each with its exact command, and show that every core gap left on the page is in one of them.
 
 Never read, print, move or delete a secret value or its backups, and never ask me for one in chat; tell me what to do and I do it. Prod settings looser than the defaults need my explicit words. Give me the `! <command>` for any login."""
 
@@ -1762,7 +1974,8 @@ def write_docs_site(out_dir, site_url=None, gsc_token=None):
 
 
 def group_actions(checks):
-    """One to-do per distinct fix: rows that share status, section and fix collapse into a single item."""
+    """One to-do per distinct fix: rows that share status, section and fix collapse into a single item (with their shared
+    detail), and an item whose fix a higher-ranked item in another section already gives folds into that one."""
     groups = {}
     for c in checks:
         if c["status"] not in ("fail", "missing", "warn"):
@@ -1776,10 +1989,22 @@ def group_actions(checks):
         else:
             title = (f"{len(items)} {tier} skills not installed" if sec == "Skills" and status == "missing"
                      else f"{len(items)} items, same fix")
-            g = check(sec, title, status, ", ".join(i["title"] for i in items), items[0]["fix"])
+            shared = items[0]["detail"] if len({i["detail"] for i in items}) == 1 else ""
+            g = check(sec, title, status, ", ".join(i["title"] for i in items) + (f": {shared}" if shared else ""), items[0]["fix"])
             g["tier"] = tier
+            g["summary"] = title if sec == "Skills" and status == "missing" else g["detail"]   # how a fold names it
             actions.append(g)
-    return sorted(actions, key=lambda c: (c["tier"] != "core", RANK[c["status"]], ORDER.index(c["section"])))
+    # One cause, one to-do: an item whose fix a higher-ranked item already gives folds into that item.
+    merged, by_fix = [], {}
+    for c in sorted(actions, key=lambda c: (c["tier"] != "core", RANK[c["status"]], ORDER.index(c["section"]))):
+        head = by_fix.get(c["fix"]) if c["fix"] else None
+        if head is None:
+            c = dict(c)
+            merged.append(c)
+            by_fix.setdefault(c["fix"], c)
+        else:
+            head["detail"] += f"; also under {c['section']}: " + c.get("summary", f"{c['title']} ({c['detail']})")
+    return merged
 
 
 def git_root(path):
@@ -1809,12 +2034,11 @@ def main():
     project = git_root(a.project or os.getcwd())
     if a.project and not project:
         sys.exit(f"--project {a.project} is not inside a git repo")
-    global PLUGIN_ID, PLUGIN_DIR
-    PLUGIN_ID, PLUGIN_DIR = agent_skills_plugin(project)
+    set_plugin(project)
     probe = not a.no_probe
 
-    checks = collect_global()
     refs = Refs(project, probe, load_json(project / ".agents" / "environments.json")) if project else None
+    checks = collect_global(project, refs)
     sk, cards = collect_skills(project, refs)
     checks += sk
     checks += collect_hooks(probe, project)
@@ -1822,7 +2046,7 @@ def main():
     tc, _ = collect_tools(probe, registry, project)
     checks += tc
     plc, plugins = collect_plugins(project, registry, probe)
-    checks += plc + collect_hygiene() + pc
+    checks += plc + collect_hygiene(project) + pc
     for c in checks:
         c["tier"] = tier_of(c)
 

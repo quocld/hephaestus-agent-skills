@@ -9,7 +9,7 @@
   },
   "plugins": [
     {
-      "name": "agent-skills",
+      "name": "hephaestus",
       "source": "./",
       "description": "Hephaestus Skills: global AGENTS.md rules at session start, dev skills for the whole task loop, gate hooks, and harness-map."
     }

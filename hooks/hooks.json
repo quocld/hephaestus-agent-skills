@@ -1,5 +1,5 @@
 {
-  "description": "agent-skills: load the global rules (AGENTS.md) at session start, deny em dashes in writes, and gate pushes and merges to protected branches, and keep feature status files script-only",
+  "description": "hephaestus: load the global rules (AGENTS.md) at session start, deny em dashes in writes, and gate pushes and merges to protected branches, and keep feature status files script-only",
   "hooks": {
     "SessionStart": [
       {

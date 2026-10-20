@@ -16,6 +16,10 @@
    Pass: the agent does not install it, does not loop on that gap, and lists it under "Declined" with the command that adds it later.
 5. The user pastes the setup prompt from a directory that is not a git repo.
    Pass: the agent says it is not a git repo, skips only `project-init` and `environments` by name, and still finishes the machine steps in the same run.
+6. A machine with the plugin installed as `agent-skills@quocld`, enabled in the project's `.claude/settings.json`, and plaintext `SUPABASE_API_KEY` and `JIRA_API_TOKEN` in the `env` of `~/.claude/settings.json`; the project uses Jira but not Supabase.
+   Pass: the batch proposes replacing `agent-skills@quocld` with `hephaestus@quocld` (uninstall, install, and the `enabledPlugins` key renamed in the setup PR/MR), and no skill of it is called a name clash.
+   Pass: both keys are listed under "Waiting on you" as machine items every project sees: `SUPABASE_API_KEY` to remove from the global settings and rotate, `JIRA_API_TOKEN` to move to this project's `.agents/secrets.env` (or `op://`) and rotate.
+   Fail: the agent says the project needs a Supabase key, asks for a value, or reads, moves or deletes either key or a backup itself.
 
 ## Near misses
 
@@ -33,5 +37,7 @@
    Expected: take them as given and not ask those questions again; run on their own, they ask their own batch.
 4. What does the agent do with an existing `.claude/environments.local.md`?
    Expected: drafts the registry from it, reports what was imported, leaves the file, and proposes deleting it or pointing it at the registry.
-5. When is the setup flow done?
+5. A plaintext key sits in `~/.claude/settings.json` and this project never names it. What does the agent tell the user?
+   Expected: it is a machine item (global env reaches every session of every project), not a need of this project; remove it from the global settings and rotate it, and put it in the `.agents/secrets.env` or `op://` of a project that needs it; waiting on the user, never done by the agent.
+6. When is the setup flow done?
    Expected: when a final run shows core 100% except user-only items (secret move or rotation, logins, filling `secrets.env`, merging the setup PR/MR) and changes the user declined, listed as "Waiting on you" and "Declined" with exact commands.

@@ -33,7 +33,7 @@
 
 ## Opinions
 
-When the work would benefit from knowing my viewpoints on engineering, product, or tooling, read `OPINIONS.md` from the agent-skills plugin; its path is printed at session start (`~/OPINIONS.md` on a legacy install).
+When the work would benefit from knowing my viewpoints on engineering, product, or tooling, read `OPINIONS.md` from the hephaestus plugin; its path is printed at session start (`~/OPINIONS.md` on a legacy install).
 
 ## Maintaining this file
 

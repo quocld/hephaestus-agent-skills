@@ -46,7 +46,7 @@ import sys
 HERE = os.path.dirname(os.path.realpath(__file__))
 # Set from status_script() below: the copy shipped next to this hook (the plugin, or a checkout), else the legacy
 # install.sh path, so deny messages always name a command that exists on this machine.
-STATUS_CMD = "python3 <agent-skills>/skills/feature-status/scripts/status.py"
+STATUS_CMD = "python3 <hephaestus>/skills/feature-status/scripts/status.py"
 TYPES = ("feat", "fix", "refactor", "chore", "docs", "test")
 BRANCH_RE = re.compile(r"^(?:refs/heads/|refs/remotes/origin/|origin/)?(%s)/([A-Za-z0-9][A-Za-z0-9._-]*)$" % "|".join(TYPES))
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

@@ -15,7 +15,7 @@ Before installing anything, list the harness this machine and this project alrea
 - Skills: user, project and plugin skills
 - Hooks and permission settings
 - Installed plugins and MCP servers
-- An earlier Hephaestus install: old `install.sh` links or an earlier plugin
+- An earlier Hephaestus install: old `install.sh` links, or the plugin under its old id `agent-skills@quocld`
 
 Show the user the list.
 
@@ -26,7 +26,7 @@ Compare that list with Hephaestus. For each overlap, draft the answer you will p
 - **Identical to ours:** skip it.
 - **Same name or same job but different** (a skill, a hook, a rule file): keep the existing one active and fork ours next to it as `hx-<name>` (for a project skill, `.claude/skills/hx-worktree-flow/` in the project's setup PR/MR), then tell the user what differs.
 - **A rule that contradicts ours** (which branch PRs target, commit attribution, push or deploy rules): the project's rule wins inside this project; note the contradiction.
-- **An earlier Hephaestus install:** upgrade it in place instead of adding a second copy.
+- **An earlier Hephaestus install:** upgrade it in place instead of adding a second copy; the old plugin id `agent-skills@quocld` is replaced by `hephaestus@quocld` (uninstall the old one, and rename a project's `enabledPlugins` key in the setup PR/MR).
 
 Do not ask yet: every question goes in the one batch of step 5.
 
@@ -49,11 +49,12 @@ Draft every decision the whole setup needs, as the harness-map skill's setup flo
 - The install: every file you will create or change outside the clone, and the commands of step 6 or 7.
 - Each clash from step 3: keep theirs and fork ours as `hx-<name>`, switch to ours, or merge.
 - A legacy hook entry that would run a gate twice: delete it, yes or no.
+- The plugin under its old id `agent-skills@quocld`: replace it with `hephaestus@quocld`, yes or no.
 - Which branch PRs go into (your guess shown; `dev` or `main` only when the user chooses it).
 - Which environments exist (local or dev, staging, prod, any other), each with its URL, drafted from the repo: environment docs such as `.claude/environments.local.md`, `.env*.example`, `.vercel/`, `supabase/`, CI and deploy scripts.
 - Whether to run the `version` and `verify` probe on prod once (default no).
 - The tracker, test account roles and logins (never passwords), and which optional items the user wants.
-- What will be waiting on the user: secrets to move and rotate, logins, the `.agents/secrets.env` names to fill in the file, never in chat.
+- What will be waiting on the user: secrets to move and rotate (one in the global settings is a machine item every project sees, never this project's need), logins, the `.agents/secrets.env` names to fill in the file, never in chat.
 
 After the answer, do everything below in this same run without asking again.
 
@@ -63,10 +64,10 @@ Run:
 
 ```text
 claude plugin marketplace add quocld/hephaestus-agent-skills
-claude plugin install agent-skills@quocld
+claude plugin install hephaestus@quocld
 ```
 
-Or ask the user to run `/plugin marketplace add quocld/hephaestus-agent-skills` and `/plugin install agent-skills@quocld`.
+Or ask the user to run `/plugin marketplace add quocld/hephaestus-agent-skills` and `/plugin install hephaestus@quocld`.
 The plugin brings the skills, the safety hooks and the global rules; a forked project skill goes in the project's `.claude/skills/hx-<name>/` through the setup PR/MR of step 8, never straight into the main checkout.
 A new session picks the plugin up; until then, read each skill from the clone (`~/.hephaestus-skills/skills/<name>/SKILL.md`) and go straight on with step 8 in this session.
 

@@ -185,7 +185,7 @@ def main():
         code, out, page = run(home, project)
         check(code == 0 and bool(page), "hooks null and a dict plugin index of an enabled plugin: no crash")
 
-    # The agent-skills plugin, as Claude Code installs it: a copy with no .git. Legacy links point into another clone.
+    # The hephaestus plugin, as Claude Code installs it: a copy with no .git. Legacy links point into another clone.
     repo = HERE.parents[2]
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -199,31 +199,107 @@ def main():
             tar = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"], capture_output=True, check=True).stdout
             subprocess.run(["tar", "-x", "-C", str(d)], input=tar, check=True)
         shutil.copy(repo / "migrate-to-plugin.py", plug / "migrate-to-plugin.py")   # the working tree's, not HEAD's
-        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps(
-            {"plugins": {"agent-skills@quocld": [{"scope": "user", "installPath": str(plug)}]}}))
-        (home / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
+        index = home / ".claude" / "plugins" / "installed_plugins.json"
+        user_settings = home / ".claude" / "settings.json"
+
+        def install(*pids, enabled=True):
+            index.write_text(json.dumps({"plugins": {pid: [{"scope": "user", "installPath": str(plug)}] for pid in pids}}))
+            user_settings.write_text(json.dumps({"enabledPlugins": {pid: enabled for pid in pids}}))
+
+        install("hephaestus@quocld")
         (home / ".claude" / "skills" / "root-cause").symlink_to(clone / "skills" / "root-cause")
         (home / ".claude" / "CLAUDE.md").symlink_to(clone / "AGENTS.md")
         code, out, page = run(home, project)
-        check(code == 0 and "registered by agent-skills@quocld" in page, "plugin: gates count as registered by the plugin")
-        check("from agent-skills@quocld as /agent-skills:worktree-flow" in page, "plugin: skills count as installed from the plugin")
+        check(code == 0 and "registered by hephaestus@quocld" in page, "plugin: gates count as registered by the plugin")
+        check("from hephaestus@quocld as /hephaestus:worktree-flow" in page, "plugin: skills count as installed from the plugin")
         check("skills not installed" not in out, "plugin: no skill reported missing")
         check("loaded twice" in page, "plugin copy without git: a legacy skill link into another clone is a duplicate")
         check("Legacy install.sh links" in page, "plugin copy without git: the legacy CLAUDE.md link is reported")
+        check("Legacy plugin id" not in page and "Plugin installed twice" not in page, "plugin: the current id is no legacy or duplicate row")
 
-        # Enabled only in the project's settings, installed at project scope.
-        (home / ".claude" / "settings.json").write_text(json.dumps({}))
+        # The id before the rename is still ours: gates and skills count, no clash, and one core row says how to move.
+        install("agent-skills@quocld")
+        code, out, page = run(home, project)
+        check("registered by agent-skills@quocld" in page and "from agent-skills@quocld as /agent-skills:worktree-flow" in page
+              and "skills not installed" not in out, "legacy plugin id: gates and skills still count as installed")
+        check(not re.search(r"[a-z]: (name clash|duplicate copy)", page), "legacy plugin id: its skills are ours, not a name clash")
+        check("[core] [Attention] Global instructions / Legacy plugin id agent-skills@quocld" in out
+              and "/plugin uninstall agent-skills@quocld, then /plugin install hephaestus@quocld" in out,
+              "legacy plugin id: a core row with the uninstall and install fix")
+        install("agent-skills@quocld", enabled=False)
+        code, out, page = run(home, project)
+        check("Legacy plugin id agent-skills@quocld" in out and "installed but disabled" in out,
+              "legacy plugin id: installed but disabled is still reported")
+
+        # Both ids at once: every gate would run twice.
+        install("hephaestus@quocld", "agent-skills@quocld")
+        code, out, page = run(home, project)
+        check("[core] [Failing] Global instructions / Plugin installed twice: hephaestus@quocld and agent-skills@quocld" in out
+              and "fix: /plugin uninstall agent-skills@quocld\n" in out + "\n" and "Legacy plugin id" not in out,
+              "both ids: a failing duplicate row whose fix only uninstalls the legacy id")
+        check("runs twice: from hephaestus@quocld and from agent-skills@quocld" in page and "from hephaestus@quocld as /hephaestus:" in page,
+              "both ids: the gates show as running twice, the current id wins for skills")
+        check(out.count("/plugin uninstall agent-skills@quocld") == 1 and "also under Hooks: no-em-dash.py registered" in out
+              and "runs twice: from hephaestus@quocld and from agent-skills@quocld" in out,
+              "both ids: one to-do, the gate rows fold into it with their shared reason")
+        check('<code>/plugin uninstall agent-skills@quocld</code>' in page, "both ids: the copyable command is only the uninstall")
+
+        # The legacy id enabled, the current one installed but disabled: the legacy id is the only live copy.
+        index.write_text(json.dumps({"plugins": {p: [{"scope": "user", "installPath": str(plug)}]
+                                                 for p in ("hephaestus@quocld", "agent-skills@quocld")}}))
+        user_settings.write_text(json.dumps({"enabledPlugins": {"hephaestus@quocld": False, "agent-skills@quocld": True}}))
+        code, out, page = run(home, project)
+        check("Legacy plugin id agent-skills@quocld" in out and "the only live copy" in out and "Plugin installed twice" not in out
+              and "fix: /plugin enable hephaestus@quocld, then /plugin uninstall agent-skills@quocld" in out
+              and "enabling it would" not in out, "current id disabled, legacy enabled: enable the current id first, then uninstall")
+        check('<code>/plugin enable hephaestus@quocld</code>' in page and '<code>/plugin uninstall agent-skills@quocld</code>' in page,
+              "current id disabled, legacy enabled: each command is its own copyable line")
+
+        # Mid-setup: the legacy plugin is uninstalled, the current one runs, the project's committed key is not renamed yet.
+        install("hephaestus@quocld")
         (project / ".claude").mkdir()
         (project / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
-        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps(
+        code, out, page = run(home, project)
+        check("Plugin installed twice" not in out and "runs twice: from" not in page and "Legacy plugin id" not in out
+              and "registered by hephaestus@quocld" in page,
+              "stale legacy key: no duplicate row and no gate running twice")
+        check("Stale enabledPlugins key agent-skills@quocld" in out
+              and "fix: in the setup PR/MR, rename the enabledPlugins key agent-skills@quocld to hephaestus@quocld in .claude/settings.json" in out
+              and "/plugin uninstall" not in out, "stale legacy key: one row whose only fix is the key rename")
+        check('class="hint">in the setup PR/MR, rename' in page and "<code>in the setup" not in page,
+              "stale legacy key: the rename is a hint, not a $ command")
+
+        # Nothing installed, the project still enables the legacy id: install the current id, never reinstall the legacy one.
+        index.write_text(json.dumps({"plugins": {}}))
+        user_settings.write_text(json.dumps({}))
+        code, out, page = run(home, project)
+        check("claude plugin install agent-skills@quocld" not in out and "/plugin install agent-skills" not in out
+              and "Hephaestus plugin (not installed" in out and "fix: /plugin marketplace add quocld/hephaestus-agent-skills, then /plugin install hephaestus@quocld" in out
+              and "Stale enabledPlugins key agent-skills@quocld" in out,
+              "legacy key only: the fix installs hephaestus@quocld and renames the key")
+        (project / ".claude" / "settings.json").unlink()
+
+        # Enabled only in the project's settings, installed at project scope.
+        user_settings.write_text(json.dumps({}))
+        (project / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"hephaestus@quocld": True}}))
+        index.write_text(json.dumps(
+            {"plugins": {"hephaestus@quocld": [{"scope": "project", "projectPath": str(project), "installPath": str(plug)}]}}))
+        code, out, page = run(home, project)
+        check("from hephaestus@quocld as /hephaestus:worktree-flow" in page, "plugin enabled at project scope is found")
+        (project / ".claude" / "settings.local.json").write_text(json.dumps({"enabledPlugins": {"hephaestus@quocld": False}}))
+        code, out, page = run(home, project)
+        check("hephaestus@quocld enabled" not in page, "plugin turned off in the project's local settings is not counted")
+        (project / ".claude" / "settings.local.json").unlink()
+        # A project that enables the legacy id in its committed settings renames that key in the setup PR/MR.
+        (project / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
+        index.write_text(json.dumps(
             {"plugins": {"agent-skills@quocld": [{"scope": "project", "projectPath": str(project), "installPath": str(plug)}]}}))
         code, out, page = run(home, project)
-        check("from agent-skills@quocld as /agent-skills:worktree-flow" in page, "plugin enabled at project scope is found")
-        (project / ".claude" / "settings.local.json").write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": False}}))
-        code, out, page = run(home, project)
-        check("agent-skills@quocld enabled" not in page, "plugin turned off in the project's local settings is not counted")
+        check("registered by agent-skills@quocld" in page and "Legacy plugin id agent-skills@quocld" in out
+              and "in the setup PR/MR, rename the enabledPlugins key agent-skills@quocld to hephaestus@quocld in .claude/settings.json" in out,
+              "legacy plugin id at project scope: counted, and the fix renames the project's enabledPlugins key in the setup PR/MR")
 
-        # migrate-to-plugin.py run from the plugin copy (no git): only links into agent-skills checkouts go.
+        # migrate-to-plugin.py run from the plugin copy (no git): only links into checkouts of this repo go.
         other = tmp / "other" / "skills" / "foo"
         other.mkdir(parents=True)
         (other / "SKILL.md").write_text("x")
@@ -234,8 +310,8 @@ def main():
         env.pop("CLAUDE_DIR", None)
         m = subprocess.run([sys.executable, str(plug / "migrate-to-plugin.py")], capture_output=True, text=True, env=env)
         check(m.returncode == 0, "migrate: no crash on odd settings")
-        check((home / ".claude" / "skills" / "foo").is_symlink(), "migrate: keeps a link into a folder that is not agent-skills")
-        check(not (home / ".claude" / "skills" / "root-cause").exists(), "migrate: removes a skill link into another agent-skills clone")
+        check((home / ".claude" / "skills" / "foo").is_symlink(), "migrate: keeps a link into a folder that is not this repo")
+        check(not (home / ".claude" / "skills" / "root-cause").exists(), "migrate: removes a skill link into another clone of this repo")
         check(not (home / ".claude" / "CLAUDE.md").exists(), "migrate: removes the CLAUDE.md link")
         check((home / ".claude" / "agent-skills-hooks").is_symlink(), "migrate: never removes agent-skills-hooks")
 
@@ -307,6 +383,54 @@ def main():
         code, out, page = run(home, project)
         check("worktree-flow: name clash:" not in out and "worktree-flow: name clash settled" in page,
               "existing harness: theirs kept and ours forked as hx-worktree-flow is settled, not a core gap")
+
+    # A plaintext secret in the global settings is this machine's risk, never the project's need: a machine row per key,
+    # whose fix depends on whether this project names the key, and no value anywhere.
+    with tempfile.TemporaryDirectory() as tmp:
+        home, project = Path(tmp) / "home", Path(tmp) / "shop"
+        (home / ".claude").mkdir(parents=True)
+        project.mkdir()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        (project / "pay.js").write_text("const t = process.env.STRIPE_SECRET_KEY;\n")
+        subprocess.run(["git", "-C", str(project), "add", "pay.js"], check=True)
+        (project / ".env.local.example").write_text("SENTRY_AUTH_TOKEN=\n")   # untracked example files count too
+        values = {"SUPABASE_API_KEY": "LeakGlobalSupabase21", "JIRA_API_TOKEN": "LeakGlobalJira22", "SENTRY_AUTH_TOKEN": "LeakGlobalSentry23",
+                  "STRIPE_SECRET_KEY": "LeakGlobalStripe24", "API_TOKEN": "LeakGlobalApi25"}
+        (home / ".claude" / "settings.json").write_text(json.dumps({"env": values}))
+        (home / ".claude" / "settings.json.bak1").write_text(json.dumps({"env": {"SUPABASE_API_KEY": "x"}}))
+        # A backup that only holds a longer key name (JIRA_API_TOKEN_OLD contains API_TOKEN) does not hold API_TOKEN.
+        (home / ".claude" / "settings.json.bak2").write_text(json.dumps({"env": {"JIRA_API_TOKEN_OLD": "x"}}))
+        (home / ".claude" / "settings.json.bak3").write_text("not json, API_TOKEN_V2=x")
+        code, out, page = run(home, project)
+        check(all(v not in page and v not in out for v in values.values()), "global secrets: no value in the page or stdout")
+        line = lambda key: next((ln for ln in out.splitlines() if f"/ Plaintext {key} in ~/.claude/settings.json:" in ln), "")
+        supa = line("SUPABASE_API_KEY")
+        check(supa.startswith(" ") and "[core] [Failing] This machine (every project) / Plaintext SUPABASE_API_KEY" in supa
+              and "Project / Plaintext" not in out and "Settings hygiene" not in page,
+              "global secrets: a core row per key in the machine section, never under Project")
+        check("loaded into every session of every project" in supa and "this project (shop) does not reference SUPABASE_API_KEY" in supa
+              and "also in the backup settings.json.bak1" in supa, "global secrets: says every project loads it, that this project does not use it, and the backup")
+        fix = lambda key: out.split(line(key), 1)[1].splitlines()[1] if line(key) else ""
+        check("remove SUPABASE_API_KEY from ~/.claude/settings.json (it is exposed to every project) and rotate it; "
+              "if another project needs it, put it in that project's .agents/secrets.env or an op:// reference" in fix("SUPABASE_API_KEY"),
+              "global secrets: a key this project does not reference is removed and rotated")
+        check("references it in pay.js" in line("STRIPE_SECRET_KEY")
+              and "move STRIPE_SECRET_KEY from ~/.claude/settings.json to this project's .agents/secrets.env (or an op:// reference) and rotate it"
+              in fix("STRIPE_SECRET_KEY"), "global secrets: a key a tracked file references moves to this project's secrets.env")
+        api = line("API_TOKEN")
+        check(api and "also in the backup" not in api and "delete the backups" not in fix("API_TOKEN"),
+              "global secrets: a backup holding only a longer key name (or a non-JSON one with API_TOKEN_V2) does not hold API_TOKEN")
+        jira = line("JIRA_API_TOKEN")
+        check("bug-triage and jira-bug-hunter read JIRA_* for the Jira REST API" in jira and "remove JIRA_API_TOKEN" not in fix("JIRA_API_TOKEN")
+              and "into your shell profile as a keychain or 1Password lookup" in fix("JIRA_API_TOKEN")
+              and "or use the Atlassian MCP instead" in fix("JIRA_API_TOKEN"),
+              "global secrets: a JIRA_* key keeps a working Jira path (shell environment via keychain, or the MCP), never just remove")
+        check("JIRA_* variables set; skills use the REST API (no MCP); they come from the env block of ~/.claude/settings.json in plaintext" in page,
+              "global secrets: the Jira access row says it relies on the plaintext global key")
+        check("references it in .env.local.example" in line("SENTRY_AUTH_TOKEN") and "move SENTRY_AUTH_TOKEN" in fix("SENTRY_AUTH_TOKEN"),
+              "global secrets: a key in an untracked .env*.example counts as referenced")
+        check('id="this-machine-every-project"' in page and ">This machine (every project)</h2>" in page,
+              "global secrets: the page groups them under This machine (every project)")
 
     # The onboarding prompt has one source (assets/onboard-prompt.md); the README and the docs site carry it verbatim.
     # It stays one line that points at the install guide, which the docs site publishes as is.
@@ -508,6 +632,22 @@ def main():
     tpl = (HERE.parent / "assets" / "template.html").read_text()
     check(".todo li{counter-increment:t;display:grid;grid-template-columns:28px minmax(0,1fr)" in tpl,
           "template: the Fix first rows can shrink, so a long fix command scrolls instead of being clipped")
+    check(".row{display:grid;grid-template-columns:104px 260px minmax(0,1fr);" in tpl and ".row{grid-template-columns:minmax(0,1fr);" in tpl
+          and ".fix code{flex:1;min-width:0;" in tpl,
+          "template: a section row's detail column can shrink, so a long fix scrolls inside its box and Copy stays visible")
+    fx = hm.fix_html("/plugin enable a@b, then /plugin uninstall c@d; in the setup PR/MR, rename the key")
+    check(fx.count('<div class="fix"><code>') == 2 and "<code>/plugin enable a@b</code>" in fx and "<code>/plugin uninstall c@d</code>" in fx
+          and '<div class="hint">in the setup PR/MR, rename the key</div>' in fx,
+          "fix_html: each command is its own copyable line and prose after '; ' is a hint, never inside the $ block")
+    with tempfile.TemporaryDirectory() as tmp:
+        bak = Path(tmp) / "b"
+        bak.write_text(json.dumps({"env": {"API_TOKEN": "x"}, "mcpServers": {"s": {"env": {"MCP_TOKEN": "x"}}}}))
+        check(hm.backup_holds(bak, "API_TOKEN") and not hm.backup_holds(bak, "MCP_TOKEN") and hm.backup_holds(bak, "MCP_TOKEN", mcp=True)
+              and not hm.backup_holds(bak, "API_TOKEN", mcp=True), "backup_holds: settings keys in env, MCP keys only in mcpServers.*.env")
+    check(hm.fix_html("remove X from y; rotate it") == '<div class="hint">remove X from y; rotate it</div>', "fix_html: a prose fix stays one hint")
+    check(re.search(r"\.card>\.hd h2\{[^}]*white-space:nowrap;flex-shrink:0", tpl) is not None
+          and re.search(r"\.card>\.hd \.desc\{[^}]*min-width:0", tpl) is not None,
+          "template: a card title never wraps (the long description shrinks instead), at every width")
 
     prompt_text = hm.setup_prompt()
     check("which branch PRs go into" in prompt_text and "never assume dev or main" in prompt_text and "staging, prod" in prompt_text,
@@ -645,6 +785,45 @@ def main():
               "merged but not pulled: AGENTS.md and the registry say on origin/main, pull to get it")
         check(merged["Integration branch"]["status"] == "ok" and "Secrets gitignored" not in merged,
               "merged but not pulled: the registry is read as origin/main has it")
+
+    # Mid-setup: the legacy plugin is uninstalled and the enabledPlugins key rename sits in the open setup PR. The stale
+    # key row is pending (merge it), not a gap, and nothing says the gates run twice.
+    with tempfile.TemporaryDirectory() as tmp:
+        git, project = gitrepo(tmp)
+        bin_ = Path(tmp) / "bin"
+        settings_rel = project / ".claude" / "settings.json"
+        settings_rel.parent.mkdir()
+        settings_rel.write_text(json.dumps({"enabledPlugins": {"agent-skills@quocld": True}}))
+        git("-C", str(project), "add", ".claude")
+        git("-C", str(project), "commit", "-q", "-m", "old key")
+        git("-C", str(project), "push", "-q", "origin", "HEAD:main")
+        git("-C", str(project), "switch", "-q", "-c", "chore/setup")
+        settings_rel.write_text(json.dumps({"enabledPlugins": {"hephaestus@quocld": True}}))
+        git("-C", str(project), "commit", "-q", "-am", "rename key")
+        git("-C", str(project), "push", "-q", "origin", "chore/setup")
+        git("-C", str(project), "switch", "-q", "main")
+        home_claude = Path(tmp) / "home" / ".claude"
+        (home_claude / "plugins").mkdir(parents=True)
+        (home_claude / "plugins" / "installed_plugins.json").write_text(json.dumps(
+            {"plugins": {"hephaestus@quocld": [{"scope": "user", "installPath": str(HERE.parents[2])}]}}))
+        (home_claude / "settings.json").write_text(json.dumps({"enabledPlugins": {"hephaestus@quocld": True}}))
+        saved_claude = hm.CLAUDE
+        hm.CLAUDE = home_claude
+        try:
+            hm.set_plugin(project)
+            stale = lambda probe=False: next((c for c in hm.collect_global(project, hm.Refs(project, probe))
+                                              if c["title"] == "Stale enabledPlugins key agent-skills@quocld"), {})
+            check(hm.PLUGIN_ID == "hephaestus@quocld" and stale().get("status") == "warn",
+                  "stale legacy key without a PR gh confirms: a warn row, the current id runs")
+            pr = [{"number": 7, "url": "https://example.test/pr/7", "headRefName": "chore/setup", "files": [{"path": ".claude/settings.json"}]}]
+            in_pr = with_gh(bin_, pr, lambda: stale(probe=True))
+            check(in_pr.get("status") == "pending" and "PR #7" in in_pr.get("detail", ""),
+                  "stale legacy key renamed in the open setup PR: pending, not a gap")
+            check(not any("runs twice" in c["detail"] for c in hm.collect_hooks(False, project)),
+                  "stale legacy key: no gate counted as running twice")
+        finally:
+            hm.CLAUDE = saved_claude
+            hm.set_plugin(None)
 
     # The merge target is not guessed from the missing registry: a stale origin/dev, or no origin/HEAD at all, still
     # finds the copy merged on origin/main, with gh and without.
