@@ -477,9 +477,61 @@ def collect_hygiene():
 
 
 def integration_branch(registry):
-    """(<int>, True when the registry names it): the dev environment's branch, else dev (worktree-flow section 0)."""
-    named = env_map(registry).get("dev", {}).get("branch") if isinstance(registry, dict) else None
-    return (named, True) if named else ("dev", False)
+    """(<int>, how) per worktree-flow section 0: how is "recorded" (the registry's integrationBranch), "legacy" (the
+    dev environment's branch, honoured but not recorded explicitly), or None with <int> None: nothing is recorded,
+    and no branch is assumed, not dev and not main. An integrationBranch that is not a non-blank string is "invalid":
+    nothing is used, the same rule as feature-status's resolve_int."""
+    if not isinstance(registry, dict):
+        return None, None
+    named = registry.get("integrationBranch")
+    if named is not None:
+        return (named.strip(), "recorded") if isinstance(named, str) and named.strip() else (None, "invalid")
+    legacy = env_map(registry).get("dev", {}).get("branch", "").strip()
+    return (legacy, "legacy") if legacy else (None, None)
+
+
+def integration_guess(project):
+    """The draft answer shown when asking which branch PRs go into: origin/dev if fetched, else the remote default."""
+    refs = run(["git", "-C", str(project), "branch", "-r", "--format=%(refname:short)"])[1].split()
+    if "origin/dev" in refs:
+        return "dev"
+    code, head, _ = run(["git", "-C", str(project), "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])
+    return head.strip().split("/", 1)[-1] if code == 0 and head.strip() else None
+
+
+def integration_check(p, registry, probe=False, deep=False):
+    """The Integration branch row: ok only when integrationBranch is recorded and origin has it; a legacy dev
+    environment branch or nothing recorded is missing (core), with the likely answer shown for the question."""
+    sec = "Project"
+    cand, how = integration_branch(registry)
+    record = "record it as integrationBranch in .agents/environments.json: project-init asks which branch PRs go into"
+    if how == "invalid":
+        return check(sec, "Integration branch", "fail", "integrationBranch in .agents/environments.json is not a branch name",
+                     "set integrationBranch to the branch the user chose, as a string")
+    if not cand:
+        guess = integration_guess(p)
+        return check(sec, "Integration branch", "missing", "not recorded; worktree-flow stops and asks which branch PRs go into"
+                     + (f" (likely {guess}: origin/{guess} exists)" if guess else ""), record)
+    if run(["git", "-C", str(p), "remote", "get-url", "origin"])[0] != 0:
+        code, where = 2, "(the repo has no origin remote)"
+    elif deep and probe:   # the remote itself, as worktree-flow section 0 asks; otherwise the fetched refs
+        code = run(["git", "-C", str(p), "ls-remote", "--exit-code", "--heads", "origin", f"refs/heads/{cand}"],
+                   timeout=20, env=git_batch_env())[0]
+        where = "on origin"
+    else:
+        so = run(["git", "-C", str(p), "branch", "-r", "--format=%(refname:short)"])[1]
+        code, where = (0 if f"origin/{cand}" in so.split() else 2), "in fetched refs"
+    if code not in (0, 2):
+        return check(sec, "Integration branch", "fail", f"git ls-remote origin exits {code}: origin is unreachable or needs a login",
+                     "! gh auth login (GitHub) or ! glab auth login (GitLab), then rerun")
+    found = f"origin/{cand} exists" if code == 0 else f"origin/{cand} not found {where}"
+    if how == "legacy":
+        return check(sec, "Integration branch", "missing",
+                     f"not recorded explicitly: {cand} is only the dev environment's branch (legacy); {found}", record)
+    if code == 0:
+        return check(sec, "Integration branch", "ok", f"{cand}, recorded as integrationBranch; {found}")
+    return check(sec, "Integration branch", "missing", f"integrationBranch is {cand}, but {found}; worktree-flow will stop and ask where PRs go",
+                 "push that branch, or correct integrationBranch in .agents/environments.json with the user's answer")
 
 
 def collect_project(project, probe=False, deep=False):
@@ -518,6 +570,9 @@ def collect_project(project, probe=False, deep=False):
             names = list(env_map(registry))
             if names:
                 out.append(check(sec, "Environment registry", "ok", "environments: " + ", ".join(names)))
+            elif isinstance(registry, dict) and registry.get("environments") == {}:   # valid: only project facts such as integrationBranch so far
+                out.append(check(sec, "Environment registry", "missing", "no environment recorded yet; deploy/SSH skills will ask every time",
+                                 "run the environments skill (create section), which asks which environments exist"))
             else:
                 out.append(check(sec, "Environment registry", "fail", "no environment object found under `environments`; the registry shape is invalid",
                                  "fix it per the environments skill's schema (templates/environments.schema.json)"))
@@ -535,26 +590,7 @@ def collect_project(project, probe=False, deep=False):
     if todos:
         out.append(check(sec, "Open TODO(owner)", "warn", ", ".join(todos), "answer them and re-run project-init"))
 
-    cand, named = integration_branch(registry)
-    has_origin = run(["git", "-C", str(p), "remote", "get-url", "origin"])[0] == 0
-    if not has_origin:
-        code, where = 2, "(the repo has no origin remote)"
-    elif deep and probe:   # the remote itself, as worktree-flow section 0 asks; otherwise the fetched refs
-        code = run(["git", "-C", str(p), "ls-remote", "--exit-code", "--heads", "origin", f"refs/heads/{cand}"],
-                   timeout=20, env=git_batch_env())[0]
-        where = "on origin"
-    else:
-        so = run(["git", "-C", str(p), "branch", "-r", "--format=%(refname:short)"])[1]
-        code, where = (0 if f"origin/{cand}" in so.split() else 2), "in fetched refs"
-    if code == 0:
-        out.append(check(sec, "Integration branch", "ok", f"origin/{cand} exists" + ("" if named else " (default dev)")))
-    elif code == 2:
-        out.append(check(sec, "Integration branch", "missing",
-                         f"origin/{cand} not found {where}; worktree-flow will stop and ask where PRs go",
-                         "project-init asks which branch PRs go into and records it (the dev environment's branch in .agents/environments.json)"))
-    else:
-        out.append(check(sec, "Integration branch", "fail", f"git ls-remote origin exits {code}: origin is unreachable or needs a login",
-                         "! gh auth login (GitHub) or ! glab auth login (GitLab), then rerun"))
+    out.append(integration_check(p, registry, probe, deep))
 
     _, url, _ = run(["git", "-C", str(p), "remote", "get-url", "origin"])
     if strip_userinfo(url.strip())[1]:
@@ -607,66 +643,206 @@ def env_map(registry):
     return {}
 
 
+def secrets_file(project):
+    """The project's .agents/secrets.env, else its main checkout's: a worktree links it from there (worktree-flow)."""
+    if not project:
+        return None
+    own = Path(project) / ".agents" / "secrets.env"
+    if own.exists():
+        return own
+    code, so, _ = run(["git", "-C", str(project), "rev-parse", "--path-format=absolute", "--git-common-dir"])
+    main_ = Path(so.strip()).parent / ".agents" / "secrets.env" if code == 0 and so.strip() else None
+    return main_ if main_ and main_.exists() else own
+
+
+def shell_value_set(raw):
+    """Whether the text after NAME= gives a non-empty value when the shell sources it (set -a; . file), without
+    running the file: a value is one word, quoted or not; whitespace right after = leaves it empty (what follows is a
+    comment or another word), and # inside an unquoted word is part of the value (NAME=#abc is "#abc")."""
+    if not raw or raw[0] in " \t":
+        return False
+    if raw[0] in "\"'":
+        end = raw.find(raw[0], 1)
+        return (end if end != -1 else len(raw)) > 1
+    return True
+
+
 def secret_names(project):
-    """Names (never values) defined in .agents/secrets.env."""
-    f = Path(project) / ".agents" / "secrets.env"
-    if not f.exists():
-        return set()
-    return {ln.split("=", 1)[0].removeprefix("export ").strip() for ln in f.read_text().splitlines()
-            if "=" in ln and not ln.lstrip().startswith("#")}
+    """Name -> whether .agents/secrets.env gives it a value; the value itself is never kept.
+    An empty value (NAME=, NAME="", NAME="" # fill me, NAME= # fill me) is a line the user has not filled yet."""
+    f = secrets_file(project)
+    out = {}
+    if not (f and f.exists()):
+        return out
+    for ln in f.read_text(errors="ignore").splitlines():
+        m = re.match(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$", ln)
+        if m:
+            out[m.group(1)] = shell_value_set(m.group(2))   # the last line wins, as in the shell
+    return out
 
 
 def secrets_use_op(project):
     """Whether .agents/secrets.env holds an op:// reference; only that text is looked for, no value is kept."""
-    f = Path(project) / ".agents" / "secrets.env" if project else None
+    f = secrets_file(project)
     return bool(f and f.exists() and "op://" in f.read_text(errors="ignore"))
 
 
 def secret_state(ref, known):
-    """(label, status) for a secret reference; the value is never read or shown."""
+    """(label, status) for a secret reference; the value is never read or shown. known is secret_names()."""
     ref = _str(ref.get("secret")) if isinstance(ref, dict) else _str(ref)
     if ref.startswith("env:"):
         name = ref[4:]
-        return f"env:{name}", "ok" if name in os.environ or name in known else "missing"
+        return f"env:{name}", "ok" if os.environ.get(name) or known.get(name) else "missing"
     if ref.startswith("op://"):
         return "1Password", "info"
     # Anything else is a value written into the registry itself: say so, never show it.
     return ("literal value (not shown)", "fail") if ref else ("no secret", "missing")
 
 
+def secret_note(label, status, known):
+    """Why a secret reference is (not) usable, in words, without its value."""
+    if status == "ok":
+        return "set"
+    if status == "info":
+        return "op:// reference, resolved by op when used"
+    if status == "fail":
+        return "a value written into the registry"
+    name = label[4:] if label.startswith("env:") else ""
+    if name in known:
+        return "empty in .agents/secrets.env: fill it there"
+    return "not in .agents/secrets.env or the shell" if name else "no reference"
+
+
+DEV_NAMES = {"dev", "local", "development"}
+STAGING_NAMES = {"staging", "stage"}
+# The environments every project is asked about (environments section 10): slot, names that fill it, default policy.
+STANDARD_ENVS = [("dev", DEV_NAMES, "autonomous"), ("staging", STAGING_NAMES, "confirm-writes"), ("prod", PROD_NAMES, "confirm-each-step")]
+ENV_FIX = "run the environments skill (create section): it asks for what is missing and records it in .agents/environments.json"
+
+
+def is_prod(name, e):
+    """Named prod, or deployed from main/master under a name that is not a dev or staging one (a local env on main is
+    not prod). standard_slots fills the prod slot with the same rule, so a card is never both prod and missing."""
+    n = name.lower()
+    return n in PROD_NAMES or (e.get("branch") in ("main", "master") and n not in DEV_NAMES | STAGING_NAMES)
+
+
+def needed_commands(e, s_):
+    """The commands a service needs: deploy and verify always; rollback and version where code is deployed remotely."""
+    remote = s_.get("type") != "local" and e.get("policy") != "autonomous"
+    return ("deploy", "verify", "rollback", "version") if remote else ("deploy", "verify")
+
+
+def secret_refs(e):
+    """(where, reference) for every secret an environment names: account passwords and MFA, secret-like access keys."""
+    refs = [(f'{a.get("role", "?")} {k}', a.get(k)) for a in e.get("accounts", []) for k in ("password", "mfa") if a.get(k)]
+    refs += [(f'{s_.get("name", "?")} {k}', v if isinstance(v, dict) else {"secret": "literal"})
+             for s_ in e.get("services", []) for k, v in s_.get("access", {}).items()
+             if (isinstance(v, dict) and "secret" in v)
+             or (isinstance(v, str) and (k == "dbUrl" or SECRET_KEY.search(k) or strip_userinfo(v)[1]))]
+    return refs
+
+
+def item(key, label, status, value="", parts=None):
+    return {"key": key, "label": label, "status": status, "value": value, "parts": parts or []}
+
+
+def env_items(name, e, known):
+    """The checklist of one recorded environment: what it should have and whether it does (secret names only)."""
+    prod = is_prod(name, e)
+    policy = e.get("policy", "")
+    url = e.get("url", "")
+    out = [item("url", "URL", "fail" if e.get("_url_credential") else "ok" if url else "missing",
+                (url + " (holds a user:password, not shown)") if e.get("_url_credential") else url or "not recorded"),
+           item("branch", "Branch", "ok" if e.get("branch") else "missing", e.get("branch") or "not recorded")]
+    if prod and policy != "confirm-each-step":
+        out.append(item("policy", "Policy", "fail", f"{policy or 'unset'}; prod must be confirm-each-step"))
+    else:
+        out.append(item("policy", "Policy", "ok" if policy in POLICY else "missing", policy or "not recorded"))
+    services = e.get("services", [])
+    for s_ in services:
+        need = needed_commands(e, s_)
+        parts = [(k, bool(s_.get(k))) for k in need]
+        out.append(item("service", s_.get("name", "?"), "ok" if all(v for _, v in parts) else "missing", s_.get("type", "?"), parts))
+    if not services:
+        out.append(item("service", "Services", "missing", "none recorded: deploy, verify, rollback and version commands"))
+    accs = e.get("accounts", [])
+    scope = e.get("testing", {}).get("scope", "")
+    # Smoke-only or no testing needs a login only when the app has one; the registry cannot tell, so it is not required.
+    out.append(item("accounts", "Test accounts", "ok" if accs else "info" if scope in ("none", "smoke-only") else "missing",
+                    ", ".join(f'{a.get("role", "?")} {a.get("login", "")}'.strip() for a in accs)
+                    or (f"none recorded; {scope} testing needs one only if the app has a login" if scope in ("none", "smoke-only")
+                        else "none recorded")))
+    for where, ref in secret_refs(e):
+        lab, st = secret_state(ref, known)
+        out.append(item("secret", lab, st, f"{where}: {secret_note(lab, st, known)}"))
+    return out
+
+
+def absent_slots(registry):
+    """Standard environments the user said this project does not have (absentEnvironments), so nothing asks for them."""
+    absent = registry.get("absentEnvironments") if isinstance(registry, dict) else None
+    return {x for x in _strs(absent) if x in {slot for slot, _, _ in STANDARD_ENVS}}
+
+
+def standard_slots(envs):
+    """slot -> the recorded environment name that fills it, or None; prod also takes the first environment is_prod picks."""
+    out = {slot: next((n for n in envs if n.lower() in names), None) for slot, names, _ in STANDARD_ENVS}
+    if not out["prod"]:
+        out["prod"] = next((n for n, e in envs.items() if n not in out.values() and is_prod(n, e)), None)
+    return out
+
+
 def env_checks(registry, project):
-    """Registry rules worth flagging: prod without step-by-step policy, no version command, unresolved secrets."""
+    """Registry gaps as check rows: prod policy and literal secrets are core; every other environment gap is optional."""
     out, known = [], secret_names(project)
-    for name, e in env_map(registry).items():
-        policy = e.get("policy", "")
-        if (name.lower() in PROD_NAMES or e.get("branch") in ("main", "master")) and policy != "confirm-each-step" and name != "dev":
-            out.append(check("Project", f"{name}: policy", "fail", f"policy is '{policy or 'unset'}'; prod must be confirm-each-step",
+    envs = env_map(registry)
+    for name, e in envs.items():
+        items = env_items(name, e, known)
+        miss = lambda key: [i for i in items if i["key"] == key and i["status"] == "missing"]
+        opt = lambda title, status, detail, fix=ENV_FIX: out.append(check("Project", f"{name}: {title}", status, detail, fix, group="env"))
+        policy = next(i for i in items if i["key"] == "policy")
+        if policy["status"] == "fail":
+            out.append(check("Project", f"{name}: policy", "fail", f"policy is '{e.get('policy') or 'unset'}'; prod must be confirm-each-step",
                              "set policy to confirm-each-step in .agents/environments.json"))
+        elif policy["status"] == "missing":
+            opt("policy", "missing", "no policy recorded; autonomous, confirm-writes or confirm-each-step")
+        for key, title in (("url", "URL"), ("branch", "branch"), ("accounts", "test accounts")):
+            if miss(key):
+                opt(title, "missing", f"no {title} recorded for {name}")
+        cmds = [f'{i["label"]} has no {", ".join(k for k, ok in i["parts"] if not ok and k != "version")}' for i in miss("service")
+                if any(not ok and k != "version" for k, ok in i["parts"])]
+        if cmds or (miss("service") and not e.get("services")):
+            opt("commands", "missing", "; ".join(cmds) or "no service recorded")
         # Version status matters where code is deployed; an autonomous (local dev) environment runs the working tree.
-        remote = [s_ for s_ in e.get("services", []) if s_.get("type") != "local" and policy != "autonomous"]
-        if remote and not all(s_.get("version") for s_ in remote):
-            miss = ", ".join(s_.get("name", "?") for s_ in remote if not s_.get("version"))
-            out.append(check("Project", f"{name}: version command", "warn", f"no version command for {miss}; what runs there is unknown",
-                             "add the version endpoint per the environments skill (references/version-endpoint.md)"))
+        nover = [i["label"] for i in items if i["key"] == "service" and ("version", False) in i["parts"]]
+        if nover:
+            opt("version command", "warn", f"no version command for {', '.join(nover)}; what runs there is unknown",
+                "add the version endpoint per the environments skill (references/version-endpoint.md)")
         old = [s_.get("name", "?") for s_ in e.get("services", []) if isinstance(s_.get("logs"), str)]
         if old:
-            out.append(check("Project", f"{name}: logs field", "warn", f"{', '.join(old)} still use the old string `logs`; it is now `logsCommand`, and `logs` names a Better Stack source",
-                             "rename logs to logsCommand in .agents/environments.json (environments skill)"))
-        refs = [a.get(k) for a in e.get("accounts", []) for k in ("password", "mfa")] + \
-               [v if isinstance(v, dict) else {"secret": "literal"}
-                for s_ in e.get("services", []) for k, v in s_.get("access", {}).items()
-                if (isinstance(v, dict) and "secret" in v)
-                or (isinstance(v, str) and (k == "dbUrl" or SECRET_KEY.search(k) or strip_userinfo(v)[1]))]
-        states = [secret_state(r, known) for r in refs if r]
-        literal = sum(1 for _, st in states if st == "fail") + (1 if e.get("_url_credential") else 0)
+            opt("logs field", "warn", f"{', '.join(old)} still use the old string `logs`; it is now `logsCommand`, and `logs` names a Better Stack source",
+                "rename logs to logsCommand in .agents/environments.json (environments skill)")
+        literal = sum(1 for i in items if i["key"] == "secret" and i["status"] == "fail") + (1 if e.get("_url_credential") else 0)
         if literal:
             out.append(check("Project", f"{name}: literal secrets", "fail",
                              f"{literal} secret value(s) written into .agents/environments.json (values not shown)",
                              "replace each with an env:NAME or op:// reference, rotate the value, and keep it in .agents/secrets.env"))
-        unresolved = [lab for lab, st in states if st == "missing"]
+        unresolved = [i for i in items if i["key"] == "secret" and i["status"] == "missing"]
         if unresolved:
-            out.append(check("Project", f"{name}: secrets", "warn", "not set in the shell or .agents/secrets.env: " + ", ".join(unresolved),
-                             "add them to .agents/secrets.env (gitignored); never commit values"))
+            filed = lambda i: i["label"].startswith("env:") and i["label"][4:] in known
+            empty = [i["label"] for i in unresolved if filed(i)]
+            absent = [i["label"] for i in unresolved if not filed(i)]
+            opt("secrets", "missing", "; ".join(x for x in (("empty in .agents/secrets.env: " + ", ".join(empty)) if empty else "",
+                                                             ("not in .agents/secrets.env or the shell: " + ", ".join(absent)) if absent else "") if x),
+                "fill them in .agents/secrets.env (gitignored, in the main checkout) yourself, values or op:// references; never paste them in chat")
+    if envs:
+        settled = absent_slots(registry)
+        absent = [slot for slot, have in standard_slots(envs).items() if not have and slot not in settled]
+        if absent:
+            out.append(check("Project", "Standard environments", "missing",
+                             "not in the registry: " + ", ".join(absent) + " (the page shows what each needs)",
+                             ENV_FIX + "; one the project does not have goes in absentEnvironments", group="env"))
     return out
 
 
@@ -698,6 +874,104 @@ def inline_code(text):
     return re.sub(r"`([^`]+)`", r'<code>\1</code>', esc(text))
 
 
+MARK = {
+    "ok": '<path d="M5 8.2l2 2L11 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+    "missing": '<path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    "fail": '<path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.2" r="1" fill="currentColor"/>',
+    "info": '<circle cx="8" cy="8" r="1.6" fill="currentColor"/>',
+}
+MARK["warn"] = MARK["fail"]
+MARK_WORD = {"ok": "done", "missing": "missing", "fail": "wrong", "warn": "attention", "info": "not checked"}
+
+
+def mark(status, size=16):
+    st = status if status in MARK else "info"
+    return (f'<svg class="mk {st}" width="{size}" height="{size}" viewBox="0 0 16 16" role="img" aria-label="{MARK_WORD[st]}">'
+            f'<title>{MARK_WORD[st]}</title>{MARK[st]}</svg>')
+
+
+def checklist(items):
+    """One row per expected item: a done or missing mark, the item, and what is recorded (secret names only)."""
+    rows = []
+    for i in items:
+        if i["parts"]:
+            val = "".join(f'<span class="part {"ok" if ok else "missing"}">{mark("ok" if ok else "missing", 12)}{esc(k)}</span>'
+                          for k, ok in i["parts"])
+            label = f'{esc(i["label"])}<span class="chip">{esc(i["value"])}</span>'
+        else:
+            val = esc(i["value"])
+            label = esc(i["label"])
+        cn = " mono" if i["key"] == "secret" else ""
+        cv = " mono" if i["key"] in ("branch", "url") and i["status"] != "missing" else ""
+        rows.append(f'<li class="ci" data-s="{i["status"]}">{mark(i["status"])}<span class="cn{cn}">{label}</span>'
+                    f'<span class="cv{cv}">{val}</span></li>')
+    return f'<ul class="cl">{"".join(rows)}</ul>'
+
+
+def progress(items):
+    scored = [i for i in items if i["status"] != "info"]
+    ok = sum(1 for i in scored if i["status"] == "ok")
+    bad = len(scored) - ok
+    wrong = sum(1 for i in scored if i["status"] in ("fail", "warn"))
+    st = "ok" if not bad else "fail" if wrong else "missing"
+    seg = lambda n, cls: f'<i class="{cls}" style="flex:{n}"></i>' if n else ""
+    word = ", ".join(x for x in (f"{bad - wrong} missing" if bad - wrong else "", f"{wrong} wrong" if wrong else "") if x)
+    return (f'<div class="eprog" data-s="{st}"><span class="tbar">{seg(ok, "ok")}{seg(bad, "bad")}</span>'
+            f'<span class="tc">{ok}/{len(scored)}</span><span class="ew">{word or "ready"}</span></div>')
+
+
+GHOST_NEEDS = {
+    "dev": ["URL, e.g. http://localhost:3000", "Branch it runs from", "Policy autonomous", "Each service with deploy and verify commands",
+            "Test accounts, passwords as env: or op:// references"],
+    "staging": ["URL", "Branch it deploys from", "Policy confirm-writes", "Each service with deploy, verify, rollback and version commands",
+                "Test accounts, passwords as env: or op:// references"],
+    "prod": ["URL", "Branch it deploys from", "Policy confirm-each-step", "Each service with deploy, verify, rollback and version commands",
+             "A read-only smoke account if the app has a login, password as an op:// reference"],
+}
+
+
+def ghost_card(slot, policy):
+    st, word = POLICY[policy]
+    rows = "".join(f'<li class="ci" data-s="missing">{mark("missing")}<span class="cn">{esc(x)}</span></li>' for x in GHOST_NEEDS[slot])
+    return (f'<div class="env ghost" data-slot="{slot}"><div class="eh"><b>{slot}</b><span class="sp"></span>'
+            f'<span class="pill skip">Not in registry</span></div>'
+            f'<p class="ed">Not recorded yet. If this project has a {slot} environment, it needs:</p>'
+            f'<ul class="cl">{rows}</ul><div class="lbl3">Default policy</div><div><span class="pill {st}">{esc(word)}</span></div>'
+            f'<div class="gfix"><span>Run the environments skill (create section). No {slot} in this project? '
+            f'Record it in <code>absentEnvironments</code> and this card goes quiet.</span></div></div>')
+
+
+def absent_card(slot):
+    return (f'<div class="env ghost quiet" data-slot="{slot}"><div class="eh"><b>{slot}</b><span class="sp"></span>'
+            f'<span class="pill skip">Not used</span></div>'
+            f'<p class="ed">This project has no {slot} environment (<code>absentEnvironments</code> in .agents/environments.json).</p></div>')
+
+
+IB_TEXT = {"ok": "Recorded", "warn": "Check", "missing": "Not recorded", "fail": "Unreachable"}
+
+
+def integration_banner(project, registry):
+    """The branch every PR goes into, as recorded (worktree-flow section 0), legacy, or not recorded yet."""
+    c = integration_check(project, registry)
+    cand, how = integration_branch(registry)
+    if cand and how == "recorded" and c["status"] != "ok":
+        word, st = "Recorded, not on origin", "warn"
+    elif how == "legacy":
+        word, st = "Legacy: not recorded", "missing"
+    elif how == "invalid":
+        word, st = "Invalid", "fail"
+    else:
+        word, st = IB_TEXT.get(c["status"], c["status"]), c["status"]
+    guess = None if cand or how == "invalid" else integration_guess(project)
+    # Nothing recorded: the box shows the drafted answer to the question, not the pill's words again.
+    shown = (f'<code class="ibb">{esc(cand)}</code>' if cand else
+             f'<span class="ibb none" title="likely answer, not recorded">{esc(guess)}?</span>' if guess else
+             '<span class="ibb none" title="asked on the next run">?</span>')
+    return (f'<div class="ib" data-s="{st}">{mark(st, 22)}<div class="ibm"><div class="ibl">Integration branch '
+            f'<span class="pill {"ok" if st == "ok" else "warn" if st == "warn" else "fail"}">{esc(word)}</span></div>'
+            f'<div class="ibv">{shown}<span class="ibd">{esc(c["detail"] if cand else c["detail"].replace("not recorded; ", "", 1))}</span></div>{fix_html(c["fix"]) if st != "ok" else ""}</div></div>')
+
+
 def env_panel(project, registry):
     if not project:
         return ""
@@ -713,65 +987,66 @@ def env_panel(project, registry):
             ("Feature status", feature_status_fact(project))]
     facts = project_facts(project)
     kv = "".join(f'<div class="kv"><span>{esc(k)}</span><b>{inline_code(v)}</b></div>' for k, v in head + facts)
-    block = (kv if facts else kv + '<div class="kvempty">No project-init block yet: integration branch, tracker, commands, '
+    block = (kv if facts else kv + '<div class="kvempty">No project-init block yet: tracker, commands, '
              'sources of truth and E2E setup will show here. <code>run the project-init skill</code></div>')
 
     envs = env_map(registry)
+    slots = standard_slots(envs)
+    cards_, ready, total = [], 0, 0
+    default = registry.get("defaultEnvironment") if isinstance(registry, dict) else None
+    # Standard environments first, in dev, staging, prod order, then every other recorded one.
+    order = [slots[s] for s, _, _ in STANDARD_ENVS if slots[s]] + [n for n in envs if n not in slots.values()]
+    settled = absent_slots(registry)
+    for idx, (slot, _names, policy) in enumerate(STANDARD_ENVS):
+        if not slots[slot]:
+            cards_.append((idx, absent_card(slot) if slot in settled else ghost_card(slot, policy)))
+    for pos, name in enumerate(order):
+        e = envs[name]
+        items = env_items(name, e, known)
+        total += 1
+        ready += all(i["status"] in ("ok", "info") for i in items)
+        st, word = POLICY.get(e.get("policy", ""), ("skip", e.get("policy") or "no policy"))
+        url = e.get("url", "")
+        link = (f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(url)}</a>' if url.startswith("http")
+                else f'<span class="none">{esc(url or "no URL")}</span>')
+        data = e.get("data", {})
+        testing = e.get("testing", {})
+        rules = e.get("rules", []) + testing.get("rules", [])
+        meta = [("Testing", esc(testing.get("scope", "not set"))),
+                ("Test data", ("allowed, marker " + f'<code>{esc(data.get("testDataMarker", "none"))}</code>') if data.get("testDataAllowed") else "not allowed")]
+        if e.get("deployOrder"):
+            meta.append(("Deploy order", " -> ".join(esc(x) for x in e["deployOrder"])))
+        logs = [f'{esc(s_.get("name", "?"))}: {esc(s_["logs"].get("source", "?"))} ({esc(s_["logs"].get("shipping", "?"))})'
+                for s_ in e.get("services", []) if isinstance(s_.get("logs"), dict)]
+        if logs:
+            meta.append(("Logs", ", ".join(logs)))
+        slot = next((s for s, n in slots.items() if n == name), None)
+        rank = [s for s, _, _ in STANDARD_ENVS].index(slot) if slot else len(STANDARD_ENVS) + pos
+        cards_.append((rank,
+            f'<div class="env" data-p="{st}"><div class="eh"><b>{esc(name)}</b>'
+            + (f'<span class="chip" title="fills the standard {slot} slot">{slot}</span>' if slot and slot != name.lower() else "")
+            + f'{"<span class=chip>default</span>" if name == default else ""}'
+            f'<span class="sp"></span><span class="pill {st}">{esc(word)}</span></div>'
+            f'<div class="eu">{link}</div>' + (f'<p class="ed">{esc(e["description"])}</p>' if e.get("description") else "")
+            + progress(items) + '<div class="lbl3">Checklist</div>' + checklist(items)
+            + "".join(f'<div class="kv"><span>{k}</span><b>{v}</b></div>' for k, v in meta)
+            + (f'<div class="lbl3">Rules</div><ul class="rules">{"".join(f"<li>{esc(r)}</li>" for r in rules)}</ul>' if rules else "")
+            + '</div>'))
+    cards_.sort(key=lambda x: x[0])
+    absent = [s for s, n in slots.items() if not n and s not in settled]
+    summary = (f'{ready} of {total} recorded environment{"s" if total != 1 else ""} complete'
+               + (f'; not in the registry: {", ".join(absent)}' if absent else "")) if envs else \
+        "No environment recorded yet: dev, staging and prod below are what the environments skill will ask for"
+    envhtml = (f'<div class="envhd"><span class="lbl3">Environments</span><span class="es">{esc(summary)}</span></div>'
+               f'<div class="envs">{"".join(c for _, c in cards_)}</div>')
     if not envs:
-        ghost = "".join(f'<div class="env ghost"><div class="eh"><b>{n}</b><span class="pill skip">{p_}</span></div>'
-                        f'<div class="gl"></div><div class="gl s"></div><div class="gl"></div><div class="gl s"></div></div>'
-                        for n, p_ in (("dev", "Autonomous"), ("staging", "Confirm writes"), ("prod", "Confirm each step")))
-        envhtml = (f'<div class="envempty"><div class="envs">{ghost}</div><div class="eo"><b>No environment registry yet</b>'
-                   '<p>Each environment will show its URL, branch, policy, services with deploy, verify, rollback and version commands, '
-                   'test accounts (secret references only) and rules. Deploy, SSH and test-account skills ask every time until it exists.</p>'
-                   '<code>run the environments skill (create section) -> .agents/environments.json</code></div></div>')
-    else:
-        cards_ = []
-        default = registry.get("defaultEnvironment")
-        for name, e in envs.items():
-            st, word = POLICY.get(e.get("policy", ""), ("skip", e.get("policy", "no policy")))
-            url = e.get("url", "")
-            link = f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(url)}</a>' if url.startswith("http") else esc(url or "no URL")
-            svc = []
-            for s_ in e.get("services", []):
-                acc = s_.get("access", {})
-                where = acc.get("ssh") or acc.get("vercelProjectId") or acc.get("supabaseProjectRef") or acc.get("composeProject") or ""
-                lg = s_.get("logs")
-                logs = (f'<span class="chip acc">logs: {esc(lg.get("source", "?"))} ({esc(lg.get("shipping", "?"))})</span>' if isinstance(lg, dict) else "") + \
-                       ('<span class="chip">logsCommand</span>' if s_.get("logsCommand") or isinstance(lg, str) else "")
-                flags = logs + "".join(f'<span class="chip {"" if s_.get(k) else "warn"}">{k}{"" if s_.get(k) else " missing"}</span>'
-                                for k in ("deploy", "verify", "rollback", "version")
-                                if (s_.get("type") != "local" and e.get("policy") != "autonomous") or k in ("deploy", "verify"))
-                runtime = f'<div class="sr">{esc(s_["runtime"])}</div>' if s_.get("runtime") else ""
-                place = f'<span class="mono">{esc(where)}</span>' if where else ""
-                svc.append(f'<li><div class="sn"><b>{esc(s_.get("name", "?"))}</b><span class="chip">{esc(s_.get("type", "?"))}</span>'
-                           f'{place}</div>{runtime}<div class="chips">{flags}</div></li>')
-            accs = []
-            for a in e.get("accounts", []):
-                lab, sst = secret_state(a.get("password"), known)
-                accs.append(f'<li><span class="chip acc">{esc(a.get("role", "?"))}</span><span class="mono">{esc(a.get("login", ""))}</span>'
-                            f'<span class="pill {sst}">{esc(lab)}{" set" if sst == "ok" else " missing" if sst == "missing" else ""}</span></li>')
-            data = e.get("data", {})
-            testing = e.get("testing", {})
-            rules = e.get("rules", []) + testing.get("rules", [])
-            meta = [("Branch", f'<code>{esc(e.get("branch", "?"))}</code>'),
-                    ("Testing", esc(testing.get("scope", "not set"))),
-                    ("Test data", ("allowed, marker " + f'<code>{esc(data.get("testDataMarker", "none"))}</code>') if data.get("testDataAllowed") else "not allowed")]
-            if e.get("deployOrder"):
-                meta.append(("Deploy order", " -> ".join(esc(x) for x in e["deployOrder"])))
-            cards_.append(
-                f'<div class="env" data-p="{st}"><div class="eh"><b>{esc(name)}</b>{"<span class=chip>default</span>" if name == default else ""}'
-                f'<span class="sp"></span><span class="pill {st}">{esc(word)}</span></div>'
-                f'<div class="eu">{link}</div><p class="ed">{esc(e.get("description", ""))}</p>'
-                + "".join(f'<div class="kv"><span>{k}</span><b>{v}</b></div>' for k, v in meta)
-                + f'<div class="lbl3">Services</div><ul class="svc">{"".join(svc) or "<li>none</li>"}</ul>'
-                + f'<div class="lbl3">Test accounts</div><ul class="acc">{"".join(accs) or "<li class=none>none</li>"}</ul>'
-                + (f'<div class="lbl3">Rules</div><ul class="rules">{"".join(f"<li>{esc(r)}</li>" for r in rules)}</ul>' if rules else "")
-                + '</div>')
-        envhtml = f'<div class="envs">{"".join(cards_)}</div>'
+        envhtml += ('<div class="eo"><b>No environment registry yet</b><p>Each environment will show a checklist: URL, branch, policy, '
+                    'services with deploy, verify, rollback and version commands, test accounts and every secret reference '
+                    '(names only, never values). Deploy, SSH and test-account skills ask every time until it exists.</p>'
+                    '<code>run the environments skill (create section) -> .agents/environments.json</code></div>')
     return (f'<section class="card" id="envs"><div class="hd">{icon("Project")}<h2>Project & environments</h2>'
-            f'<span class="desc">From the project-init block and .agents/environments.json; secret values are never read</span></div>'
-            f'<div class="facts">{block}</div>{envhtml}</section>')
+            f'<span class="desc">From the project-init block and .agents/environments.json; secret values are never shown</span></div>'
+            f'{integration_banner(project, registry)}<div class="facts">{block}</div>{envhtml}</section>')
 
 
 # ---------------------------------------------------------------- render
@@ -801,6 +1076,8 @@ TOOL_KIND = {name: kind for name, kind, _, _ in TOOLS}
 
 def tier_of(c):
     sec, title = c["section"], c["title"]
+    if c.get("group") == "env":   # environment gaps other than prod policy and literal secrets (env_checks)
+        return "optional"
     if title in OPTIONAL_TITLES or title.endswith(": logs field"):
         return "optional"
     if sec == "Skills":
@@ -905,6 +1182,7 @@ If the harness-map skill is not available, tell me to install the agent-skills p
 1. Run harness-map for this project and open the page so I can see what is set up and what is missing.
 2. Go through the gaps in order: this machine first (install, hooks, secrets, tools and logins), then this project (project-init, then environments), core before optional.
 3. Check everything you can yourself. When a step needs something only I know or a decision from me, ask me once for that step, with your best guess shown, then apply it. project-init and environments ask their own questions.
+   Until .agents/environments.json records them, project-init must ask me which branch PRs go into (never assume dev or main) and environments must ask which environments exist (local or dev, staging, prod, any other, each with its URL); do not skip those questions or ask them twice.
 4. After each step, regenerate the page and open it again so I can see the progress.
 5. Repeat until no core gap is left, then show me the optional gaps and ask which ones I want.
 

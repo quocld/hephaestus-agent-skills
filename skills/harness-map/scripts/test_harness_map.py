@@ -366,6 +366,147 @@ def main():
         nf = (site / "404.html").read_text() if (site / "404.html").exists() else ""
         check('content="noindex"' in nf and f"{url}/404" not in " ".join(locs), "docs site: 404.html exists, noindex and out of the sitemap")
     check((HERE.parents[2] / "LICENSE").read_text().startswith("MIT License"), "repo: LICENSE is the MIT License")
+    # The integration branch is the user's recorded answer: never dev or the remote default by assumption.
+    import harness_map as hm
+    with tempfile.TemporaryDirectory() as tmp:
+        origin, project = Path(tmp) / "origin.git", Path(tmp) / "project"
+        git = lambda *a: subprocess.run(["git", *a], check=True, capture_output=True,
+                                        env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
+        git("init", "-q", "--bare", "-b", "main", str(origin))
+        git("clone", "-q", str(origin), str(project))
+        git("-C", str(project), "commit", "-q", "--allow-empty", "-m", "init")
+        git("-C", str(project), "push", "-q", "origin", "HEAD:main", "HEAD:dev")
+        git("-C", str(project), "fetch", "-q", "origin")
+        row = lambda reg: hm.integration_check(project, reg)
+        r = row(None)
+        check(r["status"] == "missing" and "not recorded" in r["detail"] and "likely dev" in r["detail"],
+              "integration branch: no registry is missing, never ok by assuming dev, and shows dev as the likely answer")
+        r = row({"project": "x", "environments": {"dev": {"policy": "autonomous", "branch": "dev", "services": []}}})
+        check(r["status"] == "missing" and "legacy" in r["detail"] and "integrationBranch" in r["fix"],
+              "integration branch: the legacy dev environment branch is missing until integrationBranch is recorded")
+        r = row({"project": "x", "integrationBranch": "main", "environments": {"dev": {"policy": "autonomous", "branch": "dev", "services": []}}})
+        check(r["status"] == "ok" and r["detail"].startswith("main, recorded as integrationBranch"),
+              "integration branch: a recorded integrationBranch wins and is ok")
+        r = row({"project": "x", "integrationBranch": "nope", "environments": {}})
+        check(r["status"] == "missing" and "origin/nope not found" in r["detail"], "integration branch: a recorded branch origin lacks is missing")
+        check(hm.integration_branch({"integrationBranch": "  "}) == (None, "invalid"), "integration branch: a blank integrationBranch is invalid, not a branch")
+        git("-C", str(project), "push", "-q", "origin", "--delete", "dev")
+        git("-C", str(project), "fetch", "-q", "--prune", "origin")
+        git("-C", str(project), "remote", "set-head", "origin", "main")
+        check("likely main" in row(None)["detail"], "integration branch: without origin/dev the guess is the remote default branch")
+        (project / ".agents").mkdir()
+        (project / ".agents" / "environments.json").write_text(json.dumps({"project": "x", "integrationBranch": "main", "environments": {}}))
+        check(hm.integration_branch({"integrationBranch": 123})[1] == "invalid" and row({"integrationBranch": 123})["status"] == "fail",
+              "integration branch: a non-string integrationBranch is invalid, never used as a branch name")
+        banner = hm.integration_banner(project, None)
+        check('<span class="ibb none" title="likely answer, not recorded">main?</span>' in banner and banner.count("ot recorded<") == 1,
+              "integration banner: nothing recorded shows the drafted guess in the box, not the pill's words again")
+        for bad in ("[1, 2]", '"str"'):
+            (project / ".agents").mkdir(exist_ok=True)
+            (project / ".agents" / "environments.json").write_text(bad)
+            rows, _ = hm.collect_project(project)
+            check(next(c for c in rows if c["title"] == "Environment registry")["status"] == "fail",
+                  f"a registry whose top level is {bad} is an invalid-shape fail row, not a crash")
+        (project / ".agents" / "environments.json").write_text(json.dumps({"project": "x", "integrationBranch": "main", "environments": {}}))
+        rows, _ = hm.collect_project(project)
+        reg_row = next(c for c in rows if c["title"] == "Environment registry")
+        check(reg_row["status"] == "missing" and "environments skill" in reg_row["fix"],
+              "a registry holding only integrationBranch is a missing environment list, not an invalid registry")
+        check(next(c for c in rows if c["title"] == "Integration branch")["status"] == "ok", "collect_project mounts the integration branch row")
+    # Environments: an empty secrets.env line is still missing, and the env panel shows a checklist per environment.
+    with tempfile.TemporaryDirectory() as tmp:
+        project = Path(tmp) / "project"
+        git = lambda *a: subprocess.run(["git", *a], check=True, capture_output=True,
+                                        env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
+        git("init", "-q", str(project))
+        git("-C", str(project), "commit", "-q", "--allow-empty", "-m", "init")
+        (project / ".agents").mkdir()
+        names = ["HMT_FILLED", "HMT_EMPTY", "HMT_QUOTED", "HMT_EXPORTED", "HMT_COMMENT", "HMT_ABSENT"]
+        for n in names:
+            os.environ.pop(n, None)
+        (project / ".agents" / "secrets.env").write_text(
+            "HMT_FILLED=LeakSecretsFile6\nHMT_EMPTY=\nHMT_QUOTED=\"\"\nexport HMT_EXPORTED=''\nHMT_COMMENT= # fill me\n# HMT_ABSENT=x\n")
+        shellish = Path(tmp) / "shellish"
+        (shellish / ".agents").mkdir(parents=True)
+        (shellish / ".agents" / "secrets.env").write_text('A=\nB=""\nC="" # fill me\nD=#hashstart\nE= # fill me\nF=real\nG="x y"\n')
+        sh = hm.secret_names(shellish)
+        check(sh == {"A": False, "B": False, "C": False, "D": True, "E": False, "F": True, "G": True},
+              "secrets.env: set or empty as the shell sources it (\"\" # comment is empty, an unquoted #value is set)")
+        known = hm.secret_names(project)
+        check(known.get("HMT_FILLED") is True and not any(known.get(n) for n in names[1:]),
+              "secrets.env: only a filled name counts as set; NAME=, \"\", export '', and a trailing comment are empty")
+        state = lambda n: hm.secret_state({"secret": "env:" + n}, known)[1]
+        check(state("HMT_FILLED") == "ok" and all(state(n) == "missing" for n in names[1:]),
+              "secret_state: an empty secrets.env value is missing, not ok")
+        reg = {"project": "x", "integrationBranch": "main", "defaultEnvironment": "staging", "environments": {
+            "staging": {"policy": "confirm-writes", "url": "https://s.test", "branch": "staging",
+                        "services": [{"name": "web", "type": "vercel", "deploy": ["d"], "verify": ["v"], "rollback": ["r"], "version": "x"}],
+                        "accounts": [{"role": "admin", "login": "a@x.test", "password": {"secret": "env:HMT_EMPTY"}},
+                                     {"role": "member", "login": "m@x.test", "password": {"secret": "env:HMT_FILLED"}}]},
+            "production": {"policy": "confirm-writes", "services": [{"name": "web", "type": "vps", "deploy": ["d"]}]}}}
+        rows = {c["title"]: c for c in hm.env_checks(reg, project)}
+        for c in rows.values():
+            c["tier"] = hm.tier_of(c)
+        sec = rows.get("staging: secrets", {})
+        check(sec.get("status") == "missing" and "empty in .agents/secrets.env: env:HMT_EMPTY" in sec.get("detail", "")
+              and "HMT_FILLED" not in sec.get("detail", ""), "env checks: an empty secret is a missing row naming it as empty")
+        check(rows.get("production: policy", {}).get("tier") == "core" and rows["production: policy"]["status"] == "fail",
+              "env checks: a prod environment without confirm-each-step stays a core failure")
+        check(all(rows.get(t, {}).get("tier") == "optional" and rows[t]["status"] == "missing"
+                  for t in ("staging: secrets", "production: URL", "production: branch", "production: test accounts", "production: commands")),
+              "env checks: other environment gaps are optional missing rows")
+        check("verify" in rows.get("production: commands", {}).get("detail", "") and "rollback" in rows["production: commands"]["detail"],
+              "env checks: the commands row names the missing commands")
+        std = rows.get("Standard environments", {})
+        check(std.get("status") == "missing" and std.get("detail", "").startswith("not in the registry: dev") and "staging" not in std["detail"],
+              "env checks: a standard environment absent from the registry is a row; production fills the prod slot")
+        panel = hm.env_panel(project, reg)
+        check('class="ib"' in panel and '<code class="ibb">main</code>' in panel, "env panel: the integration branch is shown")
+        check('data-slot="dev"' in panel and 'data-slot="prod"' not in panel and 'data-slot="staging"' not in panel,
+              "env panel: a ghost card only for a standard environment not in the registry")
+        check(re.search(r'data-s="missing"><svg[^>]*>.*?</svg><span class="cn mono">env:HMT_EMPTY</span>', panel) is not None
+              and re.search(r'data-s="ok"><svg[^>]*>.*?</svg><span class="cn mono">env:HMT_FILLED</span>', panel) is not None,
+              "env panel: each secret reference is a checklist row marked set or missing")
+        check("LeakSecretsFile6" not in panel, "env panel: no secret value")
+        bare = hm.env_panel(project, {"project": "x", "environments": {}})
+        check(all(f'data-slot="{s}"' in bare for s in ("dev", "staging", "prod")) and ">Not recorded</span>" in bare,
+              "env panel: no environment yet shows dev, staging and prod ghost cards and an unrecorded integration branch")
+        # A worktree without its own secrets.env reads the main checkout's (worktree-flow links it from there).
+        git("-C", str(project), "worktree", "add", "-q", str(Path(tmp) / "wt"))
+        check(hm.secret_names(Path(tmp) / "wt").get("HMT_FILLED") is True, "secrets.env: a worktree falls back to the main checkout's file")
+        (Path(tmp) / "home").mkdir()
+        page = run(Path(tmp) / "home", project)[2]
+        check('id="envs"' in page and 'class="ib"' in page and 'class="cl"' in page, "the page mounts the env panel with the checklist")
+
+    # One definition of prod for the slot and the policy rule; settled and smoke-only environments add no noise.
+    local = {"local": {"branch": "main", "policy": "autonomous", "url": "http://localhost:3000", "testing": {"scope": "full"},
+                       "services": [{"name": "web", "type": "local", "deploy": ["d"], "verify": ["v"]}], "accounts": [{"role": "a", "login": "a"}]}}
+    lrows = {c["title"]: c for c in hm.env_checks({"integrationBranch": "main", "environments": local}, None)}
+    check("local: policy" not in lrows and hm.standard_slots(hm.env_map({"environments": local}))["dev"] == "local",
+          "env checks: a local environment on main fills the dev slot and is not prod")
+    docs = {"docs": {"branch": "main", "policy": "confirm-writes", "url": "https://d.test", "testing": {"scope": "smoke-only"},
+                     "services": [{"name": "site", "type": "vercel", "deploy": ["d"], "verify": ["v"], "rollback": ["r"], "version": "v"}]}}
+    reg = {"integrationBranch": "main", "absentEnvironments": ["dev", "staging"], "environments": docs}
+    drows = {c["title"]: c for c in hm.env_checks(reg, None)}
+    check(hm.standard_slots(hm.env_map(reg))["prod"] == "docs" and drows.get("docs: policy", {}).get("status") == "fail",
+          "env checks: an environment on main that is_prod picks also fills the prod slot")
+    check("Standard environments" not in drows and "docs: test accounts" not in drows,
+          "env checks: absentEnvironments settles a slot, and smoke-only testing does not require test accounts")
+    with tempfile.TemporaryDirectory() as tmp:
+        subprocess.run(["git", "init", "-q", tmp], check=True)
+        panel = hm.env_panel(tmp, reg)
+        check(panel.count("Not in registry") == 0 and panel.count("Not used") == 2 and "ghost quiet" in panel,
+              "env panel: a settled standard environment is a quiet 'not used' card, not a ghost asking for it")
+    items = [hm.item("a", "A", "ok"), hm.item("b", "B", "missing"), hm.item("c", "C", "fail"), hm.item("d", "D", "missing")]
+    check(">1 missing, 1 wrong<" not in hm.progress(items) and ">2 missing, 1 wrong<" in hm.progress(items),
+          "env progress: missing and wrong items are counted apart")
+    tpl = (HERE.parent / "assets" / "template.html").read_text()
+    check(".todo li{counter-increment:t;display:grid;grid-template-columns:28px minmax(0,1fr)" in tpl,
+          "template: the Fix first rows can shrink, so a long fix command scrolls instead of being clipped")
+
+    prompt_text = hm.setup_prompt()
+    check("which branch PRs go into" in prompt_text and "never assume dev or main" in prompt_text and "staging, prod" in prompt_text,
+          "setup prompt: always asks the integration branch and which environments exist")
 
     old = shutil.which("python3.9") or ("/usr/bin/python3" if Path("/usr/bin/python3").exists() else None)
     if old:

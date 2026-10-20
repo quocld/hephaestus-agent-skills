@@ -37,7 +37,7 @@ Never use `--no-probe` here: the hooks test is how step 2 knows it is done.
 When this skill runs from a checkout before step 1, read any skill this flow names next to it (`<this skill>/../<name>/SKILL.md`); if the user declines the install, keep reading them there.
 
 1. **Check**: run the script with `--open` and read its fix list; the order below decides what comes first, not the list's order.
-2. **Take the steps in this order**, skipping a step with no gap:
+2. **Take the steps in this order**, skipping a step with no gap; an integration branch or environment list not recorded in `.agents/environments.json` is always a gap, whatever else the page shows:
 
    | Step | Gaps it closes | How |
    | --- | --- | --- |
@@ -45,12 +45,12 @@ When this skill runs from a checkout before step 1, read any skill this flow nam
    | 2. Hooks | Hook not registered, or registered twice | The plugin registers the gates; a gate that runs twice has a legacy `agent-skills-hooks` entry in `~/.claude/settings.json`: ask, delete only that entry, then run the plugin's `hooks/test.sh` |
    | 3. Secrets | Plaintext secret in settings, backups that hold it | Tell the user where it is, to move it out and rotate it, and which backups hold it; never read, echo, move or delete it yourself |
    | 4. Tools and logins | CLI missing, `gh` not logged in, Jira access, browser tool, Better Stack MCP | The install command from the row; logins and MCP sign-ins as `! <command>` or `/mcp` for the user, marked waiting on you |
-   | 5. Project | No AGENTS.md or project-init block, CLAUDE.md import, integration branch, `TODO(owner)` | `project-init`, which asks the gaps in one batch, including which branch PRs go into (this step's own PR targets it) |
-   | 6. Environments | No registry, prod policy, version command, unresolved secrets, `logs` rename, `secrets.env` not gitignored | `environments` (its create section), which asks for URLs, SSH aliases and test accounts |
+   | 5. Project | No AGENTS.md or project-init block, CLAUDE.md import, integration branch not recorded (or only legacy), `TODO(owner)` | `project-init`, whose one question batch starts with which branch PRs go into, your guess shown, even when `origin/dev` exists, then which environments exist; the branch becomes `integrationBranch`, this step's own PR targets it, and its section 3b hands both answers to the `environments` create section |
+   | 6. Environments | No registry or no environment in it, prod policy, version command, unresolved secrets, `logs` rename, `secrets.env` not gitignored | `environments` (its create section), whose question batch starts with which branch PRs go into and which environments exist (local or dev, staging, prod, any other, each with its URL) when step 5 has not asked them, then SSH aliases and test accounts; a standard environment the project does not have goes in `absentEnvironments`; it then creates the gitignored `.agents/secrets.env` with empty values and the user fills it (never in chat), which the page's environment cards show name by name |
    | 7. Optional | Everything in the optional list | Show the list and ask which ones the user wants; do only those |
 
 3. **Ask before you change**: in steps 1 to 4 and 7, when a step needs a fact or a decision only the user has, ask once per step with your drafted answer shown (`ask-or-decide`); never invent one, and write `TODO(<owner>)` for what the user does not know yet.
-   In steps 5 and 6 the owner skill asks; do not ask the same things again.
+   In steps 5 and 6 the owner skill asks; do not ask the same things again, and never skip its batch while the integration branch or the environment list is unrecorded.
    A step only the user can finish (a login, moving a secret) is marked "waiting on you" and the flow goes on to the next step; check it again in the final run.
    Steps 5 and 6 run in a worktree and end as a PR/MR into the integration branch (`worktree-flow`); steps 1 to 4 change only the user's machine.
 4. **Show progress**: after each step, rerun the script with `--open` so the user sees the page change, and say in one line what moved.

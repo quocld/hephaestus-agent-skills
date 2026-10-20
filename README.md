@@ -64,7 +64,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | Skill | Use it for | Needs |
 | --- | --- | --- |
 | `feature-status` | One status file per feature in `docs/status/`, claimed on the remote before the worktree exists and edited only by its script: states, per-AC test tiers with E2E evidence, board. | `python3`; `gh` or `glab` for `board --live` |
-| `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |
+| `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into the recorded integration branch; staging/prod only on explicit word. | `gh` or `glab` |
 | `feature-build` | Implement a feature or user story end to end in an S, M or L lane sized from the change: gaps, exploration, design options, verify, PR. Lean per-technology notes for Next.js, React, Vercel, Supabase, NestJS. | - |
 | `root-cause` | Find the cause before fixing: failing layer, backward trace, 3-failed-fixes stop, flaky tests, polluter bisection. | - |
 | `verify-loop` | One ordered chain of gates before any PR (toolchain, project checks, proof tests, requirements, review, E2E) with a PASS/FAIL table; a lighter gate set for docs, config and copy-only changes, and targeted reruns after a fix. | - |
@@ -73,7 +73,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | `security-pass` | Per-PR security pass for any stack: authz on every entry point, tenant isolation, IDOR, secrets, injection; Next.js/Supabase specifics (RLS, service role). | - |
 | `flow-trace` | Trace one business lifecycle end to end: one-way-door states, unhandled events, broken idempotency. | - |
 | `bug-triage` | Bug/QA ticket loop: classify, depth by risk, prove the test, verify the deploy, hand back. | Jira access |
-| `jira-bug-hunter` | Work assigned Jira bugs one at a time: fix, review, merge into `dev`, verify with video, daily HTML demo report. | Jira, Playwright MCP, `environments` |
+| `jira-bug-hunter` | Work assigned Jira bugs one at a time: fix, review, merge into the integration branch, verify with video, daily HTML demo report. | Jira, Playwright MCP, `environments` |
 | `fe-guardrails` | React/Next rules for loading, empty and error states, form errors, and copy. | - |
 | `environments` | Per-project registry of dev/staging/prod: servers, deploy commands, test accounts; prod confirmed step by step. | `.agents/environments.json` |
 | `server-touch` | Docker Compose ops over SSH on a shared host: scoped commands, deploy, logs, `.env`, psql, rollback. | `environments` |

@@ -63,4 +63,6 @@ When it is installed, run the harness-map skill:
 python3 <the clone or plugin>/skills/harness-map/scripts/harness_map.py --open
 ```
 
-Show the user what is still missing or clashing, and walk them through it one step at a time.
+Before the walk, tell the user that the project part of the setup will ask them two things it never assumes: which branch PRs go into (shown with a guess, `dev` or `main` only when they choose it), and which environments exist (local or dev, staging, prod, any other, each with its URL).
+The environments step then creates `.agents/secrets.env` with empty values; the user fills it in the file, never in chat, and the Dashboard's environment cards show each name still missing.
+Then show them what is still missing or clashing, and walk them through it one step at a time with the harness-map skill's setup flow (its section 3).

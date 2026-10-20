@@ -69,6 +69,9 @@ spec:
 
 - 2026-01-01 picked by other@t on feat/WEST-4-other
 EOF
+# PRs go into dev, recorded the way project-init records it; status.py never assumes it.
+mkdir -p "$SEED/.agents"
+printf '{"project": "app", "integrationBranch": "dev", "environments": {}}\n' >"$SEED/.agents/environments.json"
 git -C "$SEED" add -A
 git -C "$SEED" commit -q -m init
 git -C "$SEED" push -q origin HEAD:main HEAD:dev
@@ -514,5 +517,28 @@ rc 0 "check passes once the bad files are gone" "$WT1" check
 rc 0 "check accepts a file with a UTF-8 byte order mark" "$WT1" check WEST-1
 rc 0 "an edit works on a file with a byte order mark" "$WT1" note WEST-1 "bom"
 expect "the edit removed the byte order mark" "[ \"\$(head -c 3 '$F1')\" = '---' ]"
+
+echo "== integration branch"
+# Read from the checkout's .agents/environments.json: integrationBranch, else the legacy dev environment branch, else refused.
+clone d
+D4="$TMP/d/repo"
+REG="$D4/.agents/environments.json"
+rm "$REG"
+rc 1 "nothing recorded: refused even though origin/dev exists" "$D4" board
+expect "the refusal asks which branch PRs go into and shows dev as the likely answer" \
+  "grep -q 'not recorded' '$ERR' && grep -q 'dev is the likely answer' '$ERR' && grep -q 'integrationBranch' '$ERR'"
+printf '{"project": "app", "environments": {"dev": {"branch": "main"}}}\n' >"$REG"
+rc 0 "the legacy dev environment branch is still honoured" "$D4" board
+expect "board reads the legacy branch, origin/main" "grep -q '^# Feature board (origin/main,' '$OUT'"
+expect "the legacy branch comes with a notice to record integrationBranch" "grep -q 'legacy dev environment branch main; record integrationBranch' '$ERR'"
+printf '{"project": "app", "integrationBranch": 123, "environments": {"dev": {"branch": "main"}}}\n' >"$REG"
+rc 1 "a non-string integrationBranch is refused, not replaced by the legacy branch" "$D4" board
+expect "the refusal says integrationBranch is not a branch name" "grep -q 'integrationBranch is not a branch name' '$ERR'"
+printf '{"project": "app", "integrationBranch": "main", "environments": {"dev": {"branch": "dev"}}}\n' >"$REG"
+rc 0 "integrationBranch is read" "$D4" board
+expect "integrationBranch wins over the dev environment branch" "grep -q '^# Feature board (origin/main,' '$OUT'"
+printf '{"project": "app", "integrationBranch": "nope"}\n' >"$REG"
+rc 1 "an integrationBranch missing on origin is refused" "$D4" board
+expect "the refusal names integrationBranch" "grep -q 'names integrationBranch nope' '$ERR'"
 
 if [ "$FAIL" = 0 ]; then echo "all status.py checks passed"; else echo "status.py checks FAILED"; exit 1; fi

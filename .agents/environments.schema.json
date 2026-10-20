@@ -6,7 +6,6 @@
   "type": "object",
   "required": [
     "project",
-    "defaultEnvironment",
     "environments"
   ],
   "additionalProperties": false,
@@ -18,17 +17,48 @@
       "type": "string",
       "minLength": 1
     },
+    "integrationBranch": {
+      "description": "The branch every PR/MR goes into, as the user chose it (worktree-flow section 0). Absent: agents stop and ask, never assume dev or main.",
+      "type": "string",
+      "minLength": 1
+    },
+    "absentEnvironments": {
+      "description": "Standard environments the user said this project does not have; harness-map stops asking for them.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "dev",
+          "staging",
+          "prod"
+        ]
+      }
+    },
     "defaultEnvironment": {
+      "description": "Required once any environment is recorded.",
       "type": "string",
       "minLength": 1
     },
     "environments": {
+      "description": "May be empty while only project facts such as integrationBranch are recorded.",
       "type": "object",
-      "minProperties": 1,
       "additionalProperties": {
         "$ref": "#/$defs/environment"
       }
     }
+  },
+  "if": {
+    "properties": {
+      "environments": {
+        "type": "object",
+        "minProperties": 1
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "defaultEnvironment"
+    ]
   },
   "$defs": {
     "secretRef": {

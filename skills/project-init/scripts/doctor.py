@@ -319,11 +319,12 @@ def check_ssh(registry):
 
 
 def version_cmd(project, cmd):
-    """argv that runs a registry `version` with .agents/secrets.env loaded in the same shell (environments section 9)."""
-    sec = Path(project) / ".agents" / "secrets.env"
-    if sec.exists() and "op://" in sec.read_text(errors="ignore") and shutil.which("op"):
+    """argv that runs a registry `version` with .agents/secrets.env loaded in the same shell (environments section 9).
+    The file is the one harness-map reads (hm.secrets_file): the worktree's own, else the main checkout's."""
+    sec = hm.secrets_file(project)
+    if sec and sec.exists() and "op://" in sec.read_text(errors="ignore") and shutil.which("op"):
         return ["op", "run", "--env-file", str(sec), "--", "bash", "-c", cmd]
-    prefix = "set -a; . .agents/secrets.env; set +a; " if sec.exists() else ""
+    prefix = f"set -a; . {shlex.quote(str(sec))}; set +a; " if sec and sec.exists() else ""
     return ["bash", "-c", prefix + cmd]
 
 
@@ -419,6 +420,8 @@ def check_logger(project, block, a, probe):
 
 def check_feature_status(project, int_branch, probe):
     status_py = SKILLS / "feature-status" / "scripts" / "status.py"
+    if not int_branch:
+        return [row("Feature status", "SKIP", "no integration branch recorded to read docs/status from (the Integration branch row)")]
     so = run(["git", "-C", str(project), "ls-tree", "-d", f"origin/{int_branch}", "docs/status"])[1]
     if not so.strip():
         return [row("Feature status", "SKIP", f"origin/{int_branch} has no docs/status (not opted in)")]

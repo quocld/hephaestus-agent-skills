@@ -17,7 +17,7 @@ An agent that takes a host, branch, command, or password from memory or chat his
   Do not improvise hosts or commands in the meantime.
 - When the user states a new fact (server, account, URL, rule), put it in the registry instead of keeping it in chat.
 - Every registry change is shown as a diff and written only after a yes; it applies from the next action.
-  Changes that weaken safety (`policy`, `allowedWithoutAsking`, `data.testDataAllowed`, `rules`, `defaultEnvironment`, or any command of a `confirm-each-step` environment) need the user to ask for that change explicitly.
+  Changes that weaken safety (`policy`, `allowedWithoutAsking`, `data.testDataAllowed`, `rules`, `defaultEnvironment`, `integrationBranch`, or any command of a `confirm-each-step` environment) need the user to ask for that change explicitly.
 - A string `logs` (and `logs` in `allowedWithoutAsking`) is the old name of `logsCommand`: propose the rename as a registry change; it is a rename, not a new command or a weakened safeguard.
 - `version`, `verify`, and `logsCommand` commands must be read-only; refuse to register one that writes.
   A request to skip a safeguard for one task ("just run it all", "create a test user on prod") is not a request to change the registry: keep the safeguard, and offer the registry change.
@@ -181,11 +181,28 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
 ## 10. Create the registry
 
 1. Draft from repo evidence first: `.env*.example` (variable names only), `.vercel/project.json`, `vercel.json`, `supabase/config.toml`, `Dockerfile`, compose files, `ecosystem.config.*`, CI workflows, deploy scripts, README.
-2. Ask the user only what the repo cannot tell, in one batch: the environment list and URLs, SSH aliases, test account roles and logins, rules such as deploy windows.
-3. Write `.agents/environments.json` based on `templates/environments.json`, and copy `templates/environments.schema.json` next to it.
+2. Ask the user only what the repo cannot tell, in one batch, your drafts shown; it always starts with these, unless the registry already records them or the calling skill (`project-init` section 2) asked them in this run:
+   - Which branch PRs/MRs go into (`integrationBranch`, `worktree-flow` section 0), never assumed.
+   - Which environments exist: local or dev, staging, prod, and any other, each with its URL and the branch it deploys from.
+   Then SSH aliases, test account roles and logins, rules such as deploy windows.
+3. Write `.agents/environments.json` based on `templates/environments.json`, with `integrationBranch` set, and copy `templates/environments.schema.json` next to it.
+   An environment the user does not know yet is left out and reported, never invented; `environments` may stay empty while only `integrationBranch` is known.
+   A standard one the user says the project does not have (dev, staging or prod) goes in `absentEnvironments`, so `harness-map` stops asking for it.
 4. Defaults: local and dev `autonomous` with testing `full`; staging `confirm-writes` with testing `non-destructive`; prod `confirm-each-step` with `allowedWithoutAsking: []`, `testDataAllowed: false`, and testing `smoke-only`.
    Writing a looser prod setting needs the user's explicit words.
 5. Add `.agents/secrets.env`, `.agents/backups/`, and `.agents/deploy/` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
+   Then create or top up the real `.agents/secrets.env` in the main checkout from it, empty values only; an existing file is never overwritten, only missing names are appended:
+
+   ```bash
+   m="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; mkdir -p "$m/.agents"; (umask 077; touch "$m/.agents/secrets.env")
+   [ -n "$(tail -c1 "$m/.agents/secrets.env")" ] && echo >> "$m/.agents/secrets.env"   # a last line without a newline stays intact
+   awk -F= 'FILENAME==ARGV[1]{k=$1; sub(/^export /,"",k); have[k]=1; next} /^[A-Z][A-Z0-9_]*=/ && !($1 in have){print $1"="}' \
+     "$m/.agents/secrets.env" .agents/secrets.env.example >> "$m/.agents/secrets.env"
+   ```
+
+   In a worktree, link it as `worktree-flow` says (`ln -s "$m/.agents/secrets.env" .agents/secrets.env`).
+   Tell the user which names to fill, and that they fill them in that file themselves, with the value or an `op://` reference; never ask for a value in chat.
+   `harness-map` shows each name that is still empty or absent as missing on its environment's card.
 6. Validate: `npx -y ajv-cli@5.0.0 validate --spec=draft2020 -s .agents/environments.schema.json -d .agents/environments.json`.
 7. A service without a version endpoint gets one per `references/version-endpoint.md`, shipped as a normal PR/MR.
 8. Run each remote service's `version` and `verify` once to prove the access works (on prod, ask first), and report anything that fails.

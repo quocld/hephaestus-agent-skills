@@ -7,7 +7,7 @@
 - I always run several agents in parallel on the same repo.
   Never edit in the main checkout; do every code change in your own git worktree and branch per the `worktree-flow` skill.
   Read-only code questions need no worktree: answer from the fetched integration branch (`git show origin/<int>:<path>`, `<int>` per `worktree-flow` section 0), never the main checkout, and say which ref you read.
-- Finished work is committed, pushed, and opened as a PR/MR into the integration branch (usually `dev`, see `worktree-flow`) by default, without asking.
+- Finished work is committed, pushed, and opened as a PR/MR into the integration branch (`integrationBranch` in the project's `.agents/environments.json`; not recorded: ask once and record it, per `worktree-flow`) by default, without asking.
   Never open a PR/MR into, merge into, push to, or deploy staging or prod unless I say so explicitly in this conversation; that covers exactly what I named, this time only.
 - When making technical decisions, do not give much weight to development cost.
   Instead, prefer quality, simplicity, robustness, scalability, and long term maintainability.

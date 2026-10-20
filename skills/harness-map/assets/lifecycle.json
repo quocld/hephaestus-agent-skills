@@ -96,7 +96,7 @@
     "act": {"label": "Take action", "sub": "edit in own worktree", "files": []},
     "verify": {"label": "Verify results", "sub": "evidence, not claims", "files": ["typecheck", "lint", "tests"]},
     "retry": {"label": "Fails: find the cause", "files": []},
-    "response": {"label": "Response", "sub": "review, PR into dev", "files": []},
+    "response": {"label": "Response", "sub": "review, PR into the integration branch", "files": []},
     "remember": {"label": "Remember for the next task", "files": []}
   }
 }

@@ -3,7 +3,8 @@
 
 A repo is opted in when docs/status/ exists at its top level, its AGENTS.md mentions feature-status,
 or (for the Bash rules) the same holds on origin/<int>, read with git ls-tree and git show.
-<int> is environments.dev.branch in .agents/environments.json, otherwise origin/dev, otherwise origin/HEAD.
+<int> is integrationBranch in .agents/environments.json, else the legacy dev environment's branch; for this opt-in
+check only (never a PR target), origin/dev and origin/HEAD are also read, so an unrecorded repo is still guarded.
 Repos that are not opted in are never blocked.
 
 Rules, each a "deny" whose reason names the command to run instead:
@@ -86,15 +87,20 @@ def toplevel(directory):
 
 
 def integration_refs(top):
-    """Candidate origin/<int> refs that exist locally, in worktree-flow order."""
+    """Candidate origin/<int> refs that exist locally, in worktree-flow order, then the guesses an unrecorded repo has."""
     names = []
     try:
         with open(os.path.join(top, ".agents", "environments.json")) as f:
-            branch = ((json.load(f).get("environments") or {}).get("dev") or {}).get("branch")
-        if isinstance(branch, str) and branch:
-            names.append(branch)
-    except (OSError, ValueError, AttributeError):
-        pass
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        # Each read on its own: a malformed dev entry must not drop the recorded integrationBranch.
+        envs = data.get("environments")
+        dev = envs.get("dev") if isinstance(envs, dict) else None
+        for branch in (data.get("integrationBranch"), dev.get("branch") if isinstance(dev, dict) else None):
+            if isinstance(branch, str) and branch:
+                names.append(branch)
     names.append("dev")
     head = git(top, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
     if head:
