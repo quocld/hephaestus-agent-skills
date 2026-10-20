@@ -85,7 +85,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | `knowledge-placement` | Where a new rule or fact belongs; keeps AGENTS.md lean; how to write a skill. | - |
 | `stow` | Save durable knowledge from a session before a reset or break. | - |
 | `vision` | Draft and stress-test a project VISION.md. | node |
-| `gnhf` | Overnight autonomous loop of small committed changes. | `gnhf` CLI |
+| `gnhf` | Overnight autonomous loop of small committed changes. | node |
 | `chrome-devtools-axi` | Token-efficient browser automation for E2E checks. | node |
 | `axi` | Design standards for CLIs meant for agents. | - |
 
