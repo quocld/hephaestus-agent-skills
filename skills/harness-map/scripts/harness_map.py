@@ -236,7 +236,7 @@ def collect_skills(project=None):
     return checks, cards
 
 
-def collect_hooks(probe):
+def collect_hooks(probe, project):
     out = []
     settings = load_json(CLAUDE / "settings.json")
     if not isinstance(settings, dict):
@@ -270,6 +270,8 @@ def collect_hooks(probe):
     elif test.exists():
         # The test builds throwaway repos; an inherited GIT_DIR or GIT_WORK_TREE would point its git calls at a real one.
         clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")}
+        if project:
+            clean["CLAUDE_PROJECT"] = str(project)
         code, so, se = run(["bash", str(test)], timeout=90, env=clean)
         fails = [ln for ln in (so + se).splitlines() if ln.startswith("FAIL") or "WARN" in ln]
         if code == 0:
@@ -1327,7 +1329,7 @@ def main():
     checks = collect_global()
     sk, cards = collect_skills(project)
     checks += sk
-    checks += collect_hooks(probe)
+    checks += collect_hooks(probe, project)
     pc, registry = collect_project(project, probe)
     tc, _ = collect_tools(probe, registry, project)
     checks += tc
