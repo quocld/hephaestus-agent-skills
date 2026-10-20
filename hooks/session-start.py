@@ -28,11 +28,11 @@ def main():
     project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     loaded = same_text(Path.home() / ".claude" / "CLAUDE.md", rules) or same_text(project / "AGENTS.md", rules)
     if not loaded:
-        print("Global rules from the agent-skills plugin (its AGENTS.md). They apply to every session, like ~/.claude/CLAUDE.md:")
+        print("Global rules from the hephaestus plugin (its AGENTS.md). They apply to every session, like ~/.claude/CLAUDE.md:")
         print()
         print(rules.strip())
         print()
-    print(f"agent-skills OPINIONS.md (the viewpoints AGENTS.md refers to): {ROOT / 'OPINIONS.md'}")
+    print(f"hephaestus OPINIONS.md (the viewpoints AGENTS.md refers to): {ROOT / 'OPINIONS.md'}")
 
 
 if __name__ == "__main__":

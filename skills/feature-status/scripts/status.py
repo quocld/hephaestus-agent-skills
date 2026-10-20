@@ -203,26 +203,42 @@ def fetch(cwd=None):
 
 
 def resolve_int(explicit, top):
+    """--int, else the registry's integrationBranch, else the legacy dev environment's branch (worktree-flow section 0).
+    Nothing recorded is refused: the integration branch is the user's answer, never assumed (not dev, not main).
+    An integrationBranch that is not a non-blank string is refused too, and the legacy branch is used with a notice."""
     if explicit:
         if not ref_exists(f"refs/remotes/origin/{explicit}", cwd=top):
             raise Refused(f"origin/{explicit} does not exist")
         return explicit
     path = os.path.join(top, ".agents", "environments.json")
+    branch, field = None, None
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
-        envs = data.get("environments") if isinstance(data.get("environments"), dict) else data
-        branch = (envs.get("dev") or {}).get("branch")
-        if isinstance(branch, str) and branch:
-            if not ref_exists(f"refs/remotes/origin/{branch}", cwd=top):
-                raise Refused(f".agents/environments.json names dev branch {branch}, but origin/{branch} does not exist")
-            return branch
+        named = data.get("integrationBranch")
+        if named is not None and not (isinstance(named, str) and named.strip()):
+            raise Refused(".agents/environments.json: integrationBranch is not a branch name; "
+                          "set it to the branch the user chose, or pass --int <branch>")
+        if named is not None:
+            branch, field = named.strip(), "integrationBranch"
+        else:
+            envs = data.get("environments") if isinstance(data.get("environments"), dict) else {}
+            legacy = (envs.get("dev") or {}).get("branch")
+            if isinstance(legacy, str) and legacy.strip():
+                branch, field = legacy.strip(), "dev environment branch"
     except (OSError, ValueError, AttributeError):
         pass
-    if ref_exists("refs/remotes/origin/dev", cwd=top):
-        return "dev"
-    raise Refused("cannot find the integration branch (no .agents/environments.json dev.branch, no origin/dev); "
-                  "ask which branch PRs go into and pass --int <branch>")
+    if branch:
+        if not ref_exists(f"refs/remotes/origin/{branch}", cwd=top):
+            raise Refused(f".agents/environments.json names {field} {branch}, but origin/{branch} does not exist")
+        if field != "integrationBranch":
+            print(f"status: using the legacy dev environment branch {branch}; record integrationBranch in "
+                  ".agents/environments.json (worktree-flow section 0)", file=sys.stderr)
+        return branch
+    guess = "dev" if ref_exists("refs/remotes/origin/dev", cwd=top) else None
+    raise Refused("the integration branch is not recorded (no integrationBranch in .agents/environments.json); "
+                  "ask the user which branch PRs go into" + (" (origin/dev exists, so dev is the likely answer)" if guess else "")
+                  + ", record it as integrationBranch, or pass --int <branch>")
 
 
 def validate_id(feature_id):
@@ -1303,7 +1319,8 @@ def parser():
     sp.add_argument("--type", default="feat", choices=TYPES, help="branch type (default feat)")
     sp.add_argument("--slug", help="branch slug; default: from the title for ticket ids, none for slug ids")
     sp.add_argument("--spec", help="spec path or link to record")
-    sp.add_argument("--int", help="integration branch (default: environments.json dev.branch, else dev)")
+    sp.add_argument("--int", help="integration branch (default: integrationBranch in .agents/environments.json, "
+                    "else the legacy dev environment branch; refused when neither is recorded)")
     sp.add_argument("--worktree-root", help="parent folder of worktrees (default: <main>/../<name>.worktrees)")
     sp.add_argument("--no-worktree", action="store_true", help="push the claim and branch only (harness worktrees)")
     sp.add_argument("--resume", action="store_true",

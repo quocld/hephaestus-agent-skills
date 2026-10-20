@@ -1,5 +1,5 @@
 {
-  "name": "agent-skills",
+  "name": "hephaestus",
   "displayName": "Hephaestus Skills",
   "description": "Hephaestus Skills: a Claude Code plugin that forges a disciplined AI coding agent. Global AGENTS.md rules loaded at session start, agent skills for the whole dev loop (worktree per task, feature and bug flows, root cause, verify loop, E2E, code review, security, environments, logs), gate hooks for the em dash and protected branches, and harness-map to see and finish the setup.",
   "author": {

@@ -110,6 +110,11 @@ def main():
               "end to end: the asks-first row is SKIP with the command to run")
         check("| Version staging/web | SKIP | not probed (--no-probe)" in out, "end to end: --no-probe skips the version commands")
         check("| Browser tool for e2e-verify | OK" not in out, "end to end: an unprobed browser fallback is never OK")
+        check("| Integration branch | MISSING | not recorded explicitly: dev is only the dev environment's branch (legacy)" in out,
+              "end to end: a legacy dev environment branch asks for integrationBranch to be recorded")
+        fs = doctor.check_feature_status(project, None, False)
+        check([r["status"] for r in fs] == ["SKIP"] and "no integration branch recorded" in fs[0]["detail"],
+              "feature status: nothing recorded is SKIP, never read from an assumed origin/dev")
 
         rows = {r["check"]: r for r in doctor.check_versions(project, registry, probe=True)}
         check(rows["Version staging/web"]["status"] == "OK", "versions: a SHA with secrets.env loaded is OK")
@@ -118,6 +123,11 @@ def main():
               "versions: a failing command is FAILING and its output is not shown")
         check(rows["Version prod/web"]["status"] == "SKIP" and not marker.exists(), "versions: probing never runs confirm-each-step")
         check(LEAK_SECRET not in json.dumps(rows), "versions: no secret value in the rows")
+        # A worktree with no secrets.env of its own loads the main checkout's, the file harness-map reads.
+        wt = Path(tmp) / "wt"
+        subprocess.run(["git", "-C", str(project), "worktree", "add", "-q", "--detach", str(wt)], check=True, capture_output=True)
+        wrows = {r["check"]: r for r in doctor.check_versions(wt, registry, probe=True)}
+        check(wrows["Version staging/web"]["status"] == "OK", "versions: a worktree loads the main checkout's secrets.env")
 
         block = doctor.block_text(project)
         paths = {r["check"]: r for r in doctor.check_paths(project, block)}
@@ -140,6 +150,8 @@ def main():
         check(doctor.check_logger(project, block, no_flags, False)["status"] == "SKIP", "logger: --no-probe leaves it SKIP")
 
         hm = doctor.hm
+        check(set(hm.RANK) <= set(doctor.STATUS) and doctor.STATUS.get("pending") == "PENDING" and "PENDING" not in doctor.BAD,
+              "every harness-map status has a doctor status; pending (an open PR/MR) is PENDING, not a gap")
         check(not hm.secrets_use_op(project), "op: a secrets.env without op:// does not need op")
         (project / ".agents" / "secrets.env").write_text(f"STAGING_TOKEN={LEAK_SECRET}\nAPI_KEY=op://vault/item/field\n")
         check(hm.secrets_use_op(project), "op: an op:// reference in secrets.env needs the op sign-in check")

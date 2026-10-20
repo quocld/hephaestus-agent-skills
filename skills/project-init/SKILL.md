@@ -23,7 +23,7 @@ Read the places in this table, not the whole tree, and draft every answer from e
 
 | Fact | Where to look |
 | --- | --- |
-| Integration branch (recorded as the `branch` of the registry's `dev` environment, which `worktree-flow` reads) | `git ls-remote --heads origin`, CI triggers, branch names in `git log --merges` |
+| Integration branch (recorded as `integrationBranch` in `.agents/environments.json`, which `worktree-flow` section 0 reads; a legacy `dev` environment `branch` is only a draft) | `git ls-remote --heads origin`, the remote default branch, CI triggers, branch names in `git log --merges` |
 | Ticket prefix and tracker | Branch names and commit subjects (`WEST-123`), PR templates, links in README |
 | PR/MR platform | `git remote get-url origin` (GitHub or GitLab) |
 | Package manager and monorepo | Lockfile, `pnpm-workspace.yaml`, `turbo.json`, `nx.json` |
@@ -32,14 +32,21 @@ Read the places in this table, not the whole tree, and draft every answer from e
 | Sources of truth | `openspec/`, `docs/`, spec or PRD files, decision log, API contracts (OpenAPI, shared schema packages), design links (Figma) |
 | E2E setup | `playwright.config.*`, existing personas, storage state files, seed scripts, report folders |
 | Frontend conventions | Shared UI folder, error-parsing helper, form library |
-| Deploy targets | Facts listed in the `environments` skill's create section |
+| Deploy targets | Facts listed in the `environments` skill's create section, an existing environment doc such as `.claude/environments.local.md` included |
 | Logger and log shipping (`logging-standard`, `betterstack-logs` section 2) | Logger package and its tenant field (`pino`, `@logtail/*` in `package.json`, a shared `logger` package), Vector or collector configs, Vercel or Supabase log drains |
 | Existing agent files | `AGENTS.md`, `CLAUDE.md`, `.claude/skills/`, `.agents/` |
 
 ## 2. Ask only the gaps, in one batch
 
 Ask once, with your drafted answers shown so the user only corrects them.
-Typical gaps: the environment list and URLs, SSH aliases, test personas and their logins, the decision log location, rules such as deploy windows.
+When the `harness-map` setup flow already asked its one batch in this run (`harness-map` section 3), take those answers as given and ask nothing they cover; only a new fact the batch could not foresee is asked, in one message.
+Run on its own, this skill asks its own batch, which always starts with these two, unless `.agents/environments.json` already records them:
+
+- Which branch PRs/MRs go into, with your draft (`dev` when `origin/dev` exists, else the remote default branch); ask even when `origin/dev` exists, and never write `main` or `dev` without the user's answer.
+- Which environments exist: local or dev, staging, prod, and any other, each with its URL; one the project does not have goes in `absentEnvironments`.
+  Section 3b passes both answers to the `environments` skill's create section, which then asks only the rest.
+
+Other typical gaps: SSH aliases, test personas and their logins, the decision log location, rules such as deploy windows.
 Anything the user does not know yet is written as `TODO(<owner>)` and reported, never invented.
 
 ## 3. Write the project's agent setup
@@ -54,7 +61,7 @@ Never rewrite text outside the markers.
 <!-- project-init:start -->
 ## Agent setup
 
-- Branches: PRs/MRs go into the integration branch from `worktree-flow` section 0; staging and prod branches only on explicit request.
+- Branches: PRs/MRs go into `dev` (`integrationBranch` in `.agents/environments.json`, `worktree-flow` section 0); staging and prod branches only on explicit request.
 - Tracker: Jira project `WEST`; branch and commit ids look like `WEST-123`. PR/MR platform: GitLab (`glab`).
 - Stack: Next.js App Router in `apps/web` (docs for the installed version in `apps/web/node_modules/next/dist/docs/`), NestJS in `apps/api`, Supabase; before using a framework API, read the docs of the installed version (`feature-build` tech files).
 - Commands (repo root): install `pnpm install --frozen-lockfile`; dev `pnpm dev`; typecheck `pnpm typecheck`; lint `pnpm lint`; test `pnpm test`; E2E `pnpm e2e`.
@@ -76,6 +83,7 @@ Leave out what the code shows on its own; if a fact is only needed in one rare s
 ### 3b. Environment registry
 
 Create or update `.agents/environments.json` by following the `environments` skill's create section (gitignore entries, secrets example file, validation).
+It always gets `integrationBranch` with the user's answer from section 2, even when no environment is known yet (`environments` stays empty).
 
 ### 3c. Version endpoint
 
@@ -97,7 +105,8 @@ For each persona the E2E skills need: an account per environment in the registry
 python3 <this skill>/scripts/doctor.py    # from the project root; --help lists every probe and flag
 ```
 
-The script runs every doctor check and prints one table: check, status (`OK` / `MISSING` / `FAILING` / `DRIFT` / `SKIP`), detail, and fix.
+The script runs every doctor check and prints one table: check, status (`OK` / `MISSING` / `FAILING` / `DRIFT` / `PENDING` / `SKIP`), detail, and fix.
+`PENDING` is a file that only an open PR/MR has (usually this skill's own): merging it finishes the row, and a file already on `origin/<int>` but not pulled is `SKIP` with `git pull` as its fix.
 Its machine rows (plugin, hooks, CLIs, logins, MCP) come from the `harness-map` collectors, so each check has one owner.
 Run it yourself, never through a subagent, and rerun it only to confirm a fix.
 
@@ -110,6 +119,7 @@ Fix cheap drift in this skill's own block and files through the normal flow of s
 
 - A block path the table shows as renamed, or a script that now has another name with the same body in `package.json`: update the block.
 - A fact the user just answered in place of a `TODO(<owner>)`: replace the TODO.
+- An `Integration branch` row that says not recorded or legacy: ask the section 2 branch question, then write `integrationBranch`.
 - Missing gitignore lines or example files from the `environments` skill's create section: add them.
 
 Report every other row with its fix command, using `! <command>` for logins.

@@ -1,1 +1,1 @@
-Read https://hephaestus-skills-docs.vercel.app/install.md and follow it to install Hephaestus Skills for yourself, then help me finish the setup.
+Read https://hephaestus-skills-docs.vercel.app/install.md and follow it to install Hephaestus Skills for yourself, then finish the whole setup for this machine and this project in the same run: ask me every decision in one message, then do it all.

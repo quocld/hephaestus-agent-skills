@@ -229,6 +229,19 @@ FS_D="$TMP/fs-d"
 git init -q -b main "$FS_D"
 echo 'Track features with the feature-status skill.' > "$FS_D/AGENTS.md"
 git -C "$FS_D" add -A && git -C "$FS_D" commit -q -m init
+# repo F: origin's default branch main is not opted in; PRs go into trunk, which is, and only integrationBranch names it
+FS_F_ORIGIN="$TMP/fs-f-origin.git"
+FS_F="$TMP/fs-f"
+git init -q --bare -b main "$FS_F_ORIGIN"
+git clone -q "$FS_F_ORIGIN" "$FS_F" 2>/dev/null
+git -C "$FS_F" switch -q -c main
+git -C "$FS_F" commit -q --allow-empty -m init && git -C "$FS_F" push -q origin main
+git -C "$FS_F" switch -q -c trunk
+mkdir -p "$FS_F/docs/status" && touch "$FS_F/docs/status/.gitkeep"
+git -C "$FS_F" add -A && git -C "$FS_F" commit -q -m status && git -C "$FS_F" push -q origin trunk
+git -C "$FS_F" switch -q main && git -C "$FS_F" fetch -q origin
+mkdir -p "$FS_F/.agents"
+printf '{"project": "f", "integrationBranch": "trunk", "environments": {"dev": "oops"}}\n' > "$FS_F/.agents/environments.json"
 # not opted in: $MAIN, with a ticket-shaped branch for the PR rule
 git -C "$MAIN" worktree add -q -b feat/WEST-8-x "$TMP/plain-wt"
 STUB_OK="$TMP/status-ok.py"; STUB_BAD="$TMP/status-bad.py"
@@ -338,6 +351,7 @@ fs_bash deny  "$FS_A" "git worktree add -b feat/WEST-1-again ../wt9 origin/dev"
 fs_bash deny  "$FS_A" "git worktree add -b feat/WEST-1-done ../wt9 origin/dev"
 fs_bash allow "$FS_A" "git worktree add --no-track -b feat/WEST-12-landed ../wt12 origin/dev"
 fs_bash deny  "$FS_E" "git worktree add -b feat/WEST-9-new ../wt9 origin/dev"
+fs_bash deny  "$FS_F" "git worktree add -b feat/WEST-9-new ../wt9 origin/trunk"
 # a slug-only branch with no claim is a small no-ticket change, out of scope for rules 2 and 3
 fs_bash allow "$FS_A" "git worktree add -b feat/dark-modes-toggle ../wt9 origin/dev"
 fs_bash allow "$FS_A" "git worktree add -b fix/csv-typo ../wt9 origin/dev"
@@ -526,8 +540,9 @@ if project:
 enabled = {}
 for s in sources:
     enabled.update(s.get("enabledPlugins") or {})
-if any(k.startswith("agent-skills@") and v for k, v in enabled.items()):
-    print("ok   agent-skills plugin enabled, its hooks.json registers the gates")
+# hephaestus@quocld, or agent-skills@quocld, its id before the rename.
+if any(k.split("@")[0] in ("hephaestus", "agent-skills") and v for k, v in enabled.items()):
+    print("ok   hephaestus plugin enabled, its hooks.json registers the gates")
     sys.exit(0)
 
 entries = []
@@ -544,7 +559,7 @@ for script, tool in want:
     print(("ok   " if hit else "FAIL ") + f"legacy settings: PreToolUse matcher with {tool} runs agent-skills-hooks/{script}")
     bad |= not hit
 if bad:
-    print("     install the agent-skills plugin (README) instead of registering the hooks by hand")
+    print("     install the hephaestus plugin (README) instead of registering the hooks by hand")
 sys.exit(bad)
 PY
 fi

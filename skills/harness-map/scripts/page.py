@@ -17,9 +17,23 @@ REPO = SKILL.parents[1]
 SKILLS_DIR = REPO / "skills"
 TEMPLATE = SKILL / "assets" / "template.html"
 
+# The plugin's name in .claude-plugin/plugin.json (skills are /hephaestus:<name>) and its id in the quocld marketplace.
+# It was "agent-skills" before the rename: an install under that name is still this plugin, never a clash.
+PLUGIN_NAME = "hephaestus"
+LEGACY_PLUGIN_NAMES = ("agent-skills",)
+OUR_PLUGIN = PLUGIN_NAME + "@quocld"
+LEGACY_PLUGIN = LEGACY_PLUGIN_NAMES[0] + "@quocld"
+MACHINE = "This machine (every project)"   # the section for global settings that every project's sessions load
+
+
+def is_our_plugin(pid):
+    """True for this plugin's id under its current name or a legacy one, from any marketplace."""
+    return isinstance(pid, str) and pid.split("@")[0] in (PLUGIN_NAME,) + LEGACY_PLUGIN_NAMES
+
 # Ranked by how much each status blocks work; drives sorting and scores.
-RANK = {"fail": 0, "missing": 1, "warn": 2, "ok": 3, "info": 4, "skip": 5}
-LABEL = {"fail": "Failing", "missing": "Missing", "warn": "Attention", "ok": "OK", "info": "Info", "skip": "Skipped"}
+# pending: done in an open PR/MR that only the user merges; not done, but not a gap to fix either.
+RANK = {"fail": 0, "missing": 1, "warn": 2, "pending": 3, "ok": 4, "info": 5, "skip": 6}
+LABEL = {"fail": "Failing", "missing": "Missing", "warn": "Attention", "pending": "Pending", "ok": "OK", "info": "Info", "skip": "Skipped"}
 
 ICONS = {
     "Global instructions": '<path d="M4 4h12v12H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 8h6M7 11h4" stroke="currentColor" stroke-width="1.6"/>',
@@ -27,7 +41,7 @@ ICONS = {
     "Hooks": '<path d="M7 4v6a3 3 0 006 0V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="13" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     "Tools": '<path d="M4 6l4 4-4 4M10 14h6" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     "Plugins & MCP": '<path d="M8 3v4M12 3v4M6 7h8v3a4 4 0 01-8 0zM10 14v3" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-    "Settings hygiene": '<path d="M10 3l6 2.5V10c0 3.5-2.6 6-6 7-3.4-1-6-3.5-6-7V5.5z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
+    MACHINE: '<path d="M10 3l6 2.5V10c0 3.5-2.6 6-6 7-3.4-1-6-3.5-6-7V5.5z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     "Project": '<path d="M3 6h5l2 2h7v8H3z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     "Flow": '<path d="M3 10h4l2-5 2 10 2-5h4" fill="none" stroke="currentColor" stroke-width="1.6"/>',
 }
@@ -126,10 +140,10 @@ def strip_userinfo(url):
 
 
 def is_agent_skills_dir(d):
-    """An agent-skills checkout or plugin folder: its manifest says so, or it has the repo's shape.
-    Identifies a legacy link's target by what it holds, so it works from a plugin folder that has no git."""
+    """A checkout or plugin folder of this repo: its manifest names the plugin (current or legacy name), or it has
+    the repo's shape. Identifies a legacy link's target by what it holds, so it works from a plugin folder with no git."""
     try:
-        if json.loads((d / ".claude-plugin" / "plugin.json").read_text()).get("name") == "agent-skills":
+        if json.loads((d / ".claude-plugin" / "plugin.json").read_text()).get("name") in (PLUGIN_NAME,) + LEGACY_PLUGIN_NAMES:
             return True
     except (OSError, ValueError, AttributeError):
         pass
@@ -137,7 +151,7 @@ def is_agent_skills_dir(d):
 
 
 def links_into_agent_skills(link, rel):
-    """True when link is a symlink to <an agent-skills checkout>/<rel>, comparing path parts."""
+    """True when link is a symlink to <a checkout of this repo>/<rel>, comparing path parts."""
     if not link.is_symlink():
         return False
     target = Path(os.path.realpath(link))

@@ -1,6 +1,7 @@
 {
   "$schema": "./environments.schema.json",
   "project": "acme",
+  "integrationBranch": "dev",
   "defaultEnvironment": "dev",
   "environments": {
     "dev": {

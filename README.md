@@ -31,40 +31,41 @@ Every merge to `main` publishes a new release (tag `vX.Y.Z` from the commit type
 Paste this one line into any coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot, …):
 
 ```text
-Read https://hephaestus-skills-docs.vercel.app/install.md and follow it to install Hephaestus Skills for yourself, then help me finish the setup.
+Read https://hephaestus-skills-docs.vercel.app/install.md and follow it to install Hephaestus Skills for yourself, then finish the whole setup for this machine and this project in the same run: ask me every decision in one message, then do it all.
 ```
 
-The agent reads the [install guide](https://hephaestus-skills-docs.vercel.app/install/) (source: [`skills/harness-map/assets/install-guide.md`](skills/harness-map/assets/install-guide.md)): it takes stock of what this machine and project already have, installs Hephaestus Skills without overwriting anything (a clashing skill or rule is kept, and ours is forked next to it as `hx-<name>`), shows you every change first, and then walks you through the rest with `harness-map`.
+The agent reads the [install guide](https://hephaestus-skills-docs.vercel.app/install/) (source: [`skills/harness-map/assets/install-guide.md`](skills/harness-map/assets/install-guide.md)): it takes stock of what this machine and project already have, installs Hephaestus Skills without overwriting anything (a clashing skill or rule is kept, and ours is forked next to it as `hx-<name>`), asks every open decision in one message, and then finishes the setup with `harness-map`, project and environments included, in the same run.
 
 <details>
 <summary><b>Or install by hand</b> in Claude Code, instead of the prompt (not both)</summary>
 
 ```text
 /plugin marketplace add quocld/hephaestus-agent-skills
-/plugin install agent-skills@quocld
+/plugin install hephaestus@quocld
 ```
 
-Restart the session, then ask Claude to **"finish my harness setup"**: the `harness-map` skill checks tools, logins and project setup and asks for what is missing.
+Restart the session, then ask Claude to **"finish my harness setup"**: the `harness-map` skill checks tools, logins and project setup, asks for what is missing in one message, and finishes the rest.
 
 </details>
 
 ### Update
 
 ```sh
-claude plugin marketplace update quocld && claude plugin update agent-skills@quocld
+claude plugin marketplace update quocld && claude plugin update hephaestus@quocld
 ```
 
+Installed before the rename as `agent-skills@quocld`: `/plugin uninstall agent-skills@quocld`, then `/plugin install hephaestus@quocld`, and rename that key under `enabledPlugins` in any project's `.claude/settings.json`; `harness-map` flags the old id.
 Try a local checkout for one session: `claude --plugin-dir <path-to-checkout>`.
 Coming from the old `install.sh` symlinks: run `python3 migrate-to-plugin.py` (`--dry-run` to preview), then `hooks/test.sh`.
 
 ## Skills
 
-Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also picks them up on its own from their descriptions.
+Skills are namespaced, for example `/hephaestus:worktree-flow`; Claude also picks them up on its own from their descriptions.
 
 | Skill | Use it for | Needs |
 | --- | --- | --- |
 | `feature-status` | One status file per feature in `docs/status/`, claimed on the remote before the worktree exists and edited only by its script: states, per-AC test tiers with E2E evidence, board. | `python3`; `gh` or `glab` for `board --live` |
-| `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into `dev`; staging/prod only on explicit word. | `gh` or `glab` |
+| `worktree-flow` | One worktree + branch per task for parallel agents; done = PR/MR into the recorded integration branch; staging/prod only on explicit word. | `gh` or `glab` |
 | `feature-build` | Implement a feature or user story end to end in an S, M or L lane sized from the change: gaps, exploration, design options, verify, PR. Lean per-technology notes for Next.js, React, Vercel, Supabase, NestJS. | - |
 | `root-cause` | Find the cause before fixing: failing layer, backward trace, 3-failed-fixes stop, flaky tests, polluter bisection. | - |
 | `verify-loop` | One ordered chain of gates before any PR (toolchain, project checks, proof tests, requirements, review, E2E) with a PASS/FAIL table; a lighter gate set for docs, config and copy-only changes, and targeted reruns after a fix. | - |
@@ -73,7 +74,7 @@ Skills are namespaced, for example `/agent-skills:worktree-flow`; Claude also pi
 | `security-pass` | Per-PR security pass for any stack: authz on every entry point, tenant isolation, IDOR, secrets, injection; Next.js/Supabase specifics (RLS, service role). | - |
 | `flow-trace` | Trace one business lifecycle end to end: one-way-door states, unhandled events, broken idempotency. | - |
 | `bug-triage` | Bug/QA ticket loop: classify, depth by risk, prove the test, verify the deploy, hand back. | Jira access |
-| `jira-bug-hunter` | Work assigned Jira bugs one at a time: fix, review, merge into `dev`, verify with video, daily HTML demo report. | Jira, Playwright MCP, `environments` |
+| `jira-bug-hunter` | Work assigned Jira bugs one at a time: fix, review, merge into the integration branch, verify with video, daily HTML demo report. | Jira, Playwright MCP, `environments` |
 | `fe-guardrails` | React/Next rules for loading, empty and error states, form errors, and copy. | - |
 | `environments` | Per-project registry of dev/staging/prod: servers, deploy commands, test accounts; prod confirmed step by step. | `.agents/environments.json` |
 | `server-touch` | Docker Compose ops over SSH on a shared host: scoped commands, deploy, logs, `.env`, psql, rollback. | `environments` |

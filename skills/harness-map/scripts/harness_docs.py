@@ -9,7 +9,7 @@ import re
 import shlex
 from pathlib import Path
 
-from page import release_version, PILLARS, REPO, pillar_cards, wheel_svg, SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
+from page import release_version, is_our_plugin, PLUGIN_NAME, PILLARS, REPO, pillar_cards, wheel_svg, SKILL_NAMES, ULTIMATE, ult, CLAUDE, SKILL, _dict, _dicts, _str, esc, icon, load_json, load_obj, plugin_entry, repo_skills
 
 LIFE = load_json(SKILL / "assets" / "lifecycle.json")
 
@@ -52,7 +52,7 @@ def repo_hooks():
         for e in _dicts(entries):
             for h in _dicts(e.get("hooks")):
                 m = re.search(r"hooks/([\w-]+)\.py", _str(h.get("command")))
-                rows.append((event, _str(e.get("matcher")) or "*", "gate", m.group(1) if m else "agent-skills", "plugin hooks.json"))
+                rows.append((event, _str(e.get("matcher")) or "*", "gate", m.group(1) if m else PLUGIN_NAME, "plugin hooks.json"))
     return rows
 
 
@@ -72,14 +72,14 @@ def live_hooks():
             continue
         path = Path(_str(plugin_entry(installed, pid).get("installPath")))
         data = load_obj(path / "hooks" / "hooks.json")
-        ours = pid.split("@")[0] == "agent-skills"
+        ours = is_our_plugin(pid)   # the current name or the legacy agent-skills id
         for event, entries in _dict(data.get("hooks", data)).items():
             for e in _dicts(entries):
                 if ours:
                     # This repo's own gates, shipped in the plugin, keep their names and the gate colour.
                     for h in _dicts(e.get("hooks")):
                         m = re.search(r"hooks/([\w-]+)\.py", _str(h.get("command")))
-                        rows.append((event, _str(e.get("matcher")) or "*", "gate", m.group(1) if m else "agent-skills", "plugin agent-skills"))
+                        rows.append((event, _str(e.get("matcher")) or "*", "gate", m.group(1) if m else PLUGIN_NAME, "plugin " + pid.split("@")[0]))
                 else:
                     rows.append((event, _str(e.get("matcher")) or "*", "plugin", pid.split("@")[0], "plugin " + pid.split("@")[0]))
     # Settings entries that only launch a plugin's own runner duplicate the plugin row; keep one per (event, name).
@@ -445,7 +445,7 @@ def onboard_source():
             '<p class="rdesc">Paste this one line into any coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Copilot). '
             'It reads the install guide, takes stock of the harness you already have, installs Hephaestus Skills without '
             'overwriting anything (a clashing skill or rule is kept and ours is forked as <code>hx-&lt;name&gt;</code>), '
-            'shows you every change first, and then walks you through the rest of the setup.</p>'
+            'asks every open decision in one message, and then finishes the setup, project and environments included, in the same run.</p>'
             '<div class="bar"><button class="btn primary" type="button" data-copy="onboard-text">Copy prompt</button>'
             '<a class="btn ghost" href="/install/">Read the install guide</a></div></div>'
             f'<pre id="onboard-text" class="ptext open">{esc(prompt)}</pre></template>')

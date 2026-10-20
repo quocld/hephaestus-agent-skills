@@ -42,6 +42,7 @@ One concise, standalone message, evidence first:
 5. Your recommendation and why.
 
 - Ask one question at a time when possible; batch non-urgent updates into the next natural reply.
+- A skill that prescribes one up-front batch (`harness-map` section 3, `project-init` section 2, `environments` section 10) asks all of it in one message, each decision numbered with its drafted answer and one line of evidence, instead of one at a time.
 - Talk in outcomes, not internal mechanics or tool jargon.
 - The final message of a turn must stand alone: results, decisions needed, and full URLs, even if said earlier.
 - While waiting on a non-blocking question, keep doing the parts that do not depend on the answer.

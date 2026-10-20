@@ -17,7 +17,7 @@ A bug often needs the user mid-way (a business decision, a confirmation, a crede
 
 ## 0. Setup, once per run
 
-- Read the project-init block of the project's `AGENTS.md` for the Jira project key, the integration branch `<int>` (`worktree-flow` section 0), and the dev environment in `.agents/environments.json`.
+- Read the project-init block of the project's `AGENTS.md` for the Jira project key, the integration branch `<int>` (`integrationBranch` in `.agents/environments.json`, `worktree-flow` section 0; not recorded: ask before the first merge), and the dev environment in that registry.
   No block means run `project-init` first.
 - Load `environments` before anything touches dev, and follow dev's policy and testing scope there.
 - Jira access is the Atlassian MCP or the REST API; having neither is a blocker to report, not a reason to guess tickets.

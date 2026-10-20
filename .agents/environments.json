@@ -1,6 +1,11 @@
 {
   "$schema": "./environments.schema.json",
   "project": "hephaestus-agent-skills",
+  "integrationBranch": "main",
+  "absentEnvironments": [
+    "dev",
+    "staging"
+  ],
   "defaultEnvironment": "docs",
   "environments": {
     "docs": {

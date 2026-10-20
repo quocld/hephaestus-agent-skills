@@ -10,7 +10,7 @@ A `version` on a confirm-each-step environment is never run: its row is SKIP wit
 
 Tool probes it runs unless --no-probe (each read-only for the project; git ones fail instead of prompting):
   bash hooks/test.sh (the plugin's own hook test, in throwaway repos); gh/glab auth status, vercel whoami, op whoami;
-  git ls-remote origin; git fetch origin --prune (updates remote-tracking refs only), when docs/status is opted in;
+  gh pr list (open PRs that add a missing AGENTS.md or registry); git ls-remote origin; git fetch origin --prune (updates remote-tracking refs only), when docs/status is opted in;
   claude mcp list (starts the configured MCP servers to health-check them); npx -y --prefer-offline chrome-devtools-axi
   --help and npx -y ajv-cli@5.0.0 (may download into the npx cache); the registry's non-asks-first `version` commands.
 Without probes those rows are SKIP with the command to run.
@@ -18,7 +18,7 @@ Without probes those rows are SKIP with the command to run.
 Machine-level rows (plugin, hooks, CLIs, logins, MCP, markers, TODOs, registry secrets) come from the harness-map
 collectors, so each check has one owner; this script owns the project-block and registry probes.
 
-Status: OK, MISSING, FAILING, DRIFT, SKIP (precondition absent, asks first, or not probed).
+Status: OK, MISSING, FAILING, DRIFT, PENDING (in an open PR/MR the user merges), SKIP (precondition absent, asks first, or not probed).
 Exit 0 when no row is MISSING, FAILING or DRIFT, 1 otherwise, 2 on a usage error.
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ try:
 except ImportError as e:   # project-init ships next to harness-map in the plugin
     sys.exit(f"doctor needs the harness-map skill next to project-init ({SKILLS / 'harness-map'}): {e}")
 
-STATUS = {"ok": "OK", "missing": "MISSING", "fail": "FAILING", "warn": "DRIFT", "skip": "SKIP", "info": "SKIP"}
+STATUS = {"ok": "OK", "missing": "MISSING", "fail": "FAILING", "warn": "DRIFT", "pending": "PENDING", "skip": "SKIP", "info": "SKIP"}
 BAD = {"MISSING", "FAILING", "DRIFT"}
 MANAGERS = {"pnpm": "pnpm-lock.yaml", "yarn": "yarn.lock", "npm": "package-lock.json", "bun": "bun.lockb"}
 BUILTINS = {"install", "i", "ci", "add", "remove", "rm", "uninstall", "update", "up", "upgrade", "exec", "dlx", "x",
@@ -76,10 +76,10 @@ PROJECT_ROWS_DROPPED = {"Repository", "Project checks (verify-loop)", "Playwrigh
 
 
 def machine_rows(project, registry, probe, manager):
-    hm.PLUGIN_ID, hm.PLUGIN_DIR = hm.agent_skills_plugin(project)
+    hm.set_plugin(project)
     # The platform's own CLI login only: a GitLab project needs glab, not gh (glab rows appear only for GitLab).
     gitlab = "gitlab" in run(["git", "-C", str(project), "remote", "get-url", "origin"])[1].lower()
-    out = [from_hm(c) for c in hm.collect_global()]
+    out = [from_hm(c) for c in hm.collect_global(project)]
     out += [from_hm(c) for c in hm.collect_hooks(probe, project) if c["status"] != "info"]
     reg_text = json.dumps(registry or {}).lower()
     for c in hm.collect_tools(probe, registry, project)[0]:
@@ -319,11 +319,12 @@ def check_ssh(registry):
 
 
 def version_cmd(project, cmd):
-    """argv that runs a registry `version` with .agents/secrets.env loaded in the same shell (environments section 9)."""
-    sec = Path(project) / ".agents" / "secrets.env"
-    if sec.exists() and "op://" in sec.read_text(errors="ignore") and shutil.which("op"):
+    """argv that runs a registry `version` with .agents/secrets.env loaded in the same shell (environments section 9).
+    The file is the one harness-map reads (hm.secrets_file): the worktree's own, else the main checkout's."""
+    sec = hm.secrets_file(project)
+    if sec and sec.exists() and "op://" in sec.read_text(errors="ignore") and shutil.which("op"):
         return ["op", "run", "--env-file", str(sec), "--", "bash", "-c", cmd]
-    prefix = "set -a; . .agents/secrets.env; set +a; " if sec.exists() else ""
+    prefix = f"set -a; . {shlex.quote(str(sec))}; set +a; " if sec and sec.exists() else ""
     return ["bash", "-c", prefix + cmd]
 
 
@@ -419,6 +420,8 @@ def check_logger(project, block, a, probe):
 
 def check_feature_status(project, int_branch, probe):
     status_py = SKILLS / "feature-status" / "scripts" / "status.py"
+    if not int_branch:
+        return [row("Feature status", "SKIP", "no integration branch recorded to read docs/status from (the Integration branch row)")]
     so = run(["git", "-C", str(project), "ls-tree", "-d", f"origin/{int_branch}", "docs/status"])[1]
     if not so.strip():
         return [row("Feature status", "SKIP", f"origin/{int_branch} has no docs/status (not opted in)")]
@@ -511,7 +514,7 @@ def main(argv=None):
         print("| Check | Status | Detail | Fix |\n| --- | --- | --- | --- |")
         for r in rows:
             print(f"| {cell(r['check'])} | {r['status']} | {cell(r['detail'])} | {cell(r['fix'])} |")
-        n = {s: sum(1 for r in rows if r["status"] == s) for s in ("OK", "MISSING", "FAILING", "DRIFT", "SKIP")}
+        n = {s: sum(1 for r in rows if r["status"] == s) for s in ("OK", "MISSING", "FAILING", "DRIFT", "PENDING", "SKIP")}
         print("\n" + "  ".join(f"{k} {v}" for k, v in n.items()))
     return 1 if any(r["status"] in BAD for r in rows) else 0
 

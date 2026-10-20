@@ -23,7 +23,7 @@ It returns `ask` when that directory cannot be resolved, skips `gh`/`glab` `-R`/
 It matches `git`, `gh` and `glab` by basename anywhere in a simple command, so `/usr/bin/git push origin main` asks and `echo git push origin main` unquoted also asks, which errs on the safe side.
 A `cd` or `-C` target of `$PWD`, `${PWD}`, `$(pwd)` or `$(git rev-parse --show-toplevel)` (quoted, or in backticks, optionally followed by `/<path>`) resolves to the directory it names; any other variable leaves it unresolved.
 
-The feature-status guard treats a repo as opted in when `docs/status/` exists at its top level or its `AGENTS.md` mentions `feature-status`; the Bash rules also check `origin/<int>` with `git ls-tree` and `git show`, where `<int>` is the `dev` environment's branch in `.agents/environments.json`, otherwise `origin/dev`, otherwise `origin/HEAD`.
+The feature-status guard treats a repo as opted in when `docs/status/` exists at its top level or its `AGENTS.md` mentions `feature-status`; the Bash rules also check `origin/<int>` with `git ls-tree` and `git show`, where `<int>` is `integrationBranch` in `.agents/environments.json`, else the legacy `dev` environment's branch; for this opt-in check only, `origin/dev` and `origin/HEAD` are read too.
 It finds commands the same way as the protected-branch guard (payload `cwd`, `cd`, `git -C`, `bash -c`, `eval`) and reuses that script's parser.
 Where that guard asks on an unresolvable `cd` or `-C` target, this one falls back to the payload `cwd`, whose repo shares its refs with every worktree, so `cd $(git rev-parse --show-toplevel)` unquoted is still checked.
 Short flags bundled as git reads them (`-qb <branch>`, `-fb`, `-qc`) count as the branch-creating flag.
