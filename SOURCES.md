@@ -27,6 +27,6 @@ License texts for each source are in `LICENSES/`.
 | `skills/jira-bug-hunter` (incl. `scripts/hunt_report.py`) | mine; report layout modeled on my VOCO TMA QA report | mine |
 | `skills/verify-loop` (incl. `scripts/checks.py`, `references/ci.md`) | ideas from claude.com article "Building verification loops in Claude Code with skills" (placements, project-specific checks, CI), github.com/obra/superpowers `verification-before-completion` (claim and evidence table), github.com/affaan-m/everything-claude-code `verification-loop` (gated phases, report table); CI YAML from code.claude.com/docs/en/github-actions | MIT (skills), docs |
 | `hooks/` | mine | mine |
-| local changes to vendored skills | `gnhf` (iteration and relaunch caps), `stow` (curate only touched files), `chrome-devtools-axi` (browser order defers to `e2e-verify`, `--prefer-offline`) | reapply after any upstream sync |
+| local changes to vendored skills | `gnhf` (iteration and relaunch caps; launched via `npx -y --prefer-offline gnhf` instead of assuming a global install, since `README.md` links were also rewritten to the upstream GitHub URL), `stow` (curate only touched files), `chrome-devtools-axi` (browser order defers to `e2e-verify`, `--prefer-offline`) | reapply after any upstream sync |
 | `reference/opinions-example.md` | github.com/kunchenguid/kun `OPINIONS.md` (no upstream license; keep this repo private) | none |
 | `skills/flow-trace`, `skills/e2e-verify`, `skills/bug-triage`, `skills/fe-guardrails`, `skills/server-touch` | distilled from my westmont-erp project workflow | mine |

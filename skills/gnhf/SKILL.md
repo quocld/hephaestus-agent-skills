@@ -52,16 +52,18 @@ Examples:
 
 ## Launch
 
+No separate install needed: `gnhf` is an npm package, so `npx -y --prefer-offline gnhf` fetches and caches it on first use, then reuses the cache. Prefer a global `gnhf` on PATH when the user already has one; otherwise run every command below as `npx -y --prefer-offline gnhf ...`.
+
 Check the installed CLI before relying on flags:
 
 ```bash
-gnhf --help
+npx -y --prefer-offline gnhf --help
 ```
 
 Known shape:
 
 ```bash
-gnhf \
+npx -y --prefer-offline gnhf \
   --agent <agent> \
   --max-iterations <n> \
   --stop-when "<observable completion condition>" \
@@ -70,7 +72,7 @@ gnhf \
 ```
 
 Default to `--max-iterations 10` unless the user names a number.
-Use `--model <model>` to select a model for a run. For config defaults and agent-specific restrictions, follow the README [Configuration](../../README.md#configuration).
+Use `--model <model>` to select a model for a run. For config defaults and agent-specific restrictions, follow the README [Configuration](https://github.com/kunchenguid/gnhf#configuration).
 
 Before launch:
 
@@ -163,7 +165,7 @@ Report mode, agent, branch, status, changes, verification, stop-condition result
 
 ## Agent
 
-The supported `--agent` roster comes from `gnhf --help`; the [Agents table](../../README.md#agents) in the GNHF README owns per-agent requirements. Do not hard-code the roster.
+The supported `--agent` roster comes from `npx -y --prefer-offline gnhf --help`; the [Agents table](https://github.com/kunchenguid/gnhf#agents) in the GNHF README owns per-agent requirements. Do not hard-code the roster.
 
 - Default to the agent the user explicitly requested, or the one already configured and authenticated locally.
 - `codex`: repo-aware code work or review-heavy tasks.
