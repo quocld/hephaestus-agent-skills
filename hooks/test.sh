@@ -502,16 +502,37 @@ sys.exit(bad)
 PY
 
 # This machine: the gates run through the enabled plugin, or through legacy settings entries.
-if [ ! -f "$SETTINGS" ]; then
+# Enablement can be scoped to one project (its .claude/settings.json or settings.local.json)
+# rather than the user's global settings; pass CLAUDE_PROJECT so this check sees that scope too.
+if [ ! -f "$SETTINGS" ] && [ -z "${CLAUDE_PROJECT:-}" ]; then
   echo "WARN $SETTINGS not found, skipping the registration check (expected in CI)"
 else
-  python3 - "$SETTINGS" <<'PY' || FAIL=1
+  python3 - "$SETTINGS" "${CLAUDE_PROJECT:-}" <<'PY' || FAIL=1
 import json, sys
-settings = json.load(open(sys.argv[1]))
-if any(k.startswith("agent-skills@") and v for k, v in (settings.get("enabledPlugins") or {}).items()):
+from pathlib import Path
+
+def load(path):
+    try:
+        return json.load(open(path))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+settings_path, project = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
+sources = [load(settings_path)]
+if project:
+    sources.append(load(Path(project) / ".claude" / "settings.json"))
+    sources.append(load(Path(project) / ".claude" / "settings.local.json"))
+
+enabled = {}
+for s in sources:
+    enabled.update(s.get("enabledPlugins") or {})
+if any(k.startswith("agent-skills@") and v for k, v in enabled.items()):
     print("ok   agent-skills plugin enabled, its hooks.json registers the gates")
     sys.exit(0)
-entries = (settings.get("hooks") or {}).get("PreToolUse") or []
+
+entries = []
+for s in sources:
+    entries += (s.get("hooks") or {}).get("PreToolUse") or []
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 want = [("no-em-dash.py", t) for t in WRITE_TOOLS] + [("guard-protected-branches.py", "Bash")]
 want += [("feature-status-guard.py", t) for t in WRITE_TOOLS + ("Bash",)]
