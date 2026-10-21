@@ -19,6 +19,12 @@ FEAT="$TMP/feature-wt"
 git init -q -b main "$MAIN"
 git -C "$MAIN" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
 git -C "$MAIN" worktree add -q -b feature "$FEAT"
+# A named remote (never contacted) so origin/main reads as main's remote counterpart.
+git -C "$MAIN" remote add origin "$TMP/no-such-origin.git"
+git -C "$MAIN" update-ref refs/remotes/origin/main HEAD
+git -C "$MAIN" update-ref refs/remotes/origin/feature HEAD
+git -C "$MAIN" config branch.main.remote origin
+git -C "$MAIN" config branch.main.merge refs/heads/main
 
 # decision <hook> <payload json> prints allow, ask or deny, or error when the hook exits non-zero or writes stderr.
 decision() {
@@ -78,6 +84,37 @@ bash_case ask   "$FEAT" 'cd "$SOMEWHERE" && git push'
 bash_case ask   "$MAIN" 'git merge feature'
 bash_case allow "$FEAT" 'git merge main'
 bash_case ask   "$FEAT" "cd $MAIN; git merge feature"
+# fast-forwarding a protected branch to its own remote counterpart only brings in what the remote has
+bash_case allow "$MAIN" 'git merge --ff-only origin/main'
+bash_case allow "$MAIN" 'git merge --ff-only refs/remotes/origin/main'
+bash_case allow "$MAIN" 'git merge --ff-only @{u}'
+bash_case allow "$MAIN" 'git fetch origin && git merge --ff-only main@{upstream}'
+bash_case ask   "$MAIN" 'git merge origin/main'
+bash_case ask   "$MAIN" 'git merge --ff-only feature'
+bash_case ask   "$MAIN" 'git merge --ff-only origin/feature'
+bash_case ask   "$MAIN" 'git merge --ff-only upstream/main'
+bash_case ask   "$MAIN" 'git merge --ff-only origin/main feature'
+bash_case ask   "$MAIN" 'git merge --ff-only'
+bash_case allow "$MAIN" 'git pull'
+bash_case allow "$MAIN" 'git pull --ff-only'
+bash_case allow "$MAIN" 'git pull --rebase origin main'
+bash_case allow "$MAIN" 'git pull --ff-only origin refs/heads/main'
+bash_case ask   "$MAIN" 'git pull origin feature'
+bash_case ask   "$MAIN" 'git pull --ff-only origin main feature'
+bash_case ask   "$FEAT" "cd $MAIN && git pull -s ours origin feature"
+bash_case allow "$FEAT" 'git pull origin main'
+# attach-only flags never swallow the branch after them; a local ref shadowing origin/main and a non-remote source ask
+bash_case ask   "$MAIN" 'git merge --ff-only -S feature origin/main'
+bash_case ask   "$MAIN" 'git pull -S . feature'
+bash_case ask   "$MAIN" 'git pull --recurse-submodules . feature'
+bash_case ask   "$MAIN" 'git pull ../other main'
+bash_case ask   "$MAIN" 'git pull https://example.invalid/x.git main'
+bash_case allow "$MAIN" 'git merge --ff-only @{U}'
+git -C "$MAIN" tag origin/main feature
+bash_case ask   "$MAIN" 'git merge --ff-only origin/main'
+git -C "$MAIN" tag -d origin/main >/dev/null
+bash_case allow "$FEAT" 'cd "$SOMEWHERE" && git pull --ff-only'
+bash_case ask   "$FEAT" 'cd "$SOMEWHERE" && git pull origin feature'
 bash_case ask   "$FEAT" 'gh pr merge 12 --squash'
 bash_case ask   "$FEAT" 'gh -R owner/repo pr merge 12'
 bash_case ask   "$FEAT" 'gh pr --repo owner/repo merge 12'
