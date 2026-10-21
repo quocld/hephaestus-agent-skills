@@ -3,10 +3,10 @@
 
 Usage: check_docs.py [--site DIR --version vX.Y.Z --sha SHA]
 
-Sources (always): every skills/<name>/SKILL.md is in the README skill table, in some pillar's covered_by.skills
+Sources (always): every skills/<name>/SKILL.md is in the README `## Skills` table, in some pillar's covered_by.skills
 (skills/harness-map/assets/pillars.json) and has an entry under `skills` in skills/harness-map/assets/lifecycle.json; every hooks/*.py
-is in the README hooks table and the hooks/README.md table.
-Site (with --site): skills/<name>/index.html exists and sitemap.xml lists it for every skill, and version.json holds
+is in the README `## Hooks` table and the hooks/README.md table.
+Site (with --site): index.html, install/index.html and 404.html exist, skills/<name>/index.html exists and sitemap.xml lists it for every skill, and version.json holds
 the given version and sha.
 Prints one line per gap and exits 1 when there is any.
 """
@@ -27,9 +27,13 @@ def hooks():
     return sorted(p.name for p in (REPO / "hooks").glob("*.py"))
 
 
-def table_names(path):
-    """Backticked first-column names of the Markdown tables in `path`."""
-    return set(re.findall(r"^\| `([^`]+)` \|", (REPO / path).read_text(), re.M))
+def table_names(path, heading=None):
+    """Backticked first-column names of the Markdown tables in `path`, only under `## <heading>` when given."""
+    text = (REPO / path).read_text()
+    if heading:
+        m = re.search(rf"^## {re.escape(heading)}\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+        text = m.group(1) if m else ""
+    return set(re.findall(r"^\| `([^`]+)` \|", text, re.M))
 
 
 def source_gaps():
@@ -37,18 +41,19 @@ def source_gaps():
     pillars = json.loads((assets / "pillars.json").read_text())
     in_pillars = {s for p in pillars["pillars"] for s in p.get("covered_by", {}).get("skills", [])}
     in_lifecycle = set(json.loads((assets / "lifecycle.json").read_text())["skills"])
-    readme = table_names("README.md")
+    readme_skills = table_names("README.md", "Skills")
+    readme_hooks = table_names("README.md", "Hooks")
     hooks_readme = table_names("hooks/README.md")
     for s in skills():
-        if s not in readme:
-            yield f"skill {s}: missing from the README skill table"
+        if s not in readme_skills:
+            yield f"skill {s}: missing from the README skill table (## Skills)"
         if s not in in_pillars:
             yield f"skill {s}: in no pillar's covered_by.skills (skills/harness-map/assets/pillars.json)"
         if s not in in_lifecycle:
             yield f"skill {s}: no entry under skills in skills/harness-map/assets/lifecycle.json"
     for h in hooks():
-        if h not in readme:
-            yield f"hook {h}: missing from the README hooks table"
+        if h not in readme_hooks:
+            yield f"hook {h}: missing from the README hooks table (## Hooks)"
         if h not in hooks_readme:
             yield f"hook {h}: missing from the hooks/README.md table"
 
@@ -57,6 +62,9 @@ def site_gaps(site, version, sha):
     sitemap = (site / "sitemap.xml").read_text() if (site / "sitemap.xml").is_file() else ""
     if not sitemap:
         yield "site: sitemap.xml missing"
+    for page in ("index.html", "install/index.html", "404.html"):
+        if not (site / page).is_file():
+            yield f"site: {page} missing"
     for s in skills():
         if not (site / "skills" / s / "index.html").is_file():
             yield f"site: skills/{s}/index.html missing"

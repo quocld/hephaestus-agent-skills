@@ -47,7 +47,7 @@
           "notes": [
             "Releases and deploys are manual through .claude/skills/release (no CI deploy): it tags the next version (feat minor, fix and others patch, ! or BREAKING CHANGE major), publishes the GitHub release, checks docs coverage, builds the site at that version, deploys it with the local Vercel CLI, and checks version.json equals the tagged commit.",
             "The deploy commands here redeploy a commit without a new release; remove the deploy worktree afterwards: git worktree remove .agents/deploy/<sha>.",
-            "Google Search Console: the GOOGLE_SITE_VERIFICATION secret (CI) or --gsc-token (manual) adds the HTML-tag token; the sitemap is /sitemap.xml."
+            "Google Search Console: --gsc-token (or GOOGLE_SITE_VERIFICATION) adds the HTML-tag token; the release skill carries over the live site's token; the sitemap is /sitemap.xml."
           ]
         }
       ]

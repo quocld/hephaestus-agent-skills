@@ -17,7 +17,7 @@ By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
    A new skill needs `name` and `description` frontmatter and a place in `skills/harness-map/assets/lifecycle.json`.
 3. Keep the house style: plain `-` instead of an em dash, one sentence per line in Markdown, and no co-author lines for AI agents in commits.
 4. Write commit subjects as [Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`, `docs:`, `refactor:`, ...).
-   Every merge to `main` tags a release from these types: `feat` is a minor bump, a `!` after the type or a `BREAKING CHANGE:` footer is major, anything else is a patch.
+   Releases are cut by hand (`.claude/skills/release`) and pick the version from these types: `feat` is a minor bump, a `!` after the type or a `BREAKING CHANGE:` footer is major, anything else is a patch.
 
 ## Checks
 

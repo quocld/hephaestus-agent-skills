@@ -103,7 +103,8 @@ class Skill:
 
 
 def load_skills(root):
-    """Plugin skills (skills/) and this repo's own skills (.claude/skills/), which are referenced the same way."""
+    """Plugin skills (skills/) and this repo's own skills (.claude/skills/), which are referenced the same way.
+    A name in both resolves to skills/."""
     skills = {}
     for base in (root / ".claude" / "skills", root / "skills"):
         if base.is_dir():
@@ -273,6 +274,13 @@ def self_test():
             (root / "skills" / name / "SKILL.md").write_text(text, encoding="utf-8")
         skills = load_skills(root)
         failed = 0
+        # A repo-only skill under .claude/skills resolves like a plugin skill.
+        (root / ".claude" / "skills" / "local").mkdir(parents=True)
+        (root / ".claude" / "skills" / "local" / "SKILL.md").write_text("# local\n\n## 1. Do\n", encoding="utf-8")
+        local = load_skills(root)
+        ok = "local" in local and not check_line("per `local` section 1", local)
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} .claude/skills: per `local` section 1 resolves")
         for line, want in SELF_TEST_CASES:
             got = check_line(line, skills)
             ok = len(got) == want
