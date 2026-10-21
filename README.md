@@ -24,7 +24,7 @@ It gives every session the same rules (`AGENTS.md`), one git worktree per task, 
 The `AGENTS.md` and skills also work in any harness that reads them (Codex, Cursor, OpenCode).
 
 **Documentation:** [hephaestus-skills-docs.vercel.app](https://hephaestus-skills-docs.vercel.app) shows the eight components of an agent harness, where every skill and hook acts in the Claude Code lifecycle, the task path, the verification loop, and each skill in full.
-Every merge to `main` publishes a new release (tag `vX.Y.Z` from the commit types) and redeploys the docs at that version (`.github/workflows/release.yml`); the site is built with `python3 skills/harness-map/scripts/harness_map.py --docs-only <dir> --site-url <url>`.
+Releases are cut by hand with the repo's `release` skill (`.claude/skills/release/`): it tags `vX.Y.Z` from the commit types, publishes the GitHub release, checks the docs cover every skill and hook, and deploys the docs at that version with the Vercel CLI; the site is built with `python3 skills/harness-map/scripts/harness_map.py --docs-only <dir> --site-url <url>`.
 
 ## Install
 
@@ -110,7 +110,8 @@ Details and tests: [`hooks/README.md`](hooks/README.md).
 | `skills/` | One folder per skill (`SKILL.md` plus scripts and references). |
 | `hooks/` | Gate hooks, registered by `hooks/hooks.json`. |
 | `evals/` | Red/green scenarios, near misses and reader tests per skill (`evals/README.md`). |
-| `.github/` | CI: skill reference check, hook and script tests, em dash scan. |
+| `.github/` | CI: skill reference check, hook and script tests, em dash scan; no release or deploy. |
+| `.claude/skills/` | Skills for working on this repo only, not shipped in the plugin (`release`). |
 | `.claude-plugin/` | Plugin manifest and the marketplace that serves it from this repo. |
 | `assets/` | Logo (`icon.svg`, `icon.png`). |
 | `SOURCES.md`, `LICENSES/` | Upstream sources and their licenses. |
