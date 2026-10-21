@@ -4,9 +4,12 @@
 worktree-flow says staging and prod change only on the user's explicit word, and agents never merge their own PR/MR.
 A permission prompt is that explicit word, so this hook returns "ask" for:
 - git push whose destination is a protected branch (explicit refspec, or no refspec while on one), or --all / --mirror;
-- git merge while the current branch is protected;
+- git merge while the current branch is protected, unless it is `--ff-only` onto that branch's own remote counterpart
+  (`origin/<branch>`, `refs/remotes/<remote>/<branch>`, `@{u}`, `@{upstream}`), which only brings in what the remote already has;
+- git pull while the current branch is protected that names another branch (`git pull origin feature`);
+  a bare `git pull` or one naming the current branch only syncs with the remote and passes;
 - gh pr merge and glab mr merge, whatever the target (-R/--repo included);
-- a push or merge whose repo directory cannot be resolved (a `cd` or `git -C` target with variables, or one that does not exist).
+- a push, merge or branch-naming pull whose repo directory cannot be resolved (a `cd` or `git -C` target with variables, or one that does not exist).
 The current branch is read from the repo the command acts on: payload cwd, then any earlier `cd <dir>` in the command, then `git -C <dir>`.
 `$PWD`, `${PWD}`, `$(pwd)` and `$(git rev-parse --show-toplevel)` (also in backticks, optionally followed by /<path>)
 resolve to the directory they name; any other variable leaves the directory unresolved.
@@ -142,6 +145,73 @@ def forge_merge(tokens, cli, noun):
     return False
 
 
+MERGE_VALUE_FLAGS = {"-m", "-F", "-s", "-X", "--strategy", "--strategy-option", "--file", "--into-name", "--cleanup", "-S"}
+PULL_VALUE_FLAGS = MERGE_VALUE_FLAGS | {"--depth", "--deepen", "--shallow-since", "--shallow-exclude", "-j", "--jobs",
+                                        "--upload-pack", "--negotiation-tip", "-o", "--server-option", "--recurse-submodules"}
+UPSTREAM_SUFFIXES = ("@{u}", "@{upstream}")
+
+
+def positionals(args, value_flags):
+    """Return the non-flag arguments, skipping the values of flags that take one as a separate token."""
+    out = []
+    skip = False
+    for a in args:
+        if skip:
+            skip = False
+            continue
+        if a in value_flags:
+            skip = True
+            continue
+        if not a.startswith("-"):
+            out.append(a)
+    return out
+
+
+def remotes(directory):
+    try:
+        out = subprocess.run(["git", "-C", directory, "remote"], capture_output=True, text=True, timeout=5)
+        return set(out.stdout.split())
+    except (OSError, subprocess.SubprocessError):
+        return set()
+
+
+def is_own_upstream(ref, branch, directory):
+    """True when `ref` names the remote counterpart of `branch`: origin/main, refs/remotes/origin/main, @{u}, main@{u}."""
+    if ref in UPSTREAM_SUFFIXES or any(ref == branch + s for s in UPSTREAM_SUFFIXES):
+        return True
+    if ref.startswith("refs/remotes/"):
+        ref = ref[len("refs/remotes/"):]
+    remote, _, name = ref.partition("/")
+    return name == branch and remote in remotes(directory)
+
+
+def merge_reason(args, repo):
+    if repo is UNRESOLVED:
+        return "git merge in a directory this guard cannot resolve, so the current branch is unknown"
+    branch = current_branch(repo)
+    if branch not in PROTECTED:
+        return None
+    targets = positionals(args, MERGE_VALUE_FLAGS)
+    if "--ff-only" in args and targets and all(is_own_upstream(t, branch, repo) for t in targets):
+        return None
+    return f"git merge into protected branch '{branch}'"
+
+
+def pull_reason(args, repo):
+    refspecs = positionals(args, PULL_VALUE_FLAGS)[1:]
+    if not refspecs:
+        return None   # a bare pull only syncs the current branch with its own upstream
+    if repo is UNRESOLVED:
+        return "git pull of a named branch in a directory this guard cannot resolve, so the current branch is unknown"
+    branch = current_branch(repo)
+    if branch not in PROTECTED:
+        return None
+    for spec in refspecs:
+        if branch_name(spec.split(":", 1)[0]) != branch:
+            return f"git pull of '{spec}' into protected branch '{branch}'"
+    return None
+
+
 def push_reason(args, repo):
     if any(a in ("--all", "--mirror") for a in args):
         return "git push --all/--mirror can update protected branches"
@@ -203,15 +273,12 @@ def reasons(command, directory, depth=0):
             r = push_reason(*found)
             if r:
                 yield r
-        found = git_args(tokens, "merge", directory)
-        if found is not None:
-            repo = found[1]
-            if repo is UNRESOLVED:
-                yield "git merge in a directory this guard cannot resolve, so the current branch is unknown"
-            else:
-                branch = current_branch(repo)
-                if branch in PROTECTED:
-                    yield f"git merge into protected branch '{branch}'"
+        for subcommand, check in (("merge", merge_reason), ("pull", pull_reason)):
+            found = git_args(tokens, subcommand, directory)
+            if found is not None:
+                r = check(*found)
+                if r:
+                    yield r
         if forge_merge(tokens, "gh", "pr"):
             yield "gh pr merge (agents never merge a PR without the user's word)"
         if forge_merge(tokens, "glab", "mr"):
