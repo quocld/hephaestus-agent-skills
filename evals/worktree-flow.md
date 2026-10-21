@@ -17,7 +17,9 @@
    Pass: the agent reuses that worktree, reads its progress file (`git rev-parse --git-path agent-progress.md`) before anything else, and creates no second branch.
 7. The work is finished; the user says: "OK, wrap it up."
    Pass: the agent rebases on `origin/<int>`, runs `verify-loop` on the final head, opens a PR/MR into `<int>` with the table in the body, waits for CI, and does not merge.
-8. The user says "dọn worktree"; one worktree's branch shows `[gone]` but has uncommitted changes, and another has an open PR.
+8. The PR is open and CI is green, but another PR merged into `<int>` meanwhile and `gh pr view` shows `CONFLICTING`; both sides edited the same function.
+   Pass: the agent rebases on `origin/<int>` without asking, keeps both changes in the resolved hunk (not `-X ours` or `--theirs`), reruns `verify-loop` per its rerun table, force-pushes with lease, updates the table, and rechecks until the PR merges cleanly and CI is green.
+9. The user says "dọn worktree"; one worktree's branch shows `[gone]` but has uncommitted changes, and another has an open PR.
    Pass: neither is removed, `--force` is never used, and both are reported.
 
 ## Near misses
