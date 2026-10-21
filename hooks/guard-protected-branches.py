@@ -6,13 +6,15 @@ A permission prompt is that explicit word, so this hook returns "ask" for:
 - git push whose destination is a protected branch (explicit refspec, or no refspec while on one), or --all / --mirror;
 - git merge while the current branch is protected, unless it is `--ff-only` onto that branch's own remote counterpart
   (`origin/<branch>`, `refs/remotes/<remote>/<branch>`, `@{u}`, `@{upstream}`), which only brings in what the remote already has;
-- git pull while the current branch is protected that names another branch (`git pull origin feature`);
-  a bare `git pull` or one naming the current branch only syncs with the remote and passes;
+- git pull while the current branch is protected that names another branch (`git pull origin feature`) or a source that is
+  not a configured remote (`git pull ../other main`); a bare `git pull` or one naming the current branch only syncs and passes;
 - gh pr merge and glab mr merge, whatever the target (-R/--repo included);
 - a push, merge or branch-naming pull whose repo directory cannot be resolved (a `cd` or `git -C` target with variables, or one that does not exist).
 The current branch is read from the repo the command acts on: payload cwd, then any earlier `cd <dir>` in the command, then `git -C <dir>`.
 `$PWD`, `${PWD}`, `$(pwd)` and `$(git rev-parse --show-toplevel)` (also in backticks, optionally followed by /<path>)
 resolve to the directory they name; any other variable leaves the directory unresolved.
+Known limit: a fetch that rewrites refs/remotes/origin/<branch> (`git fetch origin +feature:refs/remotes/origin/main`) or a
+changed upstream makes a later `--ff-only` merge look like a sync; that takes a deliberate setup step, not a slip.
 `git`, `gh` and `glab` are matched by basename, so /usr/bin/git counts.
 Commands inside `bash -c`, `sh -c`, `zsh -c` and `eval` strings are scanned too.
 Protected branches: main, master, staging, stage, prod, production.
@@ -145,10 +147,11 @@ def forge_merge(tokens, cli, noun):
     return False
 
 
-MERGE_VALUE_FLAGS = {"-m", "-F", "-s", "-X", "--strategy", "--strategy-option", "--file", "--into-name", "--cleanup", "-S"}
+# Flags whose value may be the next token; attach-only ones (-S<key>, --recurse-submodules=<v>) must not be listed,
+# or the branch after them would be skipped.
+MERGE_VALUE_FLAGS = {"-m", "-F", "-s", "-X", "--strategy", "--strategy-option", "--file", "--into-name", "--cleanup"}
 PULL_VALUE_FLAGS = MERGE_VALUE_FLAGS | {"--depth", "--deepen", "--shallow-since", "--shallow-exclude", "-j", "--jobs",
-                                        "--upload-pack", "--negotiation-tip", "-o", "--server-option", "--recurse-submodules"}
-UPSTREAM_SUFFIXES = ("@{u}", "@{upstream}")
+                                        "--upload-pack", "--negotiation-tip", "-o", "--server-option"}
 
 
 def positionals(args, value_flags):
@@ -176,13 +179,15 @@ def remotes(directory):
 
 
 def is_own_upstream(ref, branch, directory):
-    """True when `ref` names the remote counterpart of `branch`: origin/main, refs/remotes/origin/main, @{u}, main@{u}."""
-    if ref in UPSTREAM_SUFFIXES or any(ref == branch + s for s in UPSTREAM_SUFFIXES):
-        return True
-    if ref.startswith("refs/remotes/"):
-        ref = ref[len("refs/remotes/"):]
-    remote, _, name = ref.partition("/")
-    return name == branch and remote in remotes(directory)
+    """True when git resolves `ref` to refs/remotes/<remote>/<branch> for a configured remote (origin/main, @{u}).
+    Resolving through git means a local branch or tag named origin/main, which git prefers, does not count."""
+    try:
+        out = subprocess.run(["git", "-C", directory, "rev-parse", "--symbolic-full-name", ref, "--"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    full = out.stdout.split("\n", 1)[0].strip() if out.returncode == 0 else ""
+    return any(full == f"refs/remotes/{r}/{branch}" for r in remotes(directory))
 
 
 def merge_reason(args, repo):
@@ -206,6 +211,9 @@ def pull_reason(args, repo):
     branch = current_branch(repo)
     if branch not in PROTECTED:
         return None
+    source = positionals(args, PULL_VALUE_FLAGS)[0]
+    if source not in remotes(repo):
+        return f"git pull from '{source}', not a configured remote, into protected branch '{branch}'"
     for spec in refspecs:
         if branch_name(spec.split(":", 1)[0]) != branch:
             return f"git pull of '{spec}' into protected branch '{branch}'"
