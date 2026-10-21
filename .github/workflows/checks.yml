@@ -1,5 +1,5 @@
 # On every PR and every push to a branch other than main: cross-skill references, the hook and script test suites,
-# and no em dash added to tracked Markdown or Python. Release and docs deploy stay in release.yml (main only).
+# and no em dash added to tracked Markdown or Python. Releases and the docs deploy are manual (.claude/skills/release).
 name: Checks
 
 on:
@@ -48,6 +48,9 @@ jobs:
         run: |
           python3 .github/scripts/check_skill_refs.py --self-test
           python3 .github/scripts/check_skill_refs.py
+
+      - name: Version picker tests
+        run: bash .github/scripts/test_next_version.sh
 
       - name: Hook tests
         run: |

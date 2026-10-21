@@ -11,7 +11,7 @@ Checked forms, where `x` is a backticked name:
   x section N, the x skill (section N), x step N, with x unbackticked
       -> the same checks, but only when x is an existing skill folder name (script messages print bare names).
   the `x` skill, `x` skill, per `x`, `x` section N
-      -> skills/x/ exists, unless the words just before it mark an outside skill ("its", "official", "built-in", "plugin"),
+      -> skills/x/ (or .claude/skills/x/) exists, unless the words just before it mark an outside skill ("its", "official", "built-in", "plugin"),
          or the name is followed by "(section N" (a command such as `pick` (section 1)).
 Inside Markdown code fences only numbered references are checked (a fenced template is still shipped text), never unknown names.
 "its section N" and other references without a skill name are out of scope.
@@ -103,13 +103,14 @@ class Skill:
 
 
 def load_skills(root):
+    """Plugin skills (skills/) and this repo's own skills (.claude/skills/), which are referenced the same way."""
     skills = {}
-    base = root / "skills"
-    if base.is_dir():
-        for d in sorted(base.iterdir()):
-            if d.is_dir():
-                f = d / "SKILL.md"
-                skills[d.name] = Skill(f.read_text(encoding="utf-8")) if f.is_file() else None
+    for base in (root / ".claude" / "skills", root / "skills"):
+        if base.is_dir():
+            for d in sorted(base.iterdir()):
+                if d.is_dir():
+                    f = d / "SKILL.md"
+                    skills[d.name] = Skill(f.read_text(encoding="utf-8")) if f.is_file() else None
     return skills
 
 
