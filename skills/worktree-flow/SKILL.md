@@ -89,6 +89,16 @@ All of these hold:
    Never read a stored git credential to call a forge API.
 5. The body: ticket or request, what changed and why, verification (table, evidence), risks, what is left out.
 6. CI on the head is green (`verify-loop` section 3).
+7. The PR/MR merges cleanly into `<int>`, checked after CI and again whenever you resume or report it:
+   ```bash
+   gh pr view <n> --json mergeable,mergeStateStatus -q '.mergeable + " " + .mergeStateStatus'   # UNKNOWN: still computing, retry
+   glab mr view <n> --output json | jq -r '.has_conflicts, .detailed_merge_status'
+   ```
+   `CONFLICTING` / `DIRTY` or `has_conflicts: true`: resolve it now, without asking:
+   `git fetch origin && git rebase origin/<int>`, and for each conflicted hunk read what the other side meant (`git log -p origin/<int> -- <file>`) and keep both intents; never take one side wholesale (`-X ours`, `--theirs`).
+   No conflict markers left (`git diff --check`), then rerun `verify-loop` per its rerun table, `git push --force-with-lease`, update the table in the body, and check again until clean and CI is green.
+   A conflict where keeping both intents is impossible (two changes to the same behavior) goes through `ask-or-decide` with both versions shown.
+   GitLab without `glab`: `git merge-tree --write-tree origin/<int> HEAD` exits 1 on a conflict.
 
 - Never merge your own PR/MR unless asked.
 - `feature-status` repos: states, merge, release, and recovery per its section 3.

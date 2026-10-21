@@ -112,7 +112,7 @@ A SKIP on a gate the change needs is a FAIL; a DEFER names who runs that gate an
 The head in the table must equal `git rev-parse HEAD` when the PR/MR opens, and the base row is rechecked then: after `git fetch origin`, `git rev-list --count HEAD..origin/<int>` prints 0, otherwise rebase and restart at gate 2 per the rerun table (section 2).
 
 Once the PR/MR is open, its CI on that head is the last gate: `gh pr checks <n> --watch --fail-fast --required`, or `glab ci status --live` on GitLab, until every required check has finished.
-A pending check is not a pass, and a red check is a red gate: fix the cause, commit, push, restart at gate 2 per the rerun table, then update the table in the PR/MR body (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4).
+A pending check is not a pass, a PR/MR that no longer merges cleanly is resolved per `worktree-flow` section 4 step 7, and a red check is a red gate: fix the cause, commit, push, restart at gate 2 per the rerun table, then update the table in the PR/MR body (`gh pr edit <n> --body-file <file>`, `glab mr update <n> --description "$(cat <file>)"`, or without `glab` the user pastes it, per `worktree-flow` section 4).
 A repo with no CI on PRs/MRs says so in the report; section 5 is where to propose it.
 
 ## 4. Add a project check
