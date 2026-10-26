@@ -46,6 +46,11 @@ Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedH
 - Find how the project deploys before proposing commands.
   Git-integrated projects deploy by pushing to the production branch, so the deploy step is the `git push`, not `vercel deploy`.
   CLI-driven projects use `vercel deploy` (preview) and `vercel deploy --prod`.
+- Set `trigger: git` for git-integrated projects: the push or merge into the production branch is the deploy, so it follows the environment's policy (`environments` section 3).
+- A Vercel deployment has no commit SHA unless you put one there.
+  Git-integrated deployments carry it in their metadata (`githubCommitSha`); CLI deployments get it with `vercel deploy --prod --meta gitSha=<sha>`, and `version` reads it back from the live deployment's metadata (`vercel inspect <url>`, or the REST API's deployment `meta`).
+  Prove the exact command once, then record it; the app's own version endpoint stays the better choice when it exists.
+- Record `access.vercelTeam`, `access.gitAccount`, and `access.tokenEnv`; `environments` section 2 checks them before every write.
 - Always pass `--scope <team>` and run inside the linked folder; before a write, check `.vercel/project.json` `projectId` and `orgId` equal the registry's `vercelProjectId` and `vercelOrgId`.
 - Push an exact commit to the deploy branch (`git push origin <sha>:refs/heads/<branch>`), not whatever the local branch holds.
 - `rollback`: `vercel rollback [deployment-url]`; `vercel promote <deployment-url>` to promote a known good deployment.

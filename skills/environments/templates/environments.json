@@ -85,7 +85,10 @@
           "type": "vercel",
           "access": {
             "vercelProjectId": "prj_staging123",
-            "vercelOrgId": "team_acme123"
+            "vercelOrgId": "team_acme123",
+            "gitAccount": "acme-dev",
+            "vercelTeam": "acme",
+            "tokenEnv": "VERCEL_TOKEN"
           },
           "version": "curl -fsS https://staging.acme.com/api/version | jq -r .sha",
           "deploy": [
@@ -102,7 +105,8 @@
             "provider": "betterstack",
             "source": "acme-staging",
             "shipping": "sdk"
-          }
+          },
+          "trigger": "git"
         },
         {
           "name": "db",
@@ -134,7 +138,8 @@
             "provider": "betterstack",
             "source": "acme-staging-supabase",
             "shipping": "drain"
-          }
+          },
+          "trigger": "cli"
         }
       ],
       "accounts": [
@@ -156,7 +161,8 @@
       "deployOrder": [
         "db",
         "web"
-      ]
+      ],
+      "appEnvSource": "vercel env, staging (web); supabase secrets (functions)"
     },
     "prod": {
       "description": "Customer-facing. Next.js on a VPS behind nginx, pm2 process, plus production Supabase.",
@@ -209,7 +215,8 @@
             "source": "acme-prod",
             "sourceId": 123456,
             "shipping": "sdk"
-          }
+          },
+          "trigger": "cli"
         },
         {
           "name": "db",
@@ -246,7 +253,8 @@
             "supabase migration new revert_<migration-name>",
             "supabase db push --db-url \"$PROD_DB_URL\"",
             "supabase functions deploy --project-ref prodref456  # run from a checkout of <previous-sha>"
-          ]
+          ],
+          "trigger": "cli"
         }
       ],
       "accounts": [
@@ -262,7 +270,8 @@
       "deployOrder": [
         "db",
         "web"
-      ]
+      ],
+      "appEnvSource": "server shared/.env.production (web); supabase secrets (functions)"
     }
   }
 }

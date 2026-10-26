@@ -199,6 +199,48 @@
               }
             }
           }
+        },
+        "appEnvSource": {
+          "description": "Where this environment's app runtime variables live (the project's own env file or the platform's env store), as free text, e.g. \"vercel env, staging\" or \"server shared/.env.production\". Never holds values; agent credentials stay in .agents/secrets.env.",
+          "type": "string"
+        }
+      },
+      "if": {
+        "properties": {
+          "policy": {
+            "not": {
+              "const": "autonomous"
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "services": {
+            "items": {
+              "if": {
+                "properties": {
+                  "type": {
+                    "not": {
+                      "const": "local"
+                    }
+                  }
+                },
+                "type": "object"
+              },
+              "then": {
+                "required": [
+                  "version",
+                  "deploy",
+                  "verify",
+                  "rollback"
+                ],
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
         }
       }
     },
@@ -270,6 +312,19 @@
             "sharedHost": {
               "description": "The server runs other projects too. Absent means treat as shared.",
               "type": "boolean"
+            },
+            "gitAccount": {
+              "description": "Expected GitHub or GitLab login for pushes that deploy this service; checked before every write.",
+              "type": "string"
+            },
+            "vercelTeam": {
+              "description": "Vercel team slug, passed as --scope and checked before every write.",
+              "type": "string"
+            },
+            "tokenEnv": {
+              "description": "Name of the env var that holds this service's CLI token (never the value); checked to see the right team or project before a write.",
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
             }
           }
         },
@@ -333,6 +388,14 @@
           "items": {
             "type": "string"
           }
+        },
+        "trigger": {
+          "description": "What makes this service deploy. git: a push or merge into the environment's branch deploys it, so that git write follows the environment's policy. cli: the registry's deploy commands. manual: someone deploys by hand.",
+          "enum": [
+            "git",
+            "cli",
+            "manual"
+          ]
         }
       }
     },

@@ -979,6 +979,9 @@ def collect_project(project, probe=False, deep=False, refs=None):
         out += env_checks(registry, p)
     if (reg.exists() or registry is not None) and "secrets.env" not in gi:
         out.append(check(sec, "Secrets gitignored", "fail", ".agents/secrets.env is not in .gitignore", "echo '.agents/secrets.env' >> .gitignore"))
+    sf = secrets_file(p)
+    if sf and sf.exists() and sf.stat().st_mode & 0o077:
+        out.append(check(sec, "Secrets file mode", "warn", f"{sf.name} is readable by other users (mode {sf.stat().st_mode & 0o777:o})", "chmod 600 .agents/secrets.env"))
 
     todos = []
     for f in (agents, reg):

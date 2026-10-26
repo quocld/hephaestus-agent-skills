@@ -32,6 +32,9 @@ An agent that takes a host, branch, command, or password from memory or chat his
   - SSH: the alias in the command equals `access.ssh`.
   - Vercel: `.vercel/project.json` `projectId` and `orgId` equal `access.vercelProjectId` and `access.vercelOrgId`.
   - Supabase: `[[ "$PROD_DB_URL" == *<supabaseProjectRef>* ]] && echo match || echo MISMATCH`, and the `--project-ref` in the command equals the registry.
+  - Git: the account that will push equals `access.gitAccount` (`gh api user -q .login`, or `glab api user` on GitLab); two logins on one machine is how a push lands under the wrong account.
+  - Vercel scope: `--scope` equals `access.vercelTeam`, and the project is identified by the IDs above, never by name (two projects can share a name in different teams).
+    With `access.tokenEnv`, the token must see that team: run a read under that `--scope` with `--token "$<tokenEnv>"` (`vercel project inspect <name>`); a token that cannot see the prod team fails there instead of deploying to the wrong place.
   - Any mismatch: stop and report.
 
 ## 3. Policies
@@ -49,6 +52,8 @@ An agent that takes a host, branch, command, or password from memory or chat his
   When a rule depends on something you cannot observe (a customer event, telling the team), ask the user before acting.
 - `data.testDataAllowed: false` is a kill switch: never create, modify, or delete records in that environment, except through reviewed migrations shipped by the deploy protocol.
   Where test data is allowed, put `testDataMarker` on every record you create and delete those records when done.
+- A service with `trigger: git` deploys on a push or merge into its environment's `branch`; that git write is a deploy and follows this table, whatever `deploy` lists.
+  On `confirm-each-step` it is a plan step, and merging a PR into that branch needs the same confirmation (main deploying prod is the usual case).
 - Approval never carries over: not from an earlier session, an earlier deploy, or another environment.
 - Before showing remote logs or query results in chat, mask secrets, tokens, and personal data such as emails and phone numbers.
 - A service's `logs` object names its Better Stack source; reading an environment's logs follows `betterstack-logs` section 4, under this environment's policy.
@@ -85,16 +90,24 @@ For each step:
   Report what state each service is in now (e.g. migrations applied but web still on `<previous-sha>`), present the options (retry, undo, roll back, investigate), and wait.
 - Never merge steps to save confirmations: no `&&` across steps, no ad-hoc scripts, no interactive SSH session.
 
+After every write step, ok or failed, append one line to the deploy log (section 5).
+
 After the last step: run every `verify`; code services' `version` must print `<sha>`, and the database's must equal the newest migration at `<sha>`. Report what ran, the running versions, the check results, and the rollback commands with placeholders filled in.
 
 ## 5. Deploy and access servers
 
 - Use the registry's commands exactly as written, substituting only placeholders.
-- A remote service needs `version`, `deploy`, `verify`, and `rollback`; `logsCommand` where the platform has a CLI for it.
+- A remote service needs `version`, `deploy`, `verify`, and `rollback` (the schema requires them outside `autonomous` environments) and a `trigger` (`git`, `cli`, `manual`); `logsCommand` where the platform has a CLI for it.
   One is missing: propose it from `references/deploy-targets.md`, get it confirmed, write it into the registry, then use it.
 - SSH only through the alias in `access.ssh` (defined in `~/.ssh/config`), one remote command per call: `ssh <alias> '<cmd>'`.
 - Docker Compose on a server (shared hosts above all): follow the `server-touch` skill.
 - "Pushed" is not "deployed": a deploy is done when `version` matches the target and `verify` passes.
+  For `trigger: git` it is the reverse trap: the push already deployed, so check what the branch would trigger before pushing it.
+- Deploy log: after every write against a non-local environment (deploy step, migration, rollback), append one JSON line to `.agents/deploy-log.jsonl` in the main checkout (gitignored, append-only, so parallel agents never conflict):
+  `{"ts":"<UTC ISO>","env":"prod","service":"web","action":"deploy","sha":"<sha>","previousSha":"<previous-sha>","by":"<git user.email>","result":"ok|failed","verify":"ok|failed|skipped","rollback":"<filled rollback command>"}`.
+  One `>>` per line; no secrets, no command output.
+  A failed step is logged too; the log records what was attempted, `version` stays the truth about what runs.
+- When a README, runbook, or old environment note disagrees with the registry or the repo's deploy script, follow the registry, then the script; say what conflicts and propose fixing the doc.
 - Read the section of `references/deploy-targets.md` for each service type you touch; it holds the platform traps (Supabase link state, Vercel git vs. CLI deploys, VPS release folders).
 
 ## 6. Version status across environments
@@ -106,6 +119,7 @@ When asked what runs where ("môi trường nào đang chạy bản nào", "prod
 2. Report one table: environment, service, short SHA, commit subject and date (`git log -1 --format='%h %s (%cr)' <sha>`), and how far behind the integration branch it is (`git rev-list --count <sha>..origin/<int>`).
 3. For each promotion path, list what would ship: `git log --oneline <prod-sha>..<staging-sha>`.
 4. Flag problems instead of smoothing them over:
+   - A remote environment that is behind: `git rev-list --count <sha>..origin/<int>` above 0 on staging, or prod behind staging, is a warning line, not just a number.
    - `unknown` or an error: the service has no working version endpoint (`references/version-endpoint.md`).
    - A SHA that no remote branch contains (`git branch -r --contains <sha>` is empty): someone deployed unpushed code.
    - Services of one environment on different SHAs, when they deploy together.
@@ -175,6 +189,11 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
 - Browser logins: prefer a saved session (Playwright storage state) per account; when a password must be typed, it goes only into the login field, never into a reply.
 - A reference does not resolve: tell the user which reference and why (`op whoami` fails = not signed in; item not found = missing entry; env var empty = missing line in `.agents/secrets.env`).
   Ask them to fix it there, not to paste the value into chat, and do not fall back to another account.
+- A secret pasted into chat is exposed: do not repeat it, write it anywhere, or use it in a command.
+  Say it must be rotated, and ask the user to put the new value in `.agents/secrets.env` (or an `op://` reference) themselves.
+- `.agents/secrets.env` is mode 600 and gitignored: `[ "$(stat -f %Lp .agents/secrets.env 2>/dev/null || stat -c %a .agents/secrets.env)" = 600 ]` and `git check-ignore -q .agents/secrets.env`; a wider mode or a tracked file is reported, and `chmod 600` is the fix.
+- Scope: `.agents/secrets.env` and the registry hold only what the agent needs to work: deploy and CLI tokens, MCP and API keys for tooling, database URLs for migrations, test account passwords.
+  The app's own runtime keys (Stripe, Brevo, OpenAI, ...) live in the project's env files or the platform's env store, never here; an agent that finds one in `secrets.env` or the registry moves it out and reports it.
 - Pick accounts by `role` from the target environment only.
   Never log in as a real customer; on prod use only the accounts listed there.
 
@@ -184,6 +203,10 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
    An existing environment doc is a source to import, not a question: take its environments, URLs, branches, SSH aliases, policies or rules, and account roles and logins into the draft.
    A secret value in it is never copied: it becomes an `env:` reference, and moving and rotating it is waiting on the user.
    Leave the doc in place; the report lists what was imported from which file and proposes deleting it or replacing its body with a pointer to `.agents/environments.json`, so the two cannot drift.
+1b. Inventory the app's variables per environment: scan `.env*.example`, `package.json` dependencies (Stripe, Brevo, Sentry, ...), and `supabase/functions/` (`Deno.env.get`) for the services the code calls and the variable names it reads.
+   Compare those names with what each environment defines, read-only and names only (`vercel env ls <environment>`, `supabase secrets list --project-ref <ref>`, the project's env files; a remote read follows the environment's policy), and record where they live as `appEnvSource`.
+   Report one table, a row per variable and a column per environment, each cell set or missing, never a value.
+   A missing name is reported under waiting on the user; a payment or email service that runs on a live key outside prod is a finding.
 2. Ask the user only what the repo cannot tell, in one batch, your drafts shown; it always starts with these, unless the registry already records them or a calling skill asked them in this run (`project-init` section 2, or the `harness-map` setup batch in its section 3, whose answers are taken as given):
    - Which branch PRs/MRs go into (`integrationBranch`, `worktree-flow` section 0), never assumed.
    - Which environments exist: local or dev, staging, prod, and any other, each with its URL and the branch it deploys from.
@@ -194,7 +217,7 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
    A standard one the user says the project does not have (dev, staging or prod) goes in `absentEnvironments`, so `harness-map` stops asking for it.
 4. Defaults: local and dev `autonomous` with testing `full`; staging `confirm-writes` with testing `non-destructive`; prod `confirm-each-step` with `allowedWithoutAsking: []`, `testDataAllowed: false`, and testing `smoke-only`.
    Writing a looser prod setting needs the user's explicit words.
-5. Add `.agents/secrets.env`, `.agents/backups/`, and `.agents/deploy/` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
+5. Add `.agents/secrets.env`, `.agents/backups/`, `.agents/deploy/`, and `.agents/deploy-log.jsonl` to `.gitignore`, and create `.agents/secrets.env.example` listing every `env:` name with an empty value.
    Then create or top up the real `.agents/secrets.env` in the main checkout from it, empty values only; an existing file is never overwritten, only missing names are appended:
 
    ```bash
