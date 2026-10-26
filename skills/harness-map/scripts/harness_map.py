@@ -1150,35 +1150,7 @@ def secret_refs(e):
              for s_ in e.get("services", []) for k, v in s_.get("access", {}).items()
              if (isinstance(v, dict) and "secret" in v)
              or (isinstance(v, str) and (k == "dbUrl" or SECRET_KEY.search(k) or strip_userinfo(v)[1]))]
-    refs += [(f'{i.get("name", "?")} key', i.get("key")) for i in e.get("integrations", []) if isinstance(i, dict) and i.get("key")]
     return refs
-
-
-def integration_gaps(envs):
-    """Per-environment warnings about third-party keys (environments section 9): a service with a key in one environment
-    and none in another, one key reference shared by two environments, a live key outside prod. Names only."""
-    def entries(e):
-        return {_str(i.get("name")): i for i in (e.get("integrations") or []) if isinstance(i, dict) and _str(i.get("name"))}
-    per = {n: entries(e) for n, e in envs.items()}
-    names = sorted({k for v in per.values() for k in v})
-    out = {n: [] for n in envs}
-    for svc in names:
-        for n in envs:
-            if svc not in per[n]:
-                out[n].append(f"service {svc} has no key for environment {n}")
-    seen = {}
-    for n, v in per.items():
-        for svc, i in v.items():
-            ref = _str(i.get("key", {}).get("secret")) if isinstance(i.get("key"), dict) else ""
-            if ref:
-                seen.setdefault((svc, ref), []).append(n)
-            if i.get("mode") == "live" and not is_prod(n, envs[n]):
-                out[n].append(f"{svc} uses a live key outside prod")
-    for (svc, ref), where in seen.items():
-        if len(where) > 1:
-            for n in where:
-                out[n].append(f"{svc} key {ref} is shared with {', '.join(w for w in where if w != n)}")
-    return out
 
 
 def item(key, label, status, value="", parts=None):
@@ -1274,10 +1246,6 @@ def env_checks(registry, project):
             opt("secrets", "missing", "; ".join(x for x in (("empty in .agents/secrets.env: " + ", ".join(empty)) if empty else "",
                                                              ("not in .agents/secrets.env or the shell: " + ", ".join(absent)) if absent else "") if x),
                 "fill them in .agents/secrets.env (gitignored, in the main checkout) yourself, values or op:// references; never paste them in chat")
-    for name, gaps in integration_gaps(envs).items():
-        if gaps:
-            out.append(check("Project", f"{name}: service keys", "warn", "; ".join(gaps),
-                             "add the key as its own env:NAME or op:// reference for this environment (environments section 10 step 1b)", group="env"))
     if envs:
         settled = absent_slots(registry)
         absent = [slot for slot, have in standard_slots(envs).items() if not have and slot not in settled]

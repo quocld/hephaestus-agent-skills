@@ -192,8 +192,8 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
 - A secret pasted into chat is exposed: do not repeat it, write it anywhere, or use it in a command.
   Say it must be rotated, and ask the user to put the new value in `.agents/secrets.env` (or an `op://` reference) themselves.
 - `.agents/secrets.env` is mode 600 and gitignored: `[ "$(stat -f %Lp .agents/secrets.env 2>/dev/null || stat -c %a .agents/secrets.env)" = 600 ]` and `git check-ignore -q .agents/secrets.env`; a wider mode or a tracked file is reported, and `chmod 600` is the fix.
-- Third-party keys (`integrations` in the registry) are per environment: staging and prod never share one, and outside prod they are test-mode (`mode: test`).
-  A `live` key outside prod, or one reference used in two environments, is a stop-and-report.
+- Scope: `.agents/secrets.env` and the registry hold only what the agent needs to work: deploy and CLI tokens, MCP and API keys for tooling, database URLs for migrations, test account passwords.
+  The app's own runtime keys (Stripe, Brevo, OpenAI, ...) live in the project's env files or the platform's env store, never here; an agent that finds one in `secrets.env` or the registry moves it out and reports it.
 - Pick accounts by `role` from the target environment only.
   Never log in as a real customer; on prod use only the accounts listed there.
 
@@ -203,10 +203,10 @@ Run a fix in two calls: first with `ROLLBACK` to show the affected count, then, 
    An existing environment doc is a source to import, not a question: take its environments, URLs, branches, SSH aliases, policies or rules, and account roles and logins into the draft.
    A secret value in it is never copied: it becomes an `env:` reference, and moving and rotating it is waiting on the user.
    Leave the doc in place; the report lists what was imported from which file and proposes deleting it or replacing its body with a pointer to `.agents/environments.json`, so the two cannot drift.
-1b. Inventory services and keys: scan `.env*.example`, `package.json` dependencies (Stripe, Brevo, Sentry, ...), and `supabase/functions/` (`Deno.env.get`) for the services the code calls and the variable names it reads.
-   Draft a table, one row per service and column per environment, each cell the secret reference that environment uses; record it as `integrations` (name, `mode`, `key`).
-   Staging and prod never share a key, and outside prod keys are test-mode.
-   A cell with no key is a gap: `harness-map` shows it as "service X has no key for environment Y", and the report lists it under waiting on the user.
+1b. Inventory the app's variables per environment: scan `.env*.example`, `package.json` dependencies (Stripe, Brevo, Sentry, ...), and `supabase/functions/` (`Deno.env.get`) for the services the code calls and the variable names it reads.
+   Compare those names with what each environment defines, read-only and names only (`vercel env ls <environment>`, `supabase secrets list --project-ref <ref>`, the project's env files; a remote read follows the environment's policy), and record where they live as `appEnvSource`.
+   Report one table, a row per variable and a column per environment, each cell set or missing, never a value.
+   A missing name is reported under waiting on the user; a payment or email service that runs on a live key outside prod is a finding.
 2. Ask the user only what the repo cannot tell, in one batch, your drafts shown; it always starts with these, unless the registry already records them or a calling skill asked them in this run (`project-init` section 2, or the `harness-map` setup batch in its section 3, whose answers are taken as given):
    - Which branch PRs/MRs go into (`integrationBranch`, `worktree-flow` section 0), never assumed.
    - Which environments exist: local or dev, staging, prod, and any other, each with its URL and the branch it deploys from.

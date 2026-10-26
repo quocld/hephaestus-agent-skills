@@ -162,22 +162,7 @@
         "db",
         "web"
       ],
-      "integrations": [
-        {
-          "name": "stripe",
-          "mode": "test",
-          "key": {
-            "secret": "env:STAGING_STRIPE_KEY"
-          }
-        },
-        {
-          "name": "brevo",
-          "mode": "test",
-          "key": {
-            "secret": "env:STAGING_BREVO_KEY"
-          }
-        }
-      ]
+      "appEnvSource": "vercel env, staging (web); supabase secrets (functions)"
     },
     "prod": {
       "description": "Customer-facing. Next.js on a VPS behind nginx, pm2 process, plus production Supabase.",
@@ -286,22 +271,7 @@
         "db",
         "web"
       ],
-      "integrations": [
-        {
-          "name": "stripe",
-          "mode": "live",
-          "key": {
-            "secret": "env:PROD_STRIPE_KEY"
-          }
-        },
-        {
-          "name": "brevo",
-          "mode": "live",
-          "key": {
-            "secret": "env:PROD_BREVO_KEY"
-          }
-        }
-      ]
+      "appEnvSource": "server shared/.env.production (web); supabase secrets (functions)"
     }
   }
 }

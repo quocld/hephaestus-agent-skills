@@ -589,21 +589,6 @@ def main():
         std = rows.get("Standard environments", {})
         check(std.get("status") == "missing" and std.get("detail", "").startswith("not in the registry: dev") and "staging" not in std["detail"],
               "env checks: a standard environment absent from the registry is a row; production fills the prod slot")
-        ik = lambda n: {"secret": "env:" + n}
-        ireg = {"project": "x", "integrationBranch": "main", "defaultEnvironment": "staging", "environments": {
-            "staging": {"policy": "confirm-writes", "branch": "staging", "services": [],
-                        "integrations": [{"name": "stripe", "mode": "live", "key": ik("K_SHARED")}, {"name": "brevo", "mode": "test", "key": ik("K_B")}]},
-            "prod": {"policy": "confirm-each-step", "branch": "main", "services": [],
-                     "integrations": [{"name": "stripe", "mode": "live", "key": ik("K_SHARED")}]}}}
-        irows = {c["title"]: c for c in hm.env_checks(ireg, project)}
-        sd, pd = irows.get("staging: service keys", {}).get("detail", ""), irows.get("prod: service keys", {}).get("detail", "")
-        check("stripe uses a live key outside prod" in sd and "stripe key env:K_SHARED is shared with prod" in sd
-              and "service brevo has no key for environment prod" in pd and "uses a live key" not in pd,
-              "env checks: a live key outside prod, a shared key and a service with no key in an environment are warnings")
-        ireg["environments"]["staging"]["integrations"] = [{"name": "stripe", "mode": "test", "key": ik("K_S")}]
-        ireg["environments"]["prod"]["integrations"] = [{"name": "stripe", "mode": "live", "key": ik("K_P")}]
-        check("staging: service keys" not in {c["title"] for c in hm.env_checks(ireg, project)},
-              "env checks: separate test and live keys raise no service-key warning")
         panel = hm.env_panel(project, reg)
         check('class="ib"' in panel and '<code class="ibb">main</code>' in panel, "env panel: the integration branch is shown")
         check('data-slot="dev"' in panel and 'data-slot="prod"' not in panel and 'data-slot="staging"' not in panel,

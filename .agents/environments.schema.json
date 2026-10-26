@@ -200,33 +200,9 @@
             }
           }
         },
-        "integrations": {
-          "description": "Third-party services this environment calls (Stripe, Brevo, ...) and the key it uses. Keys are never shared between environments, and outside prod they are test-mode.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "name",
-              "mode",
-              "key"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "mode": {
-                "enum": [
-                  "test",
-                  "live"
-                ]
-              },
-              "key": {
-                "$ref": "#/$defs/secretRef"
-              }
-            }
-          }
+        "appEnvSource": {
+          "description": "Where this environment's app runtime variables live (the project's own env file or the platform's env store), as free text, e.g. \"vercel env, staging\" or \"server shared/.env.production\". Never holds values; agent credentials stay in .agents/secrets.env.",
+          "type": "string"
         }
       },
       "if": {
