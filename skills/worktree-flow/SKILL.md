@@ -1,7 +1,7 @@
 ---
 name: worktree-flow
 description: >
-  Use at the start of any task that will change files in a git repo, before committing or opening a PR/MR, when resuming, finishing, or abandoning a task, and when asked "tạo worktree", "mở PR", "mở MR", "xong thì commit", "dọn worktree", "lên staging".
+  Use at the start of any task that will change files in a git repo, before committing or opening a PR/MR, when resuming, finishing, or abandoning a task, and when asked "tạo worktree", "mở PR", "mở MR", "xong thì commit", "dọn worktree", "đã merge", "lên staging".
 user-invocable: true
 ---
 
@@ -21,12 +21,12 @@ When the `harness-map` setup batch (its section 3), `project-init` section 2 or 
 
 ## 1. Start or resume: one task = one worktree = one branch
 
-Repo opted in to `feature-status` (its section 0): for ticket work and for no-ticket features other agents could collide on, its `pick`, run before any worktree exists, replaces steps 1-3 (in a harness's detached worktree: `pick --no-worktree`, then `git switch -c <branch> --track origin/<branch>`); on `pick --resume` still read the progress file (section 3).
+Repo opted in to `feature-status` (its section 0): for ticket work and for no-ticket features other agents could collide on, its `pick`, run before any worktree exists, replaces steps 1-3, then run step 4 (in a harness's detached worktree: `pick --no-worktree`, then `git switch -c <branch> --track origin/<branch>`); on `pick --resume` still read the progress file (section 3).
 A small no-ticket change follows the steps below alone; `feature-status` section 1 owns who picks.
 
 0. `git rev-parse --path-format=absolute --git-dir --git-common-dir` prints two different paths in a linked worktree.
    - Linked, on this task's branch: use it, read its progress file, go to section 2.
-   - Linked, detached HEAD, clean tree (the harness's): steps 1-2, then in step 3 `git switch --no-track -c <branch> origin/<int>` in place.
+   - Linked, detached HEAD, clean tree (the harness's): steps 1-2, then in step 3 `git switch --no-track -c <branch> origin/<int>` in place (`WT` is `git rev-parse --show-toplevel`), then step 4.
    - Another task's branch, or the main checkout: never work there; step 1.
 1. Look for existing work:
    ```bash
@@ -44,7 +44,8 @@ A small no-ticket change follows the steps below alone; `feature-status` section
    WT="$(dirname "$MAIN")/$(basename "$MAIN").worktrees/<branch-with-slashes-as-dashes>"
    git worktree add --no-track -b <branch> "$WT" origin/<int>
    ```
-4. Every command from now on runs in `$WT`.
+4. Mark it, on every entry path above (`pick`, harness, step 3): `touch "$(git -C "$WT" rev-parse --path-format=absolute --git-path agent-flow)"`; section 6 cleans up only worktrees that have this marker.
+5. Every command from now on runs in `$WT`.
 
 ## 2. Run without touching other agents
 
@@ -104,6 +105,7 @@ All of these hold:
 - `feature-status` repos: states, merge, release, and recovery per its section 3.
 - Blocked or partial work: a draft (`--draft`) listing what remains, as soon as you know you will stop.
 - Copy the progress file's Decisions and Next into the body; it dies with the worktree.
+- After opening, add `cleanup after merge: <branch> @ <WT>` under `## Next` in the progress file and keep it on rewrites (section 6).
 
 ## 5. Promote to staging and prod
 
@@ -115,21 +117,35 @@ Only on the user's explicit word, per `AGENTS.md`.
 
 ## 6. Clean up
 
-Session start: `[gone]` branches only; "dọn worktree": also every worktree under `<repo>.worktrees/` (repos keeping merged branches never show `[gone]`).
+Scope: session start checks `[gone]` branches only (cheap); a merge the user reports runs this for that branch at once (a resumed agent reads the `cleanup after merge` line); "dọn worktree" sweeps every worktree of this repo, including old sibling layouts, not just `<repo>.worktrees/` (the user can run it per repo).
+List first, then remove the worktree, then delete the branch, then prune; never prune before listing.
+
+Classify each worktree once (`git worktree list --porcelain`, plus `[gone]` from `git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads`), first match wins:
+
+- missing: directory gone (`prunable`); first `ls "$(dirname "$WT")"` (an unmounted volume or a moved directory is not missing). Read its marker from the admin dir, `test -e "$(git rev-parse --path-format=absolute --git-common-dir)/worktrees/<name>/agent-flow"` (`<name>` is in the `gitdir` file under `worktrees/*`), before any prune. Run `git worktree prune` (repo-wide) only when every prunable entry is marked and mounted, else list them. Its branch has no worktree: skip the dirty check and use the gates below.
+- foreign: no marker (`test -e "$(git -C "$WT" rev-parse --path-format=absolute --git-path agent-flow)"` fails); list it, never touch it. A detached HEAD is listed only.
+- locked, current (`git rev-parse --show-toplevel`), main checkout: list only.
+- open PR/MR: active, list only.
+- unsafe state: `symbolic-ref -q HEAD` differs from `refs/heads/<branch>`, or a `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD` or `BISECT_LOG` exists under `git rev-parse --git-path`: list only.
+- dirty: `git -C "$WT" status --porcelain --ignored` shows anything beyond dependency and build output (untracked, and ignored files such as a copied `.env.local` or local database count): list only.
+- merged: gates below. closed unmerged: its commits may exist nowhere else, so "needs decision", never removed.
+- no PR/MR: unpushed when `git rev-list <branch> --not --remotes` is not empty, else not; stale when also the last commit is over 14 days old (age only selects candidates; stale goes in a "needs decision" list: branch, last commit date, `git rev-list --count origin/<int>..<branch>`, `git diff --stat origin/<int>...<branch>`); otherwise active.
 
 ```bash
-git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == "[gone]" {print $1}'
-git worktree list --porcelain | awk -v b="refs/heads/<branch>" '/^worktree /{p=substr($0,10)} $0=="branch "b{print p}'   # its $WT
-gh pr view <branch> --json state,headRefOid -q '.state + " " + .headRefOid'   # GitLab: glab mr view <branch> --output json | jq -r '.state + " " + .sha' (no glab: references/gitlab.md)
+gh pr list --head <branch> --state all --json number,state,headRefOid,baseRefName,isCrossRepository   # OPEN / MERGED / CLOSED
+glab mr list --source-branch <branch> --all --output json | jq -r '.[] | [.iid, .state, .sha, .target_branch] | @tsv'   # opened / merged / closed (no glab: references/gitlab.md)
 ```
 
-Remove only when its PR/MR is merged or closed (`[gone]` proves nothing), `git -C "$WT" status --porcelain` is empty, `git rev-parse <branch>` equals the PR/MR head, and it is neither your worktree nor the main checkout.
-`feature-status` repos, merged feature: `status.py release <ID>` first; when it names the recovery, do it in this worktree before removing anything.
-Then `git worktree remove "$WT"` (if any) and `git branch -D <branch>` (needed after squash merges, safe only after these checks).
+Merge detection: forge state is primary (`[gone]` proves nothing).
+Merged means no PR/MR for the branch is open, and the one whose head sha equals `git -C "$WT" rev-parse HEAD` is merged, has base `<int>`, and is not cross-repo; a mismatch means list, not remove.
+Offline or no forge: `git merge-base --is-ancestor <branch> origin/<int>`, or `git merge-tree --write-tree origin/<int> <branch>` printing a tree equal to `git rev-parse origin/<int>^{tree}` (squash; exit 1 or a different tree means not proven).
+That is "merged (unverified)": list only, since a branch with no commits yet passes the same test; never take "behind `origin/<int>`" as proof.
 
-- Never `git worktree remove --force`; on refusal, keep it and report.
-- Open PR/MR or no PR/MR: never remove, report.
-- Stop the servers and containers you started.
+Auto-remove only when ALL hold: marker present, forge-verified merged, clean (`status --porcelain --ignored` as above), not unsafe, not current, main or locked, and no live owner (progress file modified within a day, or `lsof +D "$WT"` shows a process); a live or unsure owner is listed as "merged, owner may be live".
+`feature-status` repos, merged feature: run `status.py release <ID>` per its section 3; if it refuses or reports a recovery, list the worktree and do not remove it.
+Then stop the dev servers and containers of that task only (`docker compose -p <repo>-<slug> down`, the section 2 name), `git worktree remove "$WT"`, `git branch -D <branch>` (needed after squash merges, safe only after these checks), and `git worktree prune` last.
+
+- Everything else is listed with its class, never removed, never `--force`; on refusal keep it and report.
 
 ## Report
 
