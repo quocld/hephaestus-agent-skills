@@ -40,7 +40,8 @@ Every line is one JSON object with these fields, as nested objects, never dotted
 
 - `commit` and `version` mean what they mean in `/health` and `/version.json` (`environments` `references/version-endpoint.md`), set at build time the same way.
 - `local` or `unknown` on a line from a deployed environment is a deploy bug: set `APP_ENV`, `GIT_SHA` and `APP_VERSION` there.
-- Every process writes one `app.started` line when it is ready (an API once it listens, a worker once it takes jobs), so the logs show which build each process started, including services with no HTTP endpoint.
+- Every long-running process writes one `app.started` line when it is ready (an API server once it listens, a worker once it takes jobs), so the logs show which build each process started, including services with no HTTP endpoint.
+  Serverless functions and Next.js on Vercel start per instance and skip it; their `/version.json` answers instead.
 - Domain ids go at the top level in snake_case (`invoice_id`), as ids, never as objects.
 - No second name for a contract field: not `msg`, `err`, `reqId`, `correlationId`, `svc`, or `name` for the service.
 - The one allowed alias: a project may keep an existing tenant field name (Westmont's `organization_id`) if its agent setup block from `project-init` declares it in one line, e.g. `Logging: tenant field is organization_id (logging-standard alias).`

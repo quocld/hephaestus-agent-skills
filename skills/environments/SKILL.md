@@ -116,7 +116,7 @@ When asked what runs where ("môi trường nào đang chạy bản nào", "prod
 
 1. `git fetch origin --prune`, then run every service's `version`, environment by environment.
    On a `confirm-each-step` environment this asks first unless `version` is in `allowedWithoutAsking`.
-2. Report one table: environment, service, short SHA, the service's `version` field when its endpoint has one, commit subject and date (`git log -1 --format='%h %s (%cr)' <sha>`), and how far behind the integration branch it is (`git rev-list --count <sha>..origin/<int>`).
+2. Report one table: environment, service, short SHA, the release name when the service reports one (`jq -r .version` on the same `/health` or `/version.json` answer, or the worker's `app.started` line), commit subject and date (`git log -1 --format='%h %s (%cr)' <sha>`), and how far behind the integration branch it is (`git rev-list --count <sha>..origin/<int>`).
 3. For each promotion path, list what would ship: `git log --oneline <prod-sha>..<staging-sha>`.
 4. Flag problems instead of smoothing them over:
    - A remote environment that is behind: `git rev-list --count <sha>..origin/<int>` above 0 on staging, or prod behind staging, is a warning line, not just a number.

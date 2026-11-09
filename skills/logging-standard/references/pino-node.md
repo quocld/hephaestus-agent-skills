@@ -570,7 +570,7 @@ async function bootstrap() {
   // process.exit after the hooks fires pino's exit flush; the default re-raises the signal and loses the last lines.
   app.enableShutdownHooks(undefined, { useProcessExit: true });
   await app.listen(Number(process.env.PORT ?? 3000));
-  app.get(Logger).log({ event: EVENT.APP_STARTED }, 'listening');
+  app.get(Logger).log({ event: EVENT.APP_STARTED }, 'listening', 'App'); // nestjs-pino reads the last argument as the context
 }
 void bootstrap();
 ```

@@ -191,29 +191,48 @@ LIMIT 20
 
 For a latency trend rather than single slow calls, group by `route` with `quantile(0.95)(duration_ms)` over the same window, still with a `LIMIT`.
 
-### 7. What each service last started
+### 7. Which build a service last started
 
-The `app.started` line carries `commit` and `version` (`logging-standard` section 1), so the newest one per service tells which build a worker runs.
+The `app.started` line carries `commit` and `version` (`logging-standard` section 1), so the newest one for a service tells which build it runs; use it for workers, which have no version endpoint.
+
+7a. Hot window, first; right after a deploy the new line is here:
 
 ```sql
 SELECT
-  JSONExtract(raw, 'service', 'Nullable(String)') AS service,
-  max(dt) AS started_at,
-  argMax(JSONExtract(raw, 'commit', 'Nullable(String)'), dt) AS commit,
-  argMax(JSONExtract(raw, 'version', 'Nullable(String)'), dt) AS version,
-  countIf(dt > now() - INTERVAL 1 HOUR) AS starts_last_hour
+  dt,
+  JSONExtract(raw, 'commit', 'Nullable(String)') AS commit,
+  JSONExtract(raw, 'version', 'Nullable(String)') AS version
 FROM remote(t<team_id>_<source>_logs)
-WHERE dt > now() - INTERVAL 7 DAY
+WHERE dt > now() - INTERVAL 30 MINUTE
   AND raw LIKE '%app.started%'
   AND JSONExtract(raw, 'event', 'Nullable(String)') = 'app.started'
+  AND JSONExtract(raw, 'service', 'Nullable(String)') = '<service>'
   AND JSONExtract(raw, 'env', 'Nullable(String)') = '<env>'
-GROUP BY service
-ORDER BY service
-LIMIT 50
+ORDER BY dt DESC
+LIMIT 20
 ```
 
-No row for a service in 7 days: it has not restarted since, so widen to the archive or read the container label instead (`environments` `references/version-endpoint.md`).
-`starts_last_hour` above 1 outside a deploy is a restart loop.
+7b. Archive, only when 7a returned nothing: call `query_windows` for the range since the last deploy (the deploy log in `environments` section 5), and run this once per window, newest window first, stopping at the first window with a row.
+
+```sql
+SELECT
+  dt,
+  JSONExtract(raw, 'commit', 'Nullable(String)') AS commit,
+  JSONExtract(raw, 'version', 'Nullable(String)') AS version
+FROM s3Cluster(primary, t<team_id>_<source>_s3)
+WHERE _row_type = 1
+  AND dt >= '<window_start>' AND dt < '<window_end>'
+  AND raw LIKE '%app.started%'
+  AND JSONExtract(raw, 'event', 'Nullable(String)') = 'app.started'
+  AND JSONExtract(raw, 'service', 'Nullable(String)') = '<service>'
+  AND JSONExtract(raw, 'env', 'Nullable(String)') = '<env>'
+ORDER BY dt DESC
+LIMIT 1
+```
+
+The first row's `commit` is the answer.
+Several rows in 7a with no deploy in that time is a restart loop: report it as a failure, not as a version.
+No row since the last deploy: the service did not start that build, or does not ship to this source; check the container label (`environments` `references/version-endpoint.md`, section Workers).
 
 ### Reading one full line
 

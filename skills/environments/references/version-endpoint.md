@@ -52,8 +52,8 @@ Normalize them into `GIT_SHA`, `APP_VERSION` and `BUILT_AT` in one place in the 
 
 `APP_VERSION`:
 
-- The project tags releases: `git describe --tags --always` (`v1.4.2` on a tag, `v1.4.2-3-g3f2a9c1` three commits after it); CI needs the tags fetched (`fetch-depth: 0` on GitHub Actions), Docker gets it as a build arg like `GIT_SHA`.
-- No release tags: the deployable's `package.json` `version`.
+- The project tags releases: `git describe --tags` (`v1.4.2` on a tag, `v1.4.2-3-g3f2a9c1` three commits after it); CI needs the tags fetched (`fetch-depth: 0` on GitHub Actions), Docker gets it as a build arg like `GIT_SHA`.
+- No release tags, or none fetched: `git describe --tags` fails and the recipes fall back to the deployable's `package.json` `version`.
 - Neither: `"unknown"`, and say so once in the PR/MR; `commit` still carries the deploy check.
 
 ## Node API: `GET /health` (Express, Fastify, NestJS)
@@ -97,7 +97,7 @@ function git(args: string): string | undefined {
 
 const GIT_SHA = process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? process.env.CI_COMMIT_SHA ?? git('rev-parse HEAD') ?? 'unknown';
 const pkgVersion: string | undefined = JSON.parse(readFileSync('package.json', 'utf8')).version;
-const APP_VERSION = process.env.APP_VERSION ?? git('describe --tags --always') ?? pkgVersion ?? 'unknown';
+const APP_VERSION = process.env.APP_VERSION ?? git('describe --tags') ?? pkgVersion ?? 'unknown';
 
 const nextConfig = {
   env: { GIT_SHA, APP_VERSION, BUILT_AT: new Date().toISOString() },
@@ -107,7 +107,6 @@ export default nextConfig;
 ```
 
 Merge this into the existing config instead of replacing it.
-A project without release tags drops the `git('describe ...')` step, or `describe --always` reports a bare short SHA as the version.
 
 ```ts
 // app/version.json/route.ts
@@ -141,7 +140,7 @@ const out = process.argv[2] ?? 'dist';
 writeFileSync(`${out}/version.json`, JSON.stringify({
   service: 'web',
   commit: process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? process.env.CI_COMMIT_SHA ?? git('rev-parse HEAD') ?? 'unknown',
-  version: process.env.APP_VERSION ?? git('describe --tags --always') ?? pkg.version ?? 'unknown',
+  version: process.env.APP_VERSION ?? git('describe --tags') ?? pkg.version ?? 'unknown',
   builtAt: new Date().toISOString(),
   env: process.env.APP_ENV ?? 'unknown',
 }) + '\n');
@@ -157,13 +156,12 @@ A process without HTTP writes one `info` line when it is ready to take work, thr
 logger.info({ event: EVENT.APP_STARTED, queues: ['invoice.send'] }, 'worker started');
 ```
 
-The registry's `version` for a worker reads the newest such line, in order of preference:
+The registry's `version` command for a worker is one of these, in order of preference:
 
-1. The running container's label: `ssh <alias> "docker inspect -f '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' <container>"`.
-2. The platform's own logs, which for a recreated container hold only this build's lines: `ssh <alias> 'docker logs <container> 2>&1' | grep '"event":"app.started"' | tail -n 1 | jq -r .commit`.
-3. Better Stack, when the worker ships there: pattern 7 of `betterstack-logs` `references/queries.md`, run as the registry's `logsQuery`.
+1. The running container's label, which says what image runs: `ssh <alias> "docker inspect -f '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' <container>"`.
+2. The newest startup line in the platform's own logs, which for a recreated container hold only this build's lines: `ssh <alias> 'docker logs <container> 2>&1' | grep '"event":"app.started"' | tail -n 1 | jq -r .commit`.
 
-The label says what image runs; the startup line proves that build actually started, so after a deploy check both when both exist.
+The label alone does not prove the build started; after a deploy, also read the startup line: option 2, or in Better Stack pattern 7 of `betterstack-logs` `references/queries.md` (a query, not a registry command, under `betterstack-logs` section 4).
 A worker that restarts in a loop writes many `app.started` lines; that is a failed deploy, not a version answer.
 
 ## Proving it works
