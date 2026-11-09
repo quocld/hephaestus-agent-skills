@@ -191,6 +191,30 @@ LIMIT 20
 
 For a latency trend rather than single slow calls, group by `route` with `quantile(0.95)(duration_ms)` over the same window, still with a `LIMIT`.
 
+### 7. What each service last started
+
+The `app.started` line carries `commit` and `version` (`logging-standard` section 1), so the newest one per service tells which build a worker runs.
+
+```sql
+SELECT
+  JSONExtract(raw, 'service', 'Nullable(String)') AS service,
+  max(dt) AS started_at,
+  argMax(JSONExtract(raw, 'commit', 'Nullable(String)'), dt) AS commit,
+  argMax(JSONExtract(raw, 'version', 'Nullable(String)'), dt) AS version,
+  countIf(dt > now() - INTERVAL 1 HOUR) AS starts_last_hour
+FROM remote(t<team_id>_<source>_logs)
+WHERE dt > now() - INTERVAL 7 DAY
+  AND raw LIKE '%app.started%'
+  AND JSONExtract(raw, 'event', 'Nullable(String)') = 'app.started'
+  AND JSONExtract(raw, 'env', 'Nullable(String)') = '<env>'
+GROUP BY service
+ORDER BY service
+LIMIT 50
+```
+
+No row for a service in 7 days: it has not restarted since, so widen to the archive or read the container label instead (`environments` `references/version-endpoint.md`).
+`starts_last_hour` above 1 outside a deploy is a restart loop.
+
 ### Reading one full line
 
 Only after a pattern above has narrowed the problem to one row, fetch its stack with `substring(JSONExtract(raw, 'error', 'stack', 'Nullable(String)'), 1, 2000)` and the same `dt` and id filters with `LIMIT 1`.

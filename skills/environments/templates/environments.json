@@ -90,7 +90,7 @@
             "vercelTeam": "acme",
             "tokenEnv": "VERCEL_TOKEN"
           },
-          "version": "curl -fsS https://staging.acme.com/api/version | jq -r .sha",
+          "version": "curl -fsS https://staging.acme.com/version.json | jq -r .commit",
           "deploy": [
             "git push origin <sha>:refs/heads/staging"
           ],
@@ -188,13 +188,13 @@
         {
           "name": "web",
           "type": "vps",
-          "runtime": "Next.js standalone + pm2, release folders named by full SHA with a current symlink; /api/version returns the build's commit SHA",
+          "runtime": "Next.js standalone + pm2, release folders named by full SHA with a current symlink; /version.json returns the build's commit and version",
           "access": {
             "ssh": "acme-prod",
             "appDir": "/srv/acme",
             "processName": "acme-web"
           },
-          "version": "ssh acme-prod 'curl -fsS http://localhost:3000/api/version' | jq -r .sha",
+          "version": "ssh acme-prod 'curl -fsS http://localhost:3000/version.json' | jq -r .commit",
           "deploy": [
             "ssh acme-prod 'git -C /srv/acme/repo fetch origin && git -C /srv/acme/repo worktree add /srv/acme/releases/<sha> <sha>'",
             "ssh acme-prod 'cd /srv/acme/releases/<sha> && cp /srv/acme/shared/.env.production . && pnpm install --frozen-lockfile && pnpm build'",
@@ -203,7 +203,7 @@
           ],
           "verify": [
             "curl -fsS -o /dev/null -w '%{http_code}' https://app.acme.com/api/health",
-            "curl -fsS https://app.acme.com/api/version"
+            "curl -fsS https://app.acme.com/version.json"
           ],
           "rollback": [
             "ssh acme-prod 'ln -sfn /srv/acme/releases/<previous-sha> /srv/acme/current'",

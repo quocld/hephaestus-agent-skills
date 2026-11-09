@@ -25,7 +25,8 @@ Every line is one JSON object with these fields, as nested objects, never dotted
 | `level` | number in pino, label once in Better Stack | always | `30` in the process, `"info"` in Better Stack |
 | `service` | string, the service key in `.agents/environments.json`; without a registry, the deployable's short name, later its registry key | always | `"api"` |
 | `env` | string, the registry environment name, from `APP_ENV`; `local` when unset | always | `"production"` |
-| `version` | string, the commit SHA the version endpoint reports, from `GIT_SHA`; `unknown` when unset | always | `"3f2a9c1e0b7d4a6f8e2c5b1d9a0f7e6c4b3a2d1e"` |
+| `commit` | string, the full commit SHA the build came from, from `GIT_SHA`; `unknown` when unset | always | `"3f2a9c1e0b7d4a6f8e2c5b1d9a0f7e6c4b3a2d1e"` |
+| `version` | string, the release name, from `APP_VERSION`; `unknown` when unset | always | `"v1.4.2"` |
 | `trace_id` | string, 32 lowercase hex or a validated inbound id | in requests and jobs | `"4bf92f3577b34da6a3ce929d0e0e4736"` |
 | `request_id` | string | in requests, and jobs a request enqueued | `"0199c7c8-5d42-4c4a-9414-325d2de609e4"` |
 | `tenant_id` | string | once the tenant is known | `"org_42"` |
@@ -37,7 +38,9 @@ Every line is one JSON object with these fields, as nested objects, never dotted
 | `duration_ms` | number | lines that close a non-HTTP operation | `412` |
 | `sample_rate` | number | sampled lines (section 6) | `0.1` |
 
-- `local` or `unknown` on a line from a deployed environment is a deploy bug: set `APP_ENV` and `GIT_SHA` there.
+- `commit` and `version` mean what they mean in `/health` and `/version.json` (`environments` `references/version-endpoint.md`), set at build time the same way.
+- `local` or `unknown` on a line from a deployed environment is a deploy bug: set `APP_ENV`, `GIT_SHA` and `APP_VERSION` there.
+- Every process writes one `app.started` line when it is ready (an API once it listens, a worker once it takes jobs), so the logs show which build each process started, including services with no HTTP endpoint.
 - Domain ids go at the top level in snake_case (`invoice_id`), as ids, never as objects.
 - No second name for a contract field: not `msg`, `err`, `reqId`, `correlationId`, `svc`, or `name` for the service.
 - The one allowed alias: a project may keep an existing tenant field name (Westmont's `organization_id`) if its agent setup block from `project-init` declares it in one line, e.g. `Logging: tenant field is organization_id (logging-standard alias).`

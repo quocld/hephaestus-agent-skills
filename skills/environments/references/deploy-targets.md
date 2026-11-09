@@ -26,10 +26,10 @@ If the project has no such endpoint, propose adding one; "pushed" is not "deploy
   Rollback then becomes "repoint the symlink and reload", which takes seconds.
 - Process manager: `pm2 reload <name> --update-env` (zero-downtime for cluster mode), `systemctl restart <unit>`, or `docker compose up -d` for the Docker variant.
 - Name release folders by the full SHA.
-- `version`: ask the running process, `ssh <alias> 'curl -fsS http://localhost:<port>/api/version' | jq -r .sha`.
+- `version`: ask the running process, `ssh <alias> 'curl -fsS http://localhost:<port>/health' | jq -r .commit` (a Next.js web app: `/version.json`).
   Reading the `current` symlink shows what is linked, not what pm2 is running.
 - `logsCommand`: `ssh <alias> 'pm2 logs <name> --lines 200 --nostream'` or `journalctl -u <unit> -n 200 --no-pager`.
-- `verify`: `curl -fsS -o /dev/null -w '%{http_code}' <url>/api/health` plus the public version endpoint.
+- `verify`: `curl -fsS -o /dev/null -w '%{http_code}' <url>/health` (or the app's own health path) plus the public version endpoint.
 - Keep the production env file on the server (`shared/.env.production`) and copy or symlink it into each release; never commit it, never print it.
 - Disk fills with old releases; keep the last 3-5 and treat cleanup as its own confirmed step.
 
@@ -40,6 +40,7 @@ Registry fields: `access.composeProject`, `access.composeFiles`, `access.sharedH
 
 - Prefer the project's versioned deploy script as `deploy` when one exists.
 - Pin image tags to the commit SHA, not `latest`; otherwise `version` and `rollback` have nothing to point at.
+- A worker's `version` reads its image label or its `app.started` line (`version-endpoint.md`, section Workers), never the compose file's tag, which says what should run, not what does.
 
 ## vercel
 
