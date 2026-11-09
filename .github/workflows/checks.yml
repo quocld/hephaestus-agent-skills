@@ -16,7 +16,8 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which has no Python 3.9 build for setup-python.
+    runs-on: ubuntu-24.04
     steps:
       # hooks/test.sh and test_status.sh build throwaway repos under $TMPDIR, which the runner leaves unset.
       # Set it per job through GITHUB_ENV: the runner context is not available in a job-level env block.
