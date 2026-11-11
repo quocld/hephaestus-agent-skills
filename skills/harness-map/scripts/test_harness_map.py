@@ -286,6 +286,14 @@ def main():
             {"plugins": {"hephaestus@quocld": [{"scope": "project", "projectPath": str(project), "installPath": str(plug)}]}}))
         code, out, page = run(home, project)
         check("from hephaestus@quocld as /hephaestus:worktree-flow" in page, "plugin enabled at project scope is found")
+        # Claude Code may record the path through a symlink; git prints the resolved one.
+        link = project.parent / "project-link"
+        link.symlink_to(project.resolve(), target_is_directory=True)
+        index.write_text(json.dumps(
+            {"plugins": {"hephaestus@quocld": [{"scope": "project", "projectPath": str(link), "installPath": str(plug)}]}}))
+        code, out, page = run(home, project)
+        check("from hephaestus@quocld as /hephaestus:worktree-flow" in page, "project-scope install recorded through a symlink is found")
+        link.unlink()
         (project / ".claude" / "settings.local.json").write_text(json.dumps({"enabledPlugins": {"hephaestus@quocld": False}}))
         code, out, page = run(home, project)
         check("hephaestus@quocld enabled" not in page, "plugin turned off in the project's local settings is not counted")

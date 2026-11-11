@@ -100,11 +100,18 @@ def plugin_ids(project=None):
         if not is_our_plugin(pid):
             continue
         records = (_dicts(installed.get(pid)) or [plugin_entry(installed, pid)]) if pid in installed else []
-        inst = any(r.get("scope", "user") == "user" or (project and _str(r.get("projectPath")) == str(project)) for r in records)
+        inst = any(r.get("scope", "user") == "user" or (project and same_path(r.get("projectPath"), project)) for r in records)
         on = enabled.get(pid) is True
         if on or inst:
             out[pid] = (on, inst)
     return out
+
+
+def same_path(recorded, project):
+    """True when an install record's projectPath names this project. git prints the resolved path, while Claude Code
+    may record the path through a symlink (macOS /var is /private/var), so both sides are resolved before comparing."""
+    rec = _str(recorded)
+    return bool(rec and project) and os.path.realpath(rec) == os.path.realpath(str(project))
 
 
 def is_current(pid):
@@ -122,7 +129,7 @@ def our_plugin(project=None, ids=None):
         if not ids[pid][1]:
             return pid, None
         records = _dicts(installed.get(pid)) or [plugin_entry(installed, pid)]
-        here = [r for r in records if r.get("scope") in ("project", "local") and _str(r.get("projectPath")) == str(project)]
+        here = [r for r in records if r.get("scope") in ("project", "local") and same_path(r.get("projectPath"), project)]
         rec = (here or [r for r in records if r.get("scope", "user") == "user"] or records)[-1]
         path = Path(_str(rec.get("installPath"))) if rec.get("installPath") else None
         return pid, (path if path and path.is_dir() else None)
