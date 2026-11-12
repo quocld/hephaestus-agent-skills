@@ -87,8 +87,8 @@ It always gets `integrationBranch` with the user's answer from section 2, even w
 
 ### 3c. Version endpoint
 
-Every deployed HTTP service needs the version endpoint from the `environments` skill's `references/version-endpoint.md`.
-Implement it in the project's own stack, prove it locally (build with a known SHA, the endpoint returns it, it works logged out), and point each environment's `version` command at it.
+Every deployed service reports its `commit` and `version` per the `environments` skill's `references/version-endpoint.md`: an API in `GET /health`, a web app in `GET /version.json`, a worker in its `app.started` log line.
+Implement it in the project's own stack, prove it locally (build with a known SHA, the endpoint or the first log line prints it, the endpoints work logged out), and point each environment's `version` command at it.
 
 ### 3d. Feature status
 

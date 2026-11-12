@@ -57,6 +57,13 @@ import { pino, type DestinationStream, type Logger, type LoggerOptions } from 'p
 
 export type { Logger } from 'pino';
 
+/** What this build is, set at build time: the values /health reports (environments skill, references/version-endpoint.md). */
+export const BUILD = {
+  commit: process.env.GIT_SHA ?? 'unknown',
+  version: process.env.APP_VERSION ?? 'unknown',
+  builtAt: process.env.BUILT_AT ?? 'unknown',
+};
+
 /** Per-request or per-job context, injected into every line by the mixin. */
 export interface LogContext {
   trace_id: string;
@@ -121,7 +128,7 @@ export function serializeError(err: unknown, depth = 0): SerializedError {
 
 /** Better Stack recommends records under 100 KiB; bigger lines are replaced by a summary, never dropped silently. */
 export const MAX_LINE_BYTES = 100 * 1024;
-const SUMMARY_KEYS = ['level', 'time', 'timestamp', 'message', 'service', 'env', 'version', 'trace_id', 'request_id', 'tenant_id', 'user_id', 'event'];
+const SUMMARY_KEYS = ['level', 'time', 'timestamp', 'message', 'service', 'env', 'commit', 'version', 'trace_id', 'request_id', 'tenant_id', 'user_id', 'event'];
 
 export function capLine(line: string): string {
   if (line.length * 3 < MAX_LINE_BYTES || Buffer.byteLength(line) <= MAX_LINE_BYTES) return line;
@@ -168,7 +175,12 @@ export function createLogger(opts: CreateLoggerOptions): Logger {
     // `err`, not `error`: pino takes a missing message from obj[errorKey], and Nest (through nestjs-pino)
     // logs errors as `{ err }` with no message; the formatter below stores it under `error`.
     errorKey: 'err',
-    base: { service: opts.service, env: process.env.APP_ENV ?? 'local', version: process.env.GIT_SHA ?? 'unknown' },
+    base: {
+      service: opts.service,
+      env: process.env.APP_ENV ?? 'local',
+      commit: BUILD.commit,
+      version: BUILD.version,
+    },
     // `timestamp` is the contract field; `time` (same value) is what @logtail/pino turns into Better Stack's `dt`.
     timestamp: () => {
       const iso = new Date().toISOString();
@@ -415,7 +427,7 @@ import express from 'express';
 import { pinoHttp } from 'pino-http';
 import { EVENT } from './logging/events.js';
 import { correlationMiddleware, errorHandler, httpLoggerOptions, setRequestOutcome } from './logging/http.js';
-import { createLogger, setLogContext } from './logging/logger.js';
+import { BUILD, createLogger, setLogContext } from './logging/logger.js';
 
 const logger = createLogger({ service: 'api' });
 const app = express();
@@ -423,7 +435,9 @@ app.use(correlationMiddleware);
 app.use(pinoHttp(httpLoggerOptions(logger)));
 app.use(express.json()); // after pino-http, so a malformed body still gets its completion line
 
-app.get('/health', (_req, res) => { res.send('ok'); });
+app.get('/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store').json({ status: 'ok', service: 'api', ...BUILD, env: process.env.APP_ENV ?? 'unknown' });
+});
 app.get('/invoices/:id', (req, res) => {
   setLogContext({ tenant_id: 'org_42', user_id: 'usr_7' }); // normally done by the auth guard
   if (req.params.id.startsWith('other_')) {
@@ -458,19 +472,20 @@ Log in handlers with the shared `logger`, not `req.log`; the context fields arri
 
 ```ts
 // src/app.module.ts
-import { Controller, Get, HttpException, HttpStatus, Logger, type MiddlewareConsumer, Module, type NestModule, type OnApplicationShutdown, Param, Post } from '@nestjs/common';
+import { Controller, Get, Header, HttpException, HttpStatus, Logger, type MiddlewareConsumer, Module, type NestModule, type OnApplicationShutdown, Param, Post } from '@nestjs/common';
 import express from 'express';
 import { LoggerModule } from 'nestjs-pino';
 import { EVENT } from './logging/events.js';
 import { httpLoggerOptions } from './logging/http.js';
-import { createLogger, setLogContext } from './logging/logger.js';
+import { BUILD, createLogger, setLogContext } from './logging/logger.js';
 
 @Controller()
 class InvoicesController {
   private readonly log = new Logger(InvoicesController.name);
 
   @Get('health')
-  health() { return 'ok'; }
+  @Header('Cache-Control', 'no-store')
+  health() { return { status: 'ok', service: 'api', ...BUILD, env: process.env.APP_ENV ?? 'unknown' }; }
 
   @Get('invoices/:id')
   get(@Param('id') id: string) {
@@ -544,6 +559,7 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { LogOnceExceptionFilter } from './log-once.filter.js';
+import { EVENT } from './logging/events.js';
 import { correlationMiddleware } from './logging/http.js';
 
 async function bootstrap() {
@@ -554,6 +570,7 @@ async function bootstrap() {
   // process.exit after the hooks fires pino's exit flush; the default re-raises the signal and loses the last lines.
   app.enableShutdownHooks(undefined, { useProcessExit: true });
   await app.listen(Number(process.env.PORT ?? 3000));
+  app.get(Logger).log({ event: EVENT.APP_STARTED }, 'listening', 'App'); // nestjs-pino reads the last argument as the context
 }
 void bootstrap();
 ```
@@ -569,6 +586,18 @@ void bootstrap();
   On an older Nest, upgrade, or handle SIGTERM yourself: `await app.close()`, then `process.exit(0)`.
 
 ## Workers and queues
+
+A worker writes `app.started` once it is connected and taking jobs, not at import time, so the line means this build is running; `commit` and `version` come from `base`:
+
+```ts
+// src/worker.ts
+const logger = createLogger({ service: 'worker' });
+const worker = new Worker('invoice', processor, { connection });
+await worker.waitUntilReady();
+logger.info({ event: EVENT.APP_STARTED, queues: ['invoice'] }, 'worker started');
+```
+
+The registry's `version` for a worker reads this line (`environments` `references/version-endpoint.md`, section Workers).
 
 When enqueuing, put `log: jobLogMeta()` in the job payload next to the business data.
 In the processor, wrap the handler:
@@ -647,7 +676,7 @@ test('every line carries the contract fields and secrets never reach the sink', 
 
   const completed = lines.find((l) => l.event === 'http.request.completed');
   assert.ok(completed, 'no completion line');
-  for (const field of ['timestamp', 'time', 'message', 'service', 'env', 'version', 'trace_id', 'request_id']) {
+  for (const field of ['timestamp', 'time', 'message', 'service', 'env', 'commit', 'version', 'trace_id', 'request_id']) {
     assert.equal(typeof completed[field], 'string', `missing ${field}`);
   }
   assert.equal(completed.level, 40); // 401 -> warn
@@ -914,7 +943,7 @@ Break it once before trusting it (`logging-standard` section 7 test 5), each bre
 Change in place when the project already has one shared logger factory with AsyncLocalStorage correlation and redaction (Westmont: `message`, `error`, ISO `timestamp` plus `time`, numeric `level`, a redaction test); otherwise adopt the four files above.
 In place means:
 
-1. Add `service`, `env`, `version` through `base`.
+1. Add `service`, `env`, `commit`, `version` through `base`; a project whose `version` field held the commit SHA renames it to `commit` and lists the saved queries that read it (step 8).
 2. Accept `traceparent` and `x-request-id`, validate every inbound id, and return `x-request-id`.
 3. Wrap job processors so worker lines carry the request's ids.
 4. Drop `req`/`res` dumps from request lines, extend the redaction defaults, and serialize errors to the four keys only.
@@ -923,7 +952,7 @@ In place means:
    If the logger and pino-http options are spread into one object (nestjs-pino's `pinoHttp: { ...loggerOptions, ...httpOptions }`), the later `serializers` replaces the earlier one, so the http options carry all three: `serializers: { req: () => undefined, res: () => undefined, error: (v) => v }`.
 7. Install `LogOnceExceptionFilter` (NestJS wiring above) and pin its registration with a structural test when the full app needs a database to boot.
 8. Before the PR, grep the repo for readers of the old fields (`req.url`, `responseTime`, `msg`, `name`, `svc`, `req.headers` in docs, project skills, scripts, saved queries) and update them; list Better Stack saved searches, dashboards, and alerts that use them in the PR body, since lines from before the deploy keep the old shape.
-9. Set `APP_ENV` per environment and pass `GIT_SHA` from the deploy's image tag (for example `GIT_SHA: ${IMAGE_TAG:-unknown}` in the compose file); a server `.env` change is the user's step (`environments`), named in the PR body.
+9. Set `APP_ENV` per environment and pass `GIT_SHA` and `APP_VERSION` from the build (for example `GIT_SHA: ${IMAGE_TAG:-unknown}` in the compose file, or baked into the image as in `environments` `references/version-endpoint.md`); a server `.env` change is the user's step (`environments`), named in the PR body.
 10. A shared logger package is shared infrastructure: follow the project's own rule for announcing such changes.
 
 Changing `level` to labels in such a project breaks scripts that grep numeric levels (Westmont's deploy check greps `"level":(50|60)`); keep it numeric.

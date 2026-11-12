@@ -100,9 +100,9 @@ Run after setting up a source and after any deploy that touches logging or the s
 Use the target environment; prod only when the user asks or the registry allows it.
 
 1. Emit one uniquely tagged line in that environment, read-only: a request to a route that writes an `info` completion line (not the excluded health check) with a fresh id, for example `curl -sS -H "x-request-id: shipcheck-$(date -u +%Y%m%d%H%M%S)-$RANDOM" <url><route>`.
-   On Next.js the proxy line is `debug`; use `/api/version`, which writes an info completion line through the `route()` wrapper in `logging-standard` `references/nextjs.md`.
+   On Next.js the proxy line is `debug`; use `/version.json`, which writes an info completion line through the `route()` wrapper in `logging-standard` `references/nextjs.md`.
 2. Query the source with pattern 2a of `references/queries.md`, `request_id` equal to the sent id; batching delays lines by a few seconds, so poll up to about 2 minutes.
-3. Check the row against the `logging-standard` contract: `level` is a label, `message`, `service`, `env` and `version` are set, `version` equals the environment's `version` command, `request_id` equals the sent id, `dt` is within a minute of the request.
+3. Check the row against the `logging-standard` contract: `level` is a label, `message`, `service`, `env`, `commit` and `version` are set, `commit` equals the environment's `version` command, `request_id` equals the sent id, `dt` is within a minute of the request.
 4. No row after 2 minutes, in this order:
    - The line is in the container's or platform's own logs (`server-touch` for Docker, the platform's CLI or dashboard otherwise): if not, the app did not log it.
    - Both variables are set in that environment, checked by presence only.

@@ -195,7 +195,7 @@ def main():
         if shutil.which("node"):
             pkg = project / "packages" / "logger"
             pkg.mkdir(parents=True, exist_ok=True)
-            line = "{message: m, timestamp: 't', level: 30, service: o.service, env: 'local', version: 'unknown'}"
+            line = "{message: m, timestamp: 't', level: 30, service: o.service, env: 'local', commit: 'unknown', version: 'unknown'}"
             (pkg / "good.mjs").write_text("export function createLogger(o) { return { info(m) {"
                                           " if (process.env.BETTER_STACK_SOURCE_TOKEN) throw new Error('would ship');"
                                           f" console.log(JSON.stringify({line})); }} }}; }}\n")

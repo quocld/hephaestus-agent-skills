@@ -43,7 +43,12 @@ const client = token && host
     })
   : undefined;
 
-const base = { service: 'web', env: process.env.APP_ENV ?? 'local', version: process.env.GIT_SHA ?? 'unknown' };
+const base = {
+  service: 'web',
+  env: process.env.APP_ENV ?? 'local',
+  commit: process.env.GIT_SHA ?? 'unknown',
+  version: process.env.APP_VERSION ?? 'unknown',
+};
 const minLevel = ORDER[(process.env.LOG_LEVEL as Level) ?? 'info'] ?? ORDER.info;
 
 const SECRET_KEY = /pass(word)?|token|secret|authorization|cookie|api_?key|email|phone|card|cvc|cvv/i;
@@ -104,7 +109,7 @@ export function flushLogs(): Promise<void> {
 }
 ```
 
-- `service` is the service name from `logging-standard` section 1; `GIT_SHA` comes from `next.config` `env` as in the `environments` skill's `references/version-endpoint.md`.
+- `service` is the service name from `logging-standard` section 1; `GIT_SHA` and `APP_VERSION` come from `next.config` `env` as in the `environments` skill's `references/version-endpoint.md`.
 - Key-based redaction also hides harmless keys that contain a listed word (`token_count`); rename those fields rather than weakening the pattern.
 - Without the two `BETTER_STACK_*` variables, lines go to the console as JSON, which is what local dev and `next build` need.
 
@@ -207,13 +212,13 @@ export const GET = route('/api/invoices/[id]', async (_request, { params }: { pa
 ```
 
 ```ts
-// app/api/version/route.ts - the version endpoint from the environments skill, wrapped like every route.
+// app/version.json/route.ts - the version endpoint from the environments skill, wrapped like every route.
 import { route } from '@/lib/route';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = route('/api/version', () => Response.json(
-  { service: 'web', sha: process.env.GIT_SHA ?? 'unknown', builtAt: process.env.BUILT_AT ?? 'unknown', env: process.env.APP_ENV ?? 'unknown' },
+export const GET = route('/version.json', () => Response.json(
+  { service: 'web', commit: process.env.GIT_SHA ?? 'unknown', version: process.env.APP_VERSION ?? 'unknown', builtAt: process.env.BUILT_AT ?? 'unknown', env: process.env.APP_ENV ?? 'unknown' },
   { headers: { 'Cache-Control': 'no-store' } },
 ));
 ```
@@ -375,7 +380,7 @@ test('lines follow the contract and secrets never reach the output', async () =>
   const raw = JSON.stringify(lines);
   assert.ok(!raw.includes('tok_live_secret') && !raw.includes('Bearer abc'), 'secret leaked');
   assert.ok(raw.includes('[REDACTED]'));
-  for (const f of ['timestamp', 'level', 'message', 'service', 'env', 'version', 'request_id', 'event']) assert.ok(lines[0][f], `missing ${f}`);
+  for (const f of ['timestamp', 'level', 'message', 'service', 'env', 'commit', 'version', 'request_id', 'event']) assert.ok(lines[0][f], `missing ${f}`);
   assert.equal(lines[0].trace_id, undefined, 'invalid inbound id was accepted');
 });
 ```
