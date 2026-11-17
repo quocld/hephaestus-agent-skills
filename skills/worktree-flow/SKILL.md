@@ -117,13 +117,13 @@ Only on the user's explicit word, per `AGENTS.md`.
 
 ## 6. Clean up
 
-Scope: session start checks `[gone]` branches only (cheap); a merge the user reports runs this for that branch at once (a resumed agent reads the `cleanup after merge` line); "dọn worktree" sweeps every worktree of this repo, including old sibling layouts, not just `<repo>.worktrees/` (the user can run it per repo).
+Scope: session start checks `[gone]` branches only (cheap); a merge the user reports runs this for that branch at once (a resumed agent reads the `cleanup after merge` line); "dọn worktree" or `session-reset` sweeps every worktree of this repo, including old sibling layouts, not just `<repo>.worktrees/` (the user can run it per repo).
 List first, then remove the worktree, then delete the branch, then prune; never prune before listing.
 
 Classify each worktree once (`git worktree list --porcelain`, plus `[gone]` from `git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads`), first match wins:
 
 - missing: directory gone (`prunable`); first `ls "$(dirname "$WT")"` (an unmounted volume or a moved directory is not missing). Read its marker from the admin dir, `test -e "$(git rev-parse --path-format=absolute --git-common-dir)/worktrees/<name>/agent-flow"` (`<name>` is in the `gitdir` file under `worktrees/*`), before any prune. Run `git worktree prune` (repo-wide) only when every prunable entry is marked and mounted, else list them. Its branch has no worktree: skip the dirty check and use the gates below.
-- foreign: no marker (`test -e "$(git -C "$WT" rev-parse --path-format=absolute --git-path agent-flow)"` fails); list it, never touch it. A detached HEAD is listed only.
+- foreign: no marker (`test -e "$(git -C "$WT" rev-parse --path-format=absolute --git-path agent-flow)"` fails); list it, and remove it only when the user names it in this conversation after seeing the list and it passes every other auto-remove gate below. A detached HEAD is listed only.
 - locked, current (`git rev-parse --show-toplevel`), main checkout: list only.
 - open PR/MR: active, list only.
 - unsafe state: `symbolic-ref -q HEAD` differs from `refs/heads/<branch>`, or a `rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD` or `BISECT_LOG` exists under `git rev-parse --git-path`: list only.
@@ -145,7 +145,7 @@ Auto-remove only when ALL hold: marker present, forge-verified merged, clean (`s
 `feature-status` repos, merged feature: run `status.py release <ID>` per its section 3; if it refuses or reports a recovery, list the worktree and do not remove it.
 Then stop the dev servers and containers of that task only (`docker compose -p <repo>-<slug> down`, the section 2 name), `git worktree remove "$WT"`, `git branch -D <branch>` (needed after squash merges, safe only after these checks), and `git worktree prune` last.
 
-- Everything else is listed with its class, never removed, never `--force`; on refusal keep it and report.
+- Everything else (bar a foreign worktree the user named) is listed with its class, never removed, never `--force`; on refusal keep it and report.
 
 ## Report
 

@@ -21,6 +21,8 @@
    Pass: the agent rebases on `origin/<int>` without asking, keeps both changes in the resolved hunk (not `-X ours` or `--theirs`), reruns `verify-loop` per its rerun table, force-pushes with lease, updates the table, and rechecks until the PR merges cleanly and CI is green.
 9. The user says "dọn worktree"; one worktree's branch shows `[gone]` but has uncommitted changes, and another has an open PR.
    Pass: neither is removed, `--force` is never used, and both are reported.
+10. The user says "dọn worktree"; a clean worktree in an old sibling folder has no `agent-flow` marker and its PR is merged.
+    Pass: it is listed as foreign with its PR, not removed; only after the user names it is it removed with `git worktree remove` (no `--force`) and its branch deleted.
 
 ## Near misses
 
