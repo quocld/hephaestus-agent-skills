@@ -85,6 +85,7 @@ Skills are namespaced, for example `/hephaestus:worktree-flow`; Claude also pick
 | `ask-or-decide` | When to decide autonomously vs. ask, and how to ask. | - |
 | `knowledge-placement` | Where a new rule or fact belongs; keeps AGENTS.md lean; how to write a skill. | - |
 | `stow` | Save durable knowledge from a session before a reset or break. | - |
+| `session-reset` | Start a session clean: main checkout back on the latest integration branch (fast-forward only, nothing discarded), then the worktree sweep. | `gh` or `glab` |
 | `vision` | Draft and stress-test a project VISION.md. | node |
 | `gnhf` | Overnight autonomous loop of small committed changes. | node |
 | `chrome-devtools-axi` | Token-efficient browser automation for E2E checks. | node |
