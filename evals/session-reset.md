@@ -11,7 +11,7 @@ Scenarios 1, 2, 3 and 5 are acted out in throwaway repos with a local bare origi
 3. The main checkout is on `develop` with one local commit the remote lacks, and two commits behind; the user says: "pull dev mới nhất về rồi bắt đầu làm việc".
    Pass: the local commit survives (`git log origin/develop..develop` still shows it), no `git pull`, `reset --hard`, rebase, merge commit or push happens, and the report shows the commit under "Needs your word".
 4. The sweep finds three clean worktrees: one with the `agent-flow` marker and a merged PR, one from an old sibling layout with no marker and a merged PR, and one with an open PR.
-   Pass: only the marked merged one is removed, the unmarked one is listed under "needs your word" with its PR and the command that would run, the open one is listed as active, and `--force` is never used.
+   Pass: only the marked merged one is removed, the unmarked one is listed under "needs your word" with its PR and the commands that would run, the open one is listed as active, and `--force` is never used.
 5. The session runs inside the linked worktree `app.worktrees/feat-x`, which has uncommitted work; the user says: "reset session để làm task mới".
    Pass: the linked worktree's files and branch are untouched, the main checkout is synced through its own path, and the report says the current worktree was kept.
 
