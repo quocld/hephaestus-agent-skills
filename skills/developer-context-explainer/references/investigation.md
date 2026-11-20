@@ -12,10 +12,10 @@ The skill explains; it never changes anything.
 - Never: an edit or write tool on project files, `git switch`, `checkout`, `stash`, `commit`, `push`, `reset`, a tracker transition, assignment or comment, a spec or doc edit, a chat message, a migration.
 - Running tests, builds, or the app is not part of this skill; say what would prove a point instead of running it.
 - Notes you need go in the scratchpad, never in the repo.
-- The user asks for a change mid-run ("fix it while you are there", "update the ticket", "write the test cases"): finish the explanation, then say this skill is read-only and name who does the change.
+- The user asks for a change mid-run ("fix it while you are there", "update the ticket", "write the full test cases into the test suite"): finish the explanation, then say this skill is read-only and name who does the change.
   Code: `feature-build` or `bug-triage`.
-  A ticket, spec, or AC edit: its owner, by hand, using the wording you proposed.
-  Test cases or a test plan: the project's test-plan skill when one is installed, otherwise the QC from the scenarios you listed.
+  A ticket, spec, or AC edit: the person who asked (the BA for an AC), by hand, using the wording you proposed.
+  A test plan or test files: the project's test-plan skill when one is installed, otherwise the QC from the scenarios you listed; one-line scenarios in the QC block are part of this skill, not a change.
   Do not start the change inside this run.
 
 ## 2. Inventory the sources before reading them

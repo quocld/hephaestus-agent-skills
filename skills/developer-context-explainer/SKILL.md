@@ -25,7 +25,8 @@ After the shared order in `references/investigation.md` section 3, add these, in
 2. **Classify what the ticket asks**: each item is a business requirement (what the user or business needs), a technical implementation (how the code will do it), or a technical constraint (what limits the how: a contract, a schema, a third-party API, performance).
    A ticket that prescribes an implementation without the requirement behind it is a question for the BA or PO.
 3. **Risks**: callers of the code you would change (`git grep` the symbol), shared components, data already stored in the old shape, the `flow-trace` triggers in `AGENTS.md`, and earlier bugs in the same area from the history step.
-4. **Progress, from Git only** (always run when there is a ticket id): find the branch by ticket id and through the PR's `headRefName`, then read it as `origin/<branch>` without switching to it.
+4. **Progress, from Git only** (always run when there is a ticket id): find the branch by ticket id and through the PR's `headRefName`, then read it as `origin/<branch>` without switching to it; a branch with no remote copy, or a worktree ahead of it, is read by its local ref, and 06 names the ref it read.
+   A PR given as the ticket (`#41`, a URL) already gave `headRefName` and `mergedAt` in its `gh pr view`; skip the search lines.
    ```bash
    git worktree list; git branch -a --list '*<ticket>*'
    gh pr list --state all --search '<ticket>' --json number,state,headRefName,mergedAt

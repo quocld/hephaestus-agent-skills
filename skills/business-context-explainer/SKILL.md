@@ -34,7 +34,7 @@ After the shared investigation order, build these, in this order, before any rec
 
 Fill this recipe in order, in the user's language.
 Drop a section that has nothing verified or inferred to say; keep 03, 04, 05, and 07 always.
-Rules are plain sentences; a code path appears only in the Source column, never in the rule text.
+Every sentence is plain product language; a code path appears only as a source (the Source column, or the source in a label's brackets), never in the rule or behavior text.
 
 ```markdown
 **TL;DR**: <what the feature is for, in one line> - <why this ticket exists, in one line> - <the one thing the reader must know>.

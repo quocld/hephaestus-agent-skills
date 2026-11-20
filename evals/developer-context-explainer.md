@@ -27,7 +27,7 @@ Scenarios run in a repo with a project-init block; the tracker is reachable only
 ## Reader test
 
 1. May the skill run `git switch` to inspect the developer's branch?
-   Expected: no; it reads the branch by ref (`git log origin/<int>..<branch>`, `git diff`, `git merge-base --is-ancestor`) or its worktree with `git -C`, never switch or checkout.
+   Expected: no; it reads the branch by ref (`git log origin/<int>..origin/<branch>`, `git diff`, `git merge-base --is-ancestor`) or its worktree with `git -C`, never switch or checkout.
 2. How is progress decided when there is no branch, commit, or PR?
    Expected: "not started (no Git evidence)", never estimated from words or the branch name.
 3. Which sections are always kept?
