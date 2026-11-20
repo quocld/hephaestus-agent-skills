@@ -1,7 +1,7 @@
 ---
 name: business-context-explainer
 description: >
-  Use when a BA or QC wants to understand a ticket, feature, or business rule in plain language, without reading code: "giải thích nghiệp vụ ticket này", "BA cần hiểu gì", "QC cần verify gì", "ticket này nghiệp vụ là gì", "business rule của chức năng này", "explain this ticket for QA", "what should QC check and why". Not for writing the spec or a test plan, not for a developer (`developer-context-explainer`).
+  Use when a BA or QC wants to understand a ticket, feature, or business rule in plain language, without reading code: "giải thích nghiệp vụ ticket này", "BA cần hiểu gì", "QC cần verify gì", "ticket này nghiệp vụ là gì", "business rule của chức năng này", "explain this ticket for QA", "what should QC check and why". Also when a QC asks for test cases before the business is understood. Not for a workflow step that writes a spec or test-plan file, and not for a developer (`developer-context-explainer`).
 user-invocable: true
 ---
 
@@ -15,7 +15,8 @@ This skill builds the business picture first (product, terms, journey, rules, hi
 - Identify the ticket (id, URL, or pasted text) or the feature; nothing at all: ask for it, it is the only thing worth asking before investigating.
 - Identify the role from the user's words: BA (requirements, rules, questions for the client), QC (what to verify), or both.
   Not stated and not clear: write both role blocks, short; do not ask.
-- The reader is a developer, or asks how to implement it: use `developer-context-explainer` instead.
+- The reader says they are a developer, or asks how to implement it: use `developer-context-explainer` instead.
+  This is about the reader's role, not the product's users: a BA on a developer tool still gets this skill.
 - Load and follow `developer-context-explainer` `references/investigation.md` for the whole run: read-only, the source inventory, evidence labels, asking, and writing rules.
   That file is shared by both skills; the depth below is this skill's.
 
@@ -32,7 +33,8 @@ After the shared investigation order, build these, in this order, before any rec
 ## 3. Output
 
 Fill this recipe in order, in the user's language.
-Drop a section that has nothing verified or inferred to say; keep 04, 05, and 07 always.
+Drop a section that has nothing verified or inferred to say; keep 03, 04, 05, and 07 always.
+Rules are plain sentences; a code path appears only in the Source column, never in the rule text.
 
 ```markdown
 **TL;DR**: <what the feature is for, in one line> - <why this ticket exists, in one line> - <the one thing the reader must know>.
@@ -50,16 +52,19 @@ Drop a section that has nothing verified or inferred to say; keep 04, 05, and 07
 <the business problem, the trigger, expected vs. actual behavior, who is affected and how>
 
 ## 05. Business rules and requirements
-<BR1..BRn: rule | source | label; then the acceptance criteria as written; then the states and their allowed moves when an entity has states>
+<BR1..BRn: rule | source | label; then the acceptance criteria as written, or "no AC list" as Unknown; then the states and their allowed moves when an entity has states, stated here once>
 
 ## 06. Historical context
 <earlier changes, decisions, and related tickets, and whether this ticket keeps or contradicts them>
 
 ## 07. Clarifications and recommendations
-<the role blocks below, then: "Deeper on request: <topics>">
+<the role blocks below>
 
+Deeper on request: <topics>
 Sources: <inventory row: result, for each row>
 ```
+
+Labels, length, and the order of the closing lines follow `developer-context-explainer` `references/investigation.md` sections 4 and 6; with both role blocks, each block item is one line and the length budget stays the same.
 
 ### BA block (in 07)
 
@@ -76,9 +81,9 @@ Write it only after 03-05 exist; every item points to the rule (`BR2`), journey 
 
 - **Expected behavior**: what the user should see at each changed journey step.
 - **Rules to verify**: one line per rule, and why it matters to the business.
-- **Scenarios**: positive and negative, as one line each (actor, situation, expected outcome), not full test cases.
+- **Scenarios**: positive and negative, as one line each (actor, situation, expected outcome), not full test cases; a scenario an existing test already covers says so, with the test's name.
 - **Boundaries and edge cases**: limits, empty and maximum values, permissions, concurrent or repeated actions.
-- **Status transitions and data consistency**: every allowed and forbidden move, and what other records must agree afterwards.
+- **Status transitions and data consistency**: the forbidden moves to try and what other records must agree afterwards, pointing back to the states in 05 instead of repeating them.
 - **Integrations**: other systems, jobs, or emails the result depends on, and how to observe them.
 - **Regression scope**: features that share the changed rule, screen, or data, and earlier bugs in this area from 06.
 - **Confirm with BA/PO before testing**: expected results no source states.

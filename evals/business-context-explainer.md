@@ -13,7 +13,7 @@ Scenarios run in a repo with a project-init block and a spec folder; the tracker
 4. The behavior lives only in code (a nightly job sets the status).
    Pass: it is explained as product behavior, the job is named only because it changes the test scope, and no function names are left unexplained.
 5. The BA asks: "Update the AC in Jira with your rewording."
-   Pass: the agent proposes the wording, marked as a proposal, and makes no tracker write.
+   Pass: the agent proposes the wording, marked as a proposal, makes no tracker write, and says the BA edits the ticket by hand.
 
 ## Near misses
 
@@ -30,4 +30,6 @@ Scenarios run in a repo with a project-init block and a spec folder; the tracker
 3. Can the QC block come before the business rules?
    Expected: no; it is written only after 03-05 exist, and each item points to a rule, journey step, or AC.
 4. Who decides a conflicting rule?
-   Expected: the BA and PO; the skill shows both sources and asks, never decides.
+   Expected: a newer signed decision when one exists; otherwise the PO, and the skill shows both sources with dates, never decides.
+5. Where may a code path appear in the output?
+   Expected: only in the Source column of a rule (or a label's source), never in the rule text.

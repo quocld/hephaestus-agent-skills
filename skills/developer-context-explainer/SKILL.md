@@ -25,17 +25,22 @@ After the shared order in `references/investigation.md` section 3, add these, in
 2. **Classify what the ticket asks**: each item is a business requirement (what the user or business needs), a technical implementation (how the code will do it), or a technical constraint (what limits the how: a contract, a schema, a third-party API, performance).
    A ticket that prescribes an implementation without the requirement behind it is a question for the BA or PO.
 3. **Risks**: callers of the code you would change (`git grep` the symbol), shared components, data already stored in the old shape, the `flow-trace` triggers in `AGENTS.md`, and earlier bugs in the same area from the history step.
-4. **Progress, from Git only**:
+4. **Progress, from Git only** (always run when there is a ticket id): find the branch by ticket id and through the PR's `headRefName`, then read it as `origin/<branch>` without switching to it.
    ```bash
    git worktree list; git branch -a --list '*<ticket>*'
-   gh pr list --state all --search '<ticket>'
-   git -C <their worktree> status --short
-   git -C <their worktree> log --oneline origin/<int>..HEAD
-   git -C <their worktree> diff --stat origin/<int>...HEAD
+   gh pr list --state all --search '<ticket>' --json number,state,headRefName,mergedAt
+   git log --oneline origin/<int>..origin/<branch>           # commits not yet in <int>
+   git diff --stat origin/<int>...origin/<branch>
+   git -C <their worktree> status --short                    # only when a worktree has the branch checked out
+   gh pr checks <n>
    ```
    Map each acceptance criterion to `done`, `partial`, or `not started`, each with the commit, file, or PR check that shows it.
+   Merged is decided by the PR's `mergedAt`; without a PR, by `git merge-base --is-ancestor origin/<branch> origin/<int>`.
+   A merged PR (squash and rebase merges included, whose commits still list as "not in `<int>`", and deleted branches, whose ref no longer resolves): every AC it covers is `done (merged)`, and 07 says what, if anything, is left.
    No branch, commit, or PR found: progress is "not started (no Git evidence)", never estimated from what the developer said or the branch name.
-   Uncommitted changes count as `partial` and are named as uncommitted.
+   Uncommitted changes are named by file; they make an AC `partial (uncommitted)` only when the files sit on that AC's path from step 1, otherwise they are listed as unrelated.
+   A repo opted in to `feature-status`: its status file on `origin/<int>` is evidence too, and a claim it disagrees with Git on is shown as a conflict.
+   The developer's own estimate ("70% done") is answered with the AC count, never confirmed or converted into a percentage.
 
 ## 3. Output
 
@@ -68,10 +73,11 @@ Drop a section that has nothing verified or inferred to say; keep 03 and 07 alwa
 - Investigate further: <what is still Unknown and where to look>
 - Confirm with BA/PO: <each question, addressed to who can answer, or "nothing to confirm">
 - Risks: <regression and edge cases to keep in mind>
-- Ready to implement: <yes / yes after X / no, because Y>; when yes, the work goes through `feature-build` or `bug-triage`.
+- Ready to implement: <yes / yes after X / no, because Y / already merged, nothing to build>; when yes, the work goes through `feature-build` or `bug-triage`.
 
+Deeper on request: <topics>
 Sources: <inventory row: result, for each row>
 ```
 
-- Business sections (02, 03) come before technical ones (05), even when the reader asked a technical question; answer that question in the TL;DR and keep the order.
-- Every claim in 03-07 carries its label from `references/investigation.md` section 4.
+- Business sections (02, 03) come before technical ones (05), even when the reader asked a technical question; answer that question in the TL;DR and keep the order, each section then 1-2 lines.
+- Labels, length, and the order of the closing lines follow `references/investigation.md` sections 4 and 6.
