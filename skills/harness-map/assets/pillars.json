@@ -26,7 +26,9 @@
           "project-init",
           "knowledge-placement",
           "environments",
-          "vision"
+          "vision",
+          "developer-context-explainer",
+          "business-context-explainer"
         ],
         "sections": [
           "Global instructions",

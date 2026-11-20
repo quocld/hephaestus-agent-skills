@@ -69,6 +69,8 @@
     "worktree-flow": {"tier": "core", "events": ["pre_tool", "stop"], "path": ["prompt", "response"], "when": "Before the first file change (own worktree) and when finishing (PR into the integration branch)"},
     "feature-build": {"ultimate": true, "tier": "core", "events": ["prompt"], "path": ["prompt"], "when": "/feature-build or a user story to implement, in an S, M or L lane"},
     "bug-triage": {"ultimate": true, "tier": "core", "events": ["prompt"], "path": ["prompt"], "when": "/bug-triage or a bug or QA ticket"},
+    "developer-context-explainer": {"tier": "optional", "events": ["prompt"], "path": ["gather"], "when": "/developer-context-explainer: a ticket explained to a developer before coding, read-only: business first, then current behavior, risks and Git-evidenced progress"},
+    "business-context-explainer": {"tier": "optional", "events": ["prompt"], "path": ["gather"], "when": "/business-context-explainer: a ticket explained to a BA or QC in plain language, read-only: rules and journey first, then what to clarify and what to verify"},
     "vision": {"tier": "optional", "events": ["prompt"], "path": ["prompt"], "when": "/vision to draft or stress-test VISION.md"},
     "fe-guardrails": {"tier": "optional", "events": ["pre_tool"], "path": ["act"], "when": "Before writing React or Next.js screens, forms and error states"},
     "ask-or-decide": {"tier": "core", "events": ["pre_tool"], "path": ["gather"], "when": "Before an AskUserQuestion call or a scope change"},

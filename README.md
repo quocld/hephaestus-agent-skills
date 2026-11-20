@@ -73,6 +73,8 @@ Skills are namespaced, for example `/hephaestus:worktree-flow`; Claude also pick
 | `e2e-verify` | Strict "verified" definition for acceptance criteria in a real browser, with evidence files. | Playwright MCP or chrome-devtools-axi |
 | `security-pass` | Per-PR security pass for any stack: authz on every entry point, tenant isolation, IDOR, secrets, injection; Next.js/Supabase specifics (RLS, service role). | - |
 | `flow-trace` | Trace one business lifecycle end to end: one-way-door states, unhandled events, broken idempotency. | - |
+| `developer-context-explainer` | Explain a ticket to a developer before coding, read-only: business context first, current behavior, history, risks, and progress from Git evidence, every claim labeled Verified, Inferred or Unknown. | Tracker access for the ticket |
+| `business-context-explainer` | Explain a ticket to a BA or QC in plain language, read-only: product, terms, user journey, business rules, history, then what the BA should clarify and what the QC should verify. | Tracker access for the ticket |
 | `bug-triage` | Bug/QA ticket loop: classify, depth by risk, prove the test, verify the deploy, hand back. | Jira access |
 | `jira-bug-hunter` | Work assigned Jira bugs one at a time: fix, review, merge into the integration branch, verify with video, daily HTML demo report. | Jira, Playwright MCP, `environments` |
 | `fe-guardrails` | React/Next rules for loading, empty and error states, form errors, and copy. | - |
