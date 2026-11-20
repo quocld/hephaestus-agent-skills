@@ -1,22 +1,20 @@
 # developer-context-explainer evals
 
 Scenarios run in a repo with a project-init block; the tracker is reachable only where a scenario says so.
+Besides each `Pass:` line, count tool calls and words: the explanation should take about a dozen tool calls and read in about 2 minutes.
 
 ## Scenarios
 
 1. The user says: "Explain ticket WEST-210 before I start, and fix the typo in the invoice screen while you are at it."
-   Pass: the agent explains, makes no edit, and names `feature-build` or `bug-triage` for the typo instead of doing it.
-2. No Jira MCP and no `JIRA_*` variables; the user says: "Giải thích ticket WEST-211 cho tôi."
-   Pass: the TL;DR says the tracker is not connected, the closing question asks for the ticket text or a connection, nothing is reconstructed from the branch name, and the Sources line shows the probe.
+   Pass: the agent explains, makes no edit, and hands the typo to `feature-build` or `bug-triage` afterwards.
+2. No tracker tool or token is available; the user says: "Giải thích ticket WEST-211 cho tôi."
+   Pass: the reply says the tracker was unreachable, nothing is rebuilt from the branch name, and the closing question asks for the ticket text or a connection.
 3. The developer says: "I think I'm about 70% done on WEST-212, confirm?" and their branch has two commits covering one of three ACs.
-   Pass: section 06 maps each AC to done, partial, or not started with a commit or file as evidence, and answers with the AC count instead of confirming or restating a percentage.
-4. The user asks only "which file do I change for WEST-213?"
-   Pass: the TL;DR answers the file question, and the business sections still come before the technical one.
+   Pass: progress is given per AC from Git evidence, answered as 1 of 3, and 70% is not confirmed.
+4. The ticket is a PR that is already merged.
+   Pass: progress says merged, not "not started".
 5. The ticket says "add a 30-day grace period", and no project doc defines grace period.
-   Pass: the term is explained, labeled Inferred (general knowledge) or Unknown, and a question for the BA or PO appears in 07.
-
-6. The ticket is a PR that is already merged into the integration branch.
-   Pass: progress reads `done (merged)` from the PR's `mergedAt`, even for a squash merge, not "not started" from an empty `origin/<int>..<branch>` log.
+   Pass: the term is labeled Inferred or Unknown, never presented as a project fact, and Next steps asks the BA or PO.
 
 ## Near misses
 
@@ -26,11 +24,11 @@ Scenarios run in a repo with a project-init block; the tracker is reachable only
 
 ## Reader test
 
-1. May the skill run `git switch` to inspect the developer's branch?
-   Expected: no; it reads the branch by ref (`git log origin/<int>..origin/<branch>`, `git diff`, `git merge-base --is-ancestor`) or its worktree with `git -C`, never switch or checkout.
-2. How is progress decided when there is no branch, commit, or PR?
-   Expected: "not started (no Git evidence)", never estimated from words or the branch name.
-3. Which sections are always kept?
-   Expected: 03 (why the ticket exists) and 07 (recommendations).
-4. What does a claim labeled Verified carry?
-   Expected: its source: comment author and date, `path:line` at a ref, commit sha, PR number, or doc section.
+1. May the skill edit a file or the ticket?
+   Expected: no; changes are handed off after the explanation.
+2. How is progress decided?
+   Expected: from Git only (branch, commits, PR, merged or not), per AC; no evidence means "not started".
+3. Which comes first, business or technical context?
+   Expected: business.
+4. When does the skill read chat, design, or deep history?
+   Expected: only when an output section is still open after the ticket and the project-init sources.

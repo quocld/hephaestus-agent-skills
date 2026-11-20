@@ -7,78 +7,18 @@ user-invocable: true
 
 # developer-context-explainer
 
-A new developer who codes a ticket without knowing why it exists builds the wrong thing correctly.
-This skill makes them understand the business first, then the system, then their own progress, from evidence, before they write code.
+A developer who codes a ticket without knowing why it exists builds the wrong thing correctly.
+Explain the business first, then the system, then where the developer stands, following `references/rules.md`.
 
-## 1. Set up the run
+## What the developer needs
 
-- Identify the ticket (id, URL, or pasted text) and the developer's repo; no ticket at all: ask for one, it is the only thing worth asking before investigating.
-- The reader says they are a BA or QC, or asks what to test or clarify: use `business-context-explainer` instead.
-- Load and follow `references/investigation.md` for the whole run: read-only, the source inventory, evidence labels, asking, and writing rules.
+- Why the ticket exists: the business problem, expected vs. actual behavior, who is affected.
+- How the system behaves today on the path the ticket touches, each file named by its role ("`invoice.service.ts:88` decides whether a paid invoice can be edited"), not as a list.
+- What must change, kept apart: the business requirement, the implementation, and the technical constraints.
+- Risks: callers and shared code, data already stored, earlier bugs in the same area.
+- Progress from Git only: branch, commits, PR, merged or not, per acceptance criterion; no Git evidence means "not started", and the developer's own estimate is answered with the AC count, never confirmed; matching commits to ACs is Inferred unless the PR or commit names the AC.
 
-## 2. Developer-specific investigation
+## Output
 
-After the shared order in `references/investigation.md` section 3, add these, in this order:
-
-1. **Current behavior**: trace the path the ticket touches, from entry point (route, screen, job, event) through the modules to the data and any external integration, on `origin/<int>`.
-   Name each file by what it does in that path ("`billing/invoice.service.ts:88` decides whether a paid invoice can be edited"), never as a bare list.
-2. **Classify what the ticket asks**: each item is a business requirement (what the user or business needs), a technical implementation (how the code will do it), or a technical constraint (what limits the how: a contract, a schema, a third-party API, performance).
-   A ticket that prescribes an implementation without the requirement behind it is a question for the BA or PO.
-3. **Risks**: callers of the code you would change (`git grep` the symbol), shared components, data already stored in the old shape, the `flow-trace` triggers in `AGENTS.md`, and earlier bugs in the same area from the history step.
-4. **Progress, from Git only** (always run when there is a ticket id): find the branch by ticket id and through the PR's `headRefName`, then read it as `origin/<branch>` without switching to it; a branch with no remote copy, or a worktree ahead of it, is read by its local ref, and 06 names the ref it read.
-   A PR given as the ticket (`#41`, a URL) already gave `headRefName` and `mergedAt` in its `gh pr view`; skip the search lines.
-   ```bash
-   git worktree list; git branch -a --list '*<ticket>*'
-   gh pr list --state all --search '<ticket>' --json number,state,headRefName,mergedAt
-   git log --oneline origin/<int>..origin/<branch>           # commits not yet in <int>
-   git diff --stat origin/<int>...origin/<branch>
-   git -C <their worktree> status --short                    # only when a worktree has the branch checked out
-   gh pr checks <n>
-   ```
-   Map each acceptance criterion to `done`, `partial`, or `not started`, each with the commit, file, or PR check that shows it.
-   Merged is decided by the PR's `mergedAt`; without a PR, by `git merge-base --is-ancestor origin/<branch> origin/<int>`.
-   A merged PR (squash and rebase merges included, whose commits still list as "not in `<int>`", and deleted branches, whose ref no longer resolves): every AC it covers is `done (merged)`, and 07 says what, if anything, is left.
-   No branch, commit, or PR found: progress is "not started (no Git evidence)", never estimated from what the developer said or the branch name.
-   Uncommitted changes are named by file; they make an AC `partial (uncommitted)` only when the files sit on that AC's path from step 1, otherwise they are listed as unrelated.
-   A repo opted in to `feature-status`: its status file on `origin/<int>` is evidence too, and a claim it disagrees with Git on is shown as a conflict.
-   The developer's own estimate ("70% done") is answered with the AC count, never confirmed or converted into a percentage.
-
-## 3. Output
-
-Fill this recipe in order, in the user's language.
-Drop a section that has nothing verified or inferred to say; keep 03 and 07 always.
-
-```markdown
-**TL;DR**: <ticket in one line> - <why it exists in one line> - <the one thing to know before coding>.
-
-## 01. Ticket overview
-<goal, type, status, assignee, links; 2-4 lines>
-
-## 02. Business context
-<domain, the terms the ticket uses, each explained at first use with a project example, how they relate, who the users are and what they do in this workflow>
-
-## 03. Why this ticket exists
-<trigger (incident, client request, decision), the problem, expected vs. actual behavior, business impact if left undone>
-
-## 04. Historical context
-<related tickets, earlier implementations and why they chose what they did, decisions, whether this ticket changes or contradicts an earlier decision; timeline only per references/investigation.md section 6>
-
-## 05. Technical impact
-<the path from section 2 step 1, affected modules, APIs, data, integrations, dependencies; requirement vs. implementation vs. constraint>
-
-## 06. Development progress
-<branch, commits, PR and its checks, uncommitted changes; the AC table: AC | done/partial/not started | evidence>
-
-## 07. Recommendations
-- First: <the next concrete step>
-- Investigate further: <what is still Unknown and where to look>
-- Confirm with BA/PO: <each question, addressed to who can answer, or "nothing to confirm">
-- Risks: <regression and edge cases to keep in mind>
-- Ready to implement: <yes / yes after X / no, because Y / already merged, nothing to build>; when yes, the work goes through `feature-build` or `bug-triage`.
-
-Deeper on request: <topics>
-Sources: <inventory row: result, for each row>
-```
-
-- Business sections (02, 03) come before technical ones (05), even when the reader asked a technical question; answer that question in the TL;DR and keep the order, each section then 1-2 lines.
-- Labels, length, and the order of the closing lines follow `references/investigation.md` sections 4 and 6.
+A TL;DR line (what, why, the one thing to know), then, dropping any with nothing to say: Ticket overview, Business context, Why this ticket exists, Historical context, Technical impact, Development progress, Next steps.
+Next steps says what to do first, what to confirm with the BA or PO, which risks to watch, and whether the developer can start implementing.
