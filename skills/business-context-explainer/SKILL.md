@@ -1,7 +1,7 @@
 ---
 name: business-context-explainer
 description: >
-  Use when a BA or QC wants to understand a ticket, feature, or business rule in plain language, without reading code: "giải thích nghiệp vụ ticket này", "BA cần hiểu gì", "QC cần verify gì", "ticket này nghiệp vụ là gì", "business rule của chức năng này", "explain this ticket for QA", "what should QC check and why". Also when a QC asks for test cases before the business is understood. Not for a workflow step that writes a spec or test-plan file, and not for a developer (`developer-context-explainer`).
+  Use when a BA or QC wants to understand a ticket, feature, or business rule in plain language, without reading code: "giải thích nghiệp vụ ticket này", "BA cần hiểu gì", "QC cần verify gì", "business rule của chức năng này", "explain this ticket for QA", "what should QC check and why". Also when a QC asks for test cases before the business is understood. Not for a workflow step that writes a spec or test-plan file, and not for a developer (`developer-context-explainer`).
 user-invocable: true
 ---
 
