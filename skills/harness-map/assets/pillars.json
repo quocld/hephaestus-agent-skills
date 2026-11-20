@@ -62,7 +62,8 @@
           "ask-or-decide",
           "gnhf",
           "jira-bug-hunter",
-          "feature-status"
+          "feature-status",
+          "session-reset"
         ],
         "sections": []
       },
